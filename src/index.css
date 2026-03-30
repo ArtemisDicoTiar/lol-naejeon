@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --color-lol-blue: #0a1428;
+  --color-lol-gold: #c89b3c;
+  --color-lol-gold-light: #f0e6d2;
+  --color-lol-dark: #010a13;
+  --color-lol-gray: #1e2328;
+  --color-lol-border: #463714;
+  --color-prof-high: #22c55e;
+  --color-prof-mid: #eab308;
+  --color-prof-low: #ef4444;
+  --color-prof-none: #6b7280;
+  --color-tier-s: #ff4444;
+  --color-tier-a: #ff8c00;
+  --color-tier-b: #4a90d9;
+  --color-tier-c: #22c55e;
+  --color-tier-d: #9ca3af;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-lol-dark);
+  color: var(--color-lol-gold-light);
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-lol-gold) var(--color-lol-blue);
+}
