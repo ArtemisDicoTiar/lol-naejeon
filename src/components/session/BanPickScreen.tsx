@@ -40,6 +40,7 @@ export function BanPickScreen({
   const [activeSlot, setActiveSlot] = useState<ActiveSlot>({ type: 'ban', team: 1, index: 0 });
   const [search, setSearch] = useState('');
   const [phase, setPhase] = useState<'ban' | 'pick'>('ban');
+  const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set()); // playerId set
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
@@ -198,7 +199,18 @@ export function BanPickScreen({
   };
 
   const allPicked = [...team1PlayerIds, ...team2PlayerIds].every((id) => picks[id]);
-  const canConfirm = allPicked;
+  const allLocked = [...team1PlayerIds, ...team2PlayerIds].every((id) => lockedPicks.has(id));
+  const canConfirm = allPicked && allLocked;
+
+  const lockPick = (playerId: number) => {
+    if (!picks[playerId]) return;
+    setLockedPicks((prev) => new Set(prev).add(playerId));
+    advancePickSlot(playerId);
+  };
+
+  const unlockPick = (playerId: number) => {
+    setLockedPicks((prev) => { const n = new Set(prev); n.delete(playerId); return n; });
+  };
 
   // Apply comp recommendation
   const applyComp = (comp: RecommendedComp) => {
@@ -364,43 +376,99 @@ export function BanPickScreen({
         <div className="space-y-2">
           {playerIds.map((pid) => {
             const isActive = activeSlot?.type === 'pick' && activeSlot.playerId === pid;
+            const isLocked = lockedPicks.has(pid);
             const pickedChamp = picks[pid] ? champions.find((c) => c.id === picks[pid]) : null;
             const recs = getPlayerRecs(pid);
+            const pStats = wrStats?.playerOverallStats[pid];
+            // Player's stats with picked champion
+            const champStat = pickedChamp && wrStats
+              ? wrStats.playerChampStats.find((s) => s.playerId === pid && s.championId === pickedChamp.id)
+              : null;
+
             return (
               <div key={pid}
-                onClick={() => { setActiveSlot({ type: 'pick', playerId: pid }); setPhase('pick'); }}
-                className={`cursor-pointer p-2 rounded border transition-all ${
-                  isActive ? 'border-lol-gold bg-lol-gold/10' : 'border-lol-border/50 hover:border-lol-gold/30'
+                onClick={() => { if (!isLocked) { setActiveSlot({ type: 'pick', playerId: pid }); setPhase('pick'); } }}
+                className={`p-2 rounded border transition-all ${
+                  isLocked ? 'border-prof-high/50 bg-prof-high/5'
+                  : isActive ? 'border-lol-gold bg-lol-gold/10 cursor-pointer'
+                  : 'border-lol-border/50 hover:border-lol-gold/30 cursor-pointer'
                 }`}>
-                <div className="flex items-center gap-2 mb-1.5">
+                {/* Player header with stats */}
+                <div className="flex items-center gap-2 mb-1">
                   {pickedChamp ? (
-                    <ChampionIcon champion={pickedChamp} size="sm" selected={isActive} />
+                    <ChampionIcon champion={pickedChamp} size="sm" selected={isActive && !isLocked} />
                   ) : (
                     <div className={`w-8 h-8 rounded border-2 border-dashed flex items-center justify-center ${isActive ? 'border-lol-gold' : 'border-gray-600'}`}>
                       <span className="text-gray-500 text-xs">?</span>
                     </div>
                   )}
-                  <div className="min-w-0">
-                    <div className="text-sm text-lol-gold-light font-medium truncate">{getPlayerName(pid)}</div>
-                    {pickedChamp && <div className="text-[10px] text-lol-gold-light/50">{pickedChamp.nameKo}</div>}
-                  </div>
-                </div>
-                {/* 7 recommendations */}
-                <div className="flex flex-wrap gap-1">
-                  {recs.map((c) => (
-                    <div key={c.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPicks((prev) => ({ ...prev, [pid]: c.id }));
-                      }}
-                      className="cursor-pointer"
-                      title={c.nameKo}>
-                      <ChampionIcon champion={c} size="sm"
-                        selected={picks[pid] === c.id}
-                        disabled={pickedIds.has(c.id) && picks[pid] !== c.id} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm text-lol-gold-light font-medium truncate">{getPlayerName(pid)}</span>
+                      {isLocked && <span className="text-[10px] text-prof-high">LOCKED</span>}
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2 text-[10px]">
+                      {pStats && pStats.totalPicks > 0 && (
+                        <>
+                          <span className={`font-mono ${pStats.winrate >= 55 ? 'text-prof-high' : pStats.winrate >= 45 ? 'text-lol-gold-light/60' : 'text-prof-low'}`}>
+                            {Math.round(pStats.winrate)}%
+                          </span>
+                          <span className="text-lol-gold-light/40">
+                            {pStats.wins}W {pStats.losses}L
+                          </span>
+                          <span className="text-lol-gold-light/30">({pStats.totalPicks}게임)</span>
+                        </>
+                      )}
+                      {pickedChamp && champStat && (
+                        <span className="text-lol-gold-light/50">
+                          | {pickedChamp.nameKo} {champStat.wins}W{champStat.losses}L
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Lock-in button */}
+                  {pickedChamp && !isLocked && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); lockPick(pid); }}
+                      className="cursor-pointer px-2 py-1 text-[10px] rounded bg-prof-high/20 text-prof-high border border-prof-high/40 hover:bg-prof-high/30 transition-colors shrink-0"
+                    >
+                      락인
+                    </button>
+                  )}
+                  {isLocked && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); unlockPick(pid); }}
+                      className="cursor-pointer px-2 py-1 text-[10px] rounded bg-lol-gray text-lol-gold-light/50 border border-lol-border hover:text-lol-gold-light transition-colors shrink-0"
+                    >
+                      해제
+                    </button>
+                  )}
                 </div>
+                {/* Top champions with pick rate bars */}
+                {!isLocked && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {recs.map((c) => {
+                      const cs = wrStats?.playerChampStats.find((s) => s.playerId === pid && s.championId === c.id);
+                      return (
+                        <div key={c.id}
+                          onClick={(e) => { e.stopPropagation(); if (!isLocked) setPicks((prev) => ({ ...prev, [pid]: c.id })); }}
+                          className="cursor-pointer relative"
+                          title={`${c.nameKo}${cs ? ` (${cs.wins}W ${cs.losses}L ${Math.round(cs.winrate)}%)` : ''}`}>
+                          <ChampionIcon champion={c} size="sm"
+                            selected={picks[pid] === c.id}
+                            disabled={pickedIds.has(c.id) && picks[pid] !== c.id} />
+                          {cs && (cs.wins + cs.losses > 0) && (
+                            <div className={`absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[8px] font-mono px-0.5 rounded ${
+                              cs.winrate >= 60 ? 'text-prof-high' : cs.winrate >= 40 ? 'text-lol-gold-light/50' : 'text-prof-low'
+                            }`}>
+                              {Math.round(cs.winrate)}%
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -424,7 +492,9 @@ export function BanPickScreen({
             픽
           </button>
         </div>
-        <Button onClick={handleConfirm} disabled={!canConfirm}>게임 시작!</Button>
+        <Button onClick={handleConfirm} disabled={!canConfirm}>
+          {!allPicked ? '픽 미완료' : !allLocked ? `락인 대기 (${lockedPicks.size}/${team1PlayerIds.length + team2PlayerIds.length})` : '게임 시작!'}
+        </Button>
       </div>
 
       {/* Fierless Banner */}

@@ -9,9 +9,19 @@ export interface PlayerChampionStats {
   winrate: number;
 }
 
+export interface PlayerOverallStats {
+  playerId: number;
+  wins: number;
+  losses: number;
+  winrate: number;
+  totalPicks: number;
+  topChampions: { championId: string; wins: number; losses: number; picks: number }[];
+}
+
 export interface WinrateStats {
   playerChampStats: PlayerChampionStats[];
   champOverallStats: Record<string, { wins: number; losses: number; winrate: number }>;
+  playerOverallStats: Record<number, PlayerOverallStats>;
   totalGames: number;
 }
 
@@ -59,9 +69,46 @@ export async function computeWinrateStats(): Promise<WinrateStats> {
     champOverallStats[cid] = { ...stats, winrate: total > 0 ? (stats.wins / total) * 100 : 50 };
   }
 
+  // Player overall stats
+  const playerOverallMap = new Map<number, { wins: number; losses: number; picks: number; champStats: Map<string, { wins: number; losses: number; picks: number }> }>();
+  for (const game of games) {
+    const gamePicks = allPicks.filter((p) => p.gameId === game.id!);
+    for (const pick of gamePicks) {
+      const po = playerOverallMap.get(pick.playerId) ?? { wins: 0, losses: 0, picks: 0, champStats: new Map() };
+      po.picks++;
+      if (game.winningTeam !== null) {
+        if (pick.team === game.winningTeam) po.wins++; else po.losses++;
+      }
+      const cs = po.champStats.get(pick.championId) ?? { wins: 0, losses: 0, picks: 0 };
+      cs.picks++;
+      if (game.winningTeam !== null) {
+        if (pick.team === game.winningTeam) cs.wins++; else cs.losses++;
+      }
+      po.champStats.set(pick.championId, cs);
+      playerOverallMap.set(pick.playerId, po);
+    }
+  }
+
+  const playerOverallStats: Record<number, PlayerOverallStats> = {};
+  for (const [pid, stats] of playerOverallMap) {
+    const total = stats.wins + stats.losses;
+    const topChamps = [...stats.champStats.entries()]
+      .map(([cid, cs]) => ({ championId: cid, ...cs }))
+      .sort((a, b) => b.picks - a.picks)
+      .slice(0, 5);
+    playerOverallStats[pid] = {
+      playerId: pid,
+      wins: stats.wins,
+      losses: stats.losses,
+      winrate: total > 0 ? (stats.wins / total) * 100 : 0,
+      totalPicks: stats.picks,
+      topChampions: topChamps,
+    };
+  }
+
   const gamesWithResult = games.filter((g) => g.winningTeam !== null).length;
 
-  return { playerChampStats, champOverallStats, totalGames: gamesWithResult };
+  return { playerChampStats, champOverallStats, playerOverallStats, totalGames: gamesWithResult };
 }
 
 export function estimateCompWinrate(
