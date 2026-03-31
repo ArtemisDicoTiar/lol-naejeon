@@ -85,14 +85,43 @@ export function BanPickScreen({
     proficiencies, allChampions: champions, alreadyBanned: alreadyBannedAll,
   }), [team1PlayerIds, players, proficiencies, champions, alreadyBannedAll]);
 
-  // Comp recommendations
-  const getCompRecs = (teamPlayerIds: number[]) => {
+  // Opponent picks per team (for counter recommendations)
+  const team1Picks = useMemo(() =>
+    team1PlayerIds.map((id) => picks[id]).filter(Boolean), [team1PlayerIds, picks]);
+  const team2Picks = useMemo(() =>
+    team2PlayerIds.map((id) => picks[id]).filter(Boolean), [team2PlayerIds, picks]);
+
+  // Draft order: B1 → R1,R2 → B2,B3 → R3 (3v3) or B1 → R1,R2 → B2,B3 → R3,R4 (3v4)
+  const draftOrder = useMemo(() => {
+    const b = team1PlayerIds;
+    const r = team2PlayerIds;
+    if (format === '3v3') {
+      return [
+        { team: 1 as const, idx: 0 },
+        { team: 2 as const, idx: 0 }, { team: 2 as const, idx: 1 },
+        { team: 1 as const, idx: 1 }, { team: 1 as const, idx: 2 },
+        { team: 2 as const, idx: 2 },
+      ].map((d) => d.team === 1 ? b[d.idx] : r[d.idx]);
+    }
+    // 3v4
+    return [
+      { team: 1 as const, idx: 0 },
+      { team: 2 as const, idx: 0 }, { team: 2 as const, idx: 1 },
+      { team: 1 as const, idx: 1 }, { team: 1 as const, idx: 2 },
+      { team: 2 as const, idx: 2 }, { team: 2 as const, idx: 3 },
+    ].map((d) => d.team === 1 ? b[d.idx] : r[d.idx]);
+  }, [team1PlayerIds, team2PlayerIds, format]);
+
+  // Comp recommendations (with opponent counter logic)
+  const getCompRecs = (teamPlayerIds: number[], team: 1 | 2) => {
     const teamPlayerObjs = teamPlayerIds.map((id) => players.find((p) => p.id === id)).filter(Boolean) as Player[];
     if (teamPlayerObjs.length < 3) return [];
+    const opponentCurrentPicks = team === 1 ? team2Picks : team1Picks;
     const recs = generateRecommendations({
       teamPlayers: teamPlayerObjs,
       bannedChampions: [...Array.from(allBannedIds), ...Object.values(picks)],
       allChampions: champions, proficiencies, format,
+      opponentPicks: opponentCurrentPicks.length > 0 ? opponentCurrentPicks : undefined,
     }).slice(0, 10);
     if (wrStats) {
       for (const rec of recs) {
@@ -105,7 +134,7 @@ export function BanPickScreen({
   // Per-player top champions
   const getPlayerRecs = (playerId: number) => {
     const profMap = proficiencies[playerId] ?? new Map();
-    return getPlayerTopChampions(playerId, profMap, availableChampions.filter((c) => !pickedIds.has(c.id) || picks[playerId] === c.id), 5);
+    return getPlayerTopChampions(playerId, profMap, availableChampions.filter((c) => !pickedIds.has(c.id) || picks[playerId] === c.id), 7);
   };
 
   // Handle champion click from grid
@@ -151,21 +180,21 @@ export function BanPickScreen({
 
     // All bans done, switch to pick phase
     setPhase('pick');
-    const allPlayerIds = [...team1PlayerIds, ...team2PlayerIds];
-    const firstUnpicked = allPlayerIds.find((id) => !picks[id]);
-    setActiveSlot(firstUnpicked ? { type: 'pick', playerId: firstUnpicked } : null);
+    const firstInDraft = draftOrder.find((id) => !picks[id]);
+    setActiveSlot(firstInDraft ? { type: 'pick', playerId: firstInDraft } : null);
   };
 
   const advancePickSlot = (currentPlayerId: number) => {
-    const allPlayerIds = [...team1PlayerIds, ...team2PlayerIds];
-    const currentIdx = allPlayerIds.indexOf(currentPlayerId);
-    for (let i = 1; i < allPlayerIds.length; i++) {
-      const nextId = allPlayerIds[(currentIdx + i) % allPlayerIds.length];
-      if (!picks[nextId] || nextId === currentPlayerId) continue;
+    // Follow draft order: find next unpicked player after current in draft sequence
+    const currentDraftIdx = draftOrder.indexOf(currentPlayerId);
+    for (let i = 1; i < draftOrder.length; i++) {
+      const nextId = draftOrder[(currentDraftIdx + i) % draftOrder.length];
+      if (!picks[nextId] && nextId !== currentPlayerId) {
+        setActiveSlot({ type: 'pick', playerId: nextId });
+        return;
+      }
     }
-    // Find first unpicked after current
-    const remaining = allPlayerIds.filter((id) => id !== currentPlayerId && !picks[id]);
-    setActiveSlot(remaining.length > 0 ? { type: 'pick', playerId: remaining[0] } : null);
+    setActiveSlot(null);
   };
 
   const allPicked = [...team1PlayerIds, ...team2PlayerIds].every((id) => picks[id]);
@@ -217,7 +246,7 @@ export function BanPickScreen({
     const playerIds = team === 1 ? team1PlayerIds : team2PlayerIds;
     const bans = getTeamBans(team);
     const banRecs = team === 1 ? team1BanRecs : team2BanRecs;
-    const compRecs = getCompRecs(playerIds);
+    const compRecs = getCompRecs(playerIds, team);
     const teamColor = team === 1 ? 'blue' : 'red';
     const bgClass = team === 1 ? 'bg-blue-950/20 border-blue-900/40' : 'bg-red-950/20 border-red-900/40';
 
@@ -426,12 +455,33 @@ export function BanPickScreen({
             placeholder="챔피언 검색..."
             className="w-full bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
           />
-          <div className="text-xs text-lol-gold-light/40 text-center">
-            {activeSlot
-              ? activeSlot.type === 'ban'
-                ? `Team ${activeSlot.team} 밴 선택 중`
-                : `${getPlayerName(activeSlot.playerId)} 챔피언 선택 중`
-              : '슬롯을 클릭하세요'}
+          <div className="text-xs text-center space-y-1">
+            <div className="text-lol-gold-light/40">
+              {activeSlot
+                ? activeSlot.type === 'ban'
+                  ? `Team ${activeSlot.team} 밴 선택 중`
+                  : `${getPlayerName(activeSlot.playerId)} 챔피언 선택 중`
+                : '슬롯을 클릭하세요'}
+            </div>
+            {phase === 'pick' && (
+              <div className="flex items-center justify-center gap-1 text-[10px]">
+                <span className="text-lol-gold-light/30">드래프트:</span>
+                {draftOrder.map((pid, i) => {
+                  const isPicked = !!picks[pid];
+                  const isCurrent = activeSlot?.type === 'pick' && activeSlot.playerId === pid;
+                  const isT1 = team1PlayerIds.includes(pid);
+                  return (
+                    <span key={i} className={`px-1 rounded ${
+                      isCurrent ? 'bg-lol-gold text-lol-dark font-bold'
+                      : isPicked ? 'text-lol-gold-light/20 line-through'
+                      : isT1 ? 'text-blue-400' : 'text-red-400'
+                    }`}>
+                      {getPlayerName(pid).slice(0, 2)}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-1 max-h-[calc(100vh-320px)] overflow-y-auto">
             {gridChampions.map((champ) => {
