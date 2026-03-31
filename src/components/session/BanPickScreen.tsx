@@ -4,7 +4,7 @@ import type { RecommendedComp } from '@/lib/recommendation/types';
 import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampions } from '@/lib/recommendation/engine';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
-import { ChampionHoverCard } from '@/components/champions/ChampionHoverCard';
+import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 
@@ -42,7 +42,6 @@ export function BanPickScreen({
   const [search, setSearch] = useState('');
   const [phase, setPhase] = useState<'ban' | 'pick'>('ban');
   const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
-  const [hoveredChamp, setHoveredChamp] = useState<string | null>(null);
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
@@ -327,12 +326,15 @@ export function BanPickScreen({
                         if (!champ) return null;
                         const isBanned = allBannedIds.has(champ.id);
                         return (
-                          <div key={rec.championId}
-                            onClick={() => canClick && !isBanned && handleChampionSelect(rec.championId)}
-                            className={`${canClick && !isBanned ? 'cursor-pointer hover:opacity-100' : ''} ${isBanned ? 'opacity-20' : 'opacity-70'}`}
-                            title={champ.nameKo}>
-                            <ChampionIcon champion={champ} size="sm" disabled={isBanned} />
-                          </div>
+                          <ChampionWithHover key={rec.championId} champion={champ} wrStats={wrStats}
+                            allPlayers={players} proficiencies={proficiencies}
+                            highlightPlayerIds={[oppId]} disabled={isBanned}>
+                            <div
+                              onClick={() => canClick && !isBanned && handleChampionSelect(rec.championId)}
+                              className={`${canClick && !isBanned ? 'cursor-pointer hover:opacity-100' : ''} ${isBanned ? 'opacity-20' : 'opacity-70'}`}>
+                              <ChampionIcon champion={champ} size="sm" disabled={isBanned} />
+                            </div>
+                          </ChampionWithHover>
                         );
                       })}
                     </div>
@@ -373,6 +375,38 @@ export function BanPickScreen({
             </div>
           </div>
         )}
+
+        {/* Counter Picks — show when opponent has picks */}
+        {phase === 'pick' && (() => {
+          const oppPicks = team === 1 ? team2Picks : team1Picks;
+          if (oppPicks.length === 0) return null;
+          // Determine opponent comp archetype for counter suggestion
+          const oppRoles = oppPicks.map((cid) => champions.find((c) => c.id === cid)?.aramRole).filter(Boolean);
+          const pokeCount = oppRoles.filter((r) => r === 'poke').length;
+          const engageCount = oppRoles.filter((r) => r === 'engage' || r === 'tank').length;
+          const sustainCount = oppRoles.filter((r) => r === 'sustain' || r === 'utility').length;
+          let counterType = '밸런스';
+          let counterTip = '';
+          if (pokeCount >= 2) { counterType = '인게이지'; counterTip = '상대 포크 다수 → 인게이지로 카운터'; }
+          else if (engageCount >= 2) { counterType = '서스테인'; counterTip = '상대 인게이지 다수 → 서스테인으로 카운터'; }
+          else if (sustainCount >= 2) { counterType = '포크'; counterTip = '상대 서스테인 다수 → 포크로 카운터'; }
+          else { counterTip = '상대 밸런스 조합 → 유연한 대응 추천'; }
+          return (
+            <div className="p-2 bg-lol-dark/40 rounded border border-lol-border/50">
+              <div className="text-[10px] text-lol-gold-light/50 mb-1">상대 카운터</div>
+              <div className="flex flex-wrap gap-1 mb-1.5">
+                {oppPicks.map((cid) => {
+                  const c = champions.find((ch) => ch.id === cid);
+                  return c ? <ChampionIcon key={cid} champion={c} size="sm" /> : null;
+                })}
+              </div>
+              <div className="text-[10px]">
+                <span className="text-lol-gold font-medium">{counterType}</span>
+                <span className="text-lol-gold-light/40 ml-1">{counterTip}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Player Rows */}
         <div className="space-y-2">
@@ -451,22 +485,27 @@ export function BanPickScreen({
                   <div className="flex flex-wrap gap-1 mt-1">
                     {recs.map((c) => {
                       const cs = wrStats?.playerChampStats.find((s) => s.playerId === pid && s.championId === c.id);
+                      const isUnavailable = pickedIds.has(c.id) && picks[pid] !== c.id;
                       return (
-                        <div key={c.id}
-                          onClick={(e) => { e.stopPropagation(); if (!isLocked) setPicks((prev) => ({ ...prev, [pid]: c.id })); }}
-                          className="cursor-pointer relative"
-                          title={`${c.nameKo}${cs ? ` (${cs.wins}W ${cs.losses}L ${Math.round(cs.winrate)}%)` : ''}`}>
-                          <ChampionIcon champion={c} size="sm"
-                            selected={picks[pid] === c.id}
-                            disabled={pickedIds.has(c.id) && picks[pid] !== c.id} />
-                          {cs && (cs.wins + cs.losses > 0) && (
-                            <div className={`absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[8px] font-mono px-0.5 rounded ${
-                              cs.winrate >= 60 ? 'text-prof-high' : cs.winrate >= 40 ? 'text-lol-gold-light/50' : 'text-prof-low'
-                            }`}>
-                              {Math.round(cs.winrate)}%
-                            </div>
-                          )}
-                        </div>
+                        <ChampionWithHover key={c.id} champion={c} wrStats={wrStats}
+                          allPlayers={players} proficiencies={proficiencies}
+                          highlightPlayerIds={team1PlayerIds.includes(pid) ? team2PlayerIds : team1PlayerIds}
+                          disabled={isUnavailable}>
+                          <div
+                            onClick={(e) => { e.stopPropagation(); if (!isLocked) setPicks((prev) => ({ ...prev, [pid]: c.id })); }}
+                            className="cursor-pointer relative">
+                            <ChampionIcon champion={c} size="sm"
+                              selected={picks[pid] === c.id}
+                              disabled={isUnavailable} />
+                            {cs && (cs.wins + cs.losses > 0) && (
+                              <div className={`absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[8px] font-mono px-0.5 rounded ${
+                                cs.winrate >= 60 ? 'text-prof-high' : cs.winrate >= 40 ? 'text-lol-gold-light/50' : 'text-prof-low'
+                              }`}>
+                                {Math.round(cs.winrate)}%
+                              </div>
+                            )}
+                          </div>
+                        </ChampionWithHover>
                       );
                     })}
                   </div>
@@ -595,49 +634,42 @@ export function BanPickScreen({
                 }
               }
 
-              const isHovered = hoveredChamp === champ.id;
-
               return (
-                <div
+                <ChampionWithHover
                   key={champ.id}
-                  onClick={() => !disabled && handleChampionSelect(champ.id)}
-                  onMouseEnter={() => setHoveredChamp(champ.id)}
-                  onMouseLeave={() => setHoveredChamp(null)}
-                  className={`relative flex flex-col items-center gap-0.5 p-1 rounded border transition-colors ${
-                    disabled
-                      ? 'border-transparent opacity-20 cursor-not-allowed'
-                      : 'border-lol-border hover:border-lol-gold cursor-pointer bg-lol-blue/50'
-                  }`}
+                  champion={champ}
+                  wrStats={wrStats}
+                  allPlayers={players}
+                  proficiencies={proficiencies}
+                  highlightPlayerIds={opponentIds}
+                  disabled={disabled}
                 >
-                  <div className="w-9 h-9 rounded overflow-hidden">
-                    <img src={champ.imageUrl} className={`w-full h-full ${disabled ? 'grayscale' : ''}`} loading="lazy" />
-                  </div>
-                  <span className="text-[9px] text-lol-gold-light/60 text-center leading-tight truncate w-full">
-                    {champ.nameKo}
-                  </span>
-                  {profLevel && profLevel !== '없음' && (
-                    <ProficiencyBadge level={profLevel} size="sm" />
-                  )}
-                  {oppWr && !disabled && (
-                    <span className={`text-[9px] font-mono ${
-                      parseInt(oppWr) >= 60 ? 'text-prof-low' : parseInt(oppWr) >= 40 ? 'text-lol-gold-light/50' : 'text-prof-high'
-                    }`}>
-                      vs {oppWr}
-                    </span>
-                  )}
-                  {/* Hover Card */}
-                  {isHovered && !disabled && (
-                    <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none">
-                      <ChampionHoverCard
-                        champion={champ}
-                        wrStats={wrStats}
-                        allPlayers={players}
-                        proficiencies={proficiencies}
-                        highlightPlayerIds={opponentIds}
-                      />
+                  <div
+                    onClick={() => !disabled && handleChampionSelect(champ.id)}
+                    className={`flex flex-col items-center gap-0.5 p-1 rounded border transition-colors ${
+                      disabled
+                        ? 'border-transparent opacity-20 cursor-not-allowed'
+                        : 'border-lol-border hover:border-lol-gold cursor-pointer bg-lol-blue/50'
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded overflow-hidden">
+                      <img src={champ.imageUrl} className={`w-full h-full ${disabled ? 'grayscale' : ''}`} loading="lazy" />
                     </div>
-                  )}
-                </div>
+                    <span className="text-[9px] text-lol-gold-light/60 text-center leading-tight truncate w-full">
+                      {champ.nameKo}
+                    </span>
+                    {profLevel && profLevel !== '없음' && (
+                      <ProficiencyBadge level={profLevel} size="sm" />
+                    )}
+                    {oppWr && !disabled && (
+                      <span className={`text-[9px] font-mono ${
+                        parseInt(oppWr) >= 60 ? 'text-prof-low' : parseInt(oppWr) >= 40 ? 'text-lol-gold-light/50' : 'text-prof-high'
+                      }`}>
+                        vs {oppWr}
+                      </span>
+                    )}
+                  </div>
+                </ChampionWithHover>
               );
             })}
           </div>
