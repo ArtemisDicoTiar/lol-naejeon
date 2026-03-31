@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
 import type { WinrateStats } from '@/lib/recommendation/winrate';
