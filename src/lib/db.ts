@@ -107,6 +107,60 @@ class LolDB extends Dexie {
 
 export const db = new LolDB();
 
+export async function seedIfEmpty(): Promise<boolean> {
+  const count = await db.players.count();
+  if (count > 0) return false;
+
+  const { seedData } = await import('@/data/seed-data');
+
+  await db.transaction('rw', [db.players, db.proficiencies, db.sessions, db.games, db.gamePicks, db.gameBans], async () => {
+    await db.players.bulkAdd(seedData.players.map((p: any) => ({
+      ...p,
+      createdAt: new Date(p.createdAt),
+    })));
+    await db.proficiencies.bulkAdd([...seedData.proficiencies] as any[]);
+    if (seedData.sessions?.length) {
+      await db.sessions.bulkAdd(seedData.sessions.map((s: any) => ({
+        ...s,
+        createdAt: new Date(s.createdAt),
+        endedAt: s.endedAt ? new Date(s.endedAt) : null,
+      })));
+    }
+    if (seedData.games?.length) {
+      await db.games.bulkAdd(seedData.games.map((g: any) => ({
+        ...g,
+        playedAt: new Date(g.playedAt),
+      })));
+    }
+    if (seedData.gamePicks?.length) {
+      await db.gamePicks.bulkAdd([...seedData.gamePicks] as any[]);
+    }
+    if (seedData.gameBans?.length) {
+      await db.gameBans.bulkAdd([...seedData.gameBans] as any[]);
+    }
+  });
+
+  return true;
+}
+
+export async function deleteGame(gameId: number): Promise<void> {
+  await db.gamePicks.where('gameId').equals(gameId).delete();
+  await db.gameBans.where('gameId').equals(gameId).delete();
+  await db.games.delete(gameId);
+}
+
+export async function deleteSession(sessionId: number): Promise<void> {
+  const games = await db.games.where('sessionId').equals(sessionId).toArray();
+  for (const game of games) {
+    await deleteGame(game.id!);
+  }
+  await db.sessions.delete(sessionId);
+}
+
+export async function updateSessionName(sessionId: number, name: string): Promise<void> {
+  await db.sessions.update(sessionId, { name });
+}
+
 export async function getActiveSession(): Promise<Session | null> {
   const all = await db.sessions.toArray();
   return all.find((s) => s.endedAt === null) ?? null;

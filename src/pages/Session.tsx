@@ -9,7 +9,7 @@ import { db, type GamePick, type GameBan, type Player } from '@/lib/db';
 
 export function Session() {
   const navigate = useNavigate();
-  const { session, games, fierlessBans, lastGameTeams, loading, setGameResult, endSession } = useSession();
+  const { session, games, fierlessBans, lastGameTeams, loading, setGameResult, endSession, removeGame } = useSession();
   const { champions } = useChampions();
   const [gamePicks, setGamePicks] = useState<Record<number, GamePick[]>>({});
   const [gameBansMap, setGameBansMap] = useState<Record<number, GameBan[]>>({});
@@ -143,14 +143,19 @@ export function Session() {
                       <span className="text-lol-gold font-bold">Game #{game.gameNumber}</span>
                       <span className="text-xs bg-lol-gold/20 text-lol-gold px-2 py-0.5 rounded">{game.format}</span>
                     </div>
-                    {game.winningTeam ? (
-                      <span className="text-prof-high text-sm font-medium">Team {game.winningTeam} 승리</span>
-                    ) : (
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="secondary" onClick={() => setGameResult(game.id!, 1)}>T1 승</Button>
-                        <Button size="sm" variant="secondary" onClick={() => setGameResult(game.id!, 2)}>T2 승</Button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {game.winningTeam ? (
+                        <span className="text-prof-high text-sm font-medium">Team {game.winningTeam} 승리</span>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="secondary" onClick={() => setGameResult(game.id!, 1)}>T1 승</Button>
+                          <Button size="sm" variant="secondary" onClick={() => setGameResult(game.id!, 2)}>T2 승</Button>
+                        </div>
+                      )}
+                      <Button size="sm" variant="danger" onClick={() => {
+                        if (confirm(`Game #${game.gameNumber}을 삭제하시겠습니까?`)) removeGame(game.id!);
+                      }}>삭제</Button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     {[{ team: team1, num: 1 }, { team: team2, num: 2 }].map(({ team, num }) => (

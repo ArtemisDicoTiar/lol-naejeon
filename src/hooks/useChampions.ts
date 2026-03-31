@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db, type Champion } from '@/lib/db';
+import { db, type Champion, seedIfEmpty } from '@/lib/db';
 import { syncChampions } from '@/lib/champions-sync';
 
 export function useChampions() {
@@ -17,6 +17,7 @@ export function useChampions() {
 
   useEffect(() => {
     (async () => {
+      await seedIfEmpty();
       const count = await db.champions.count();
       if (count === 0) {
         setSyncing(true);

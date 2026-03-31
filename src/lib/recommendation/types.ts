@@ -26,6 +26,7 @@ export interface RecommendedComp {
   damageProfile: { ap: number; ad: number; hybrid: number };
   strengths: string[];
   weaknesses: string[];
+  estimatedWinrate?: number;
 }
 
 export interface ScoreBreakdown {

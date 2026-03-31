@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { db, type Session, type Game, type GamePick, type Player, type Champion } from '@/lib/db';
+import { db, deleteSession, updateSessionName, type Session, type Game, type GamePick, type Player, type Champion } from '@/lib/db';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 
 interface SessionWithGames extends Session {
@@ -13,8 +14,7 @@ export function History() {
   const [champions, setChampions] = useState<Champion[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
+  const loadSessions = async () => {
       const [allSessions, allPlayers, allChampions] = await Promise.all([
         db.sessions.toArray(),
         db.players.toArray(),
@@ -37,10 +37,24 @@ export function History() {
           sessionsWithGames.push({ ...session, games: gamesWithPicks });
         }
       }
-      setSessions(sessionsWithGames);
-      setLoading(false);
-    })();
-  }, []);
+    setSessions(sessionsWithGames);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadSessions(); }, []);
+
+  const handleDeleteSession = async (sid: number, name: string) => {
+    if (!confirm(`"${name}" 세션을 삭제하시겠습니까? 모든 게임 기록도 함께 삭제됩니다.`)) return;
+    await deleteSession(sid);
+    await loadSessions();
+  };
+
+  const handleRenameSession = async (sid: number, currentName: string) => {
+    const newName = prompt('새 세션 이름:', currentName);
+    if (!newName || newName === currentName) return;
+    await updateSessionName(sid, newName);
+    await loadSessions();
+  };
 
   const getPlayer = (id: number) => players.find((p) => p.id === id);
   const getChampion = (id: string) => champions.find((c) => c.id === id);
@@ -60,6 +74,10 @@ export function History() {
       ) : (
         sessions.map((session) => (
           <Card key={session.id} title={`${session.name} (${session.games.length}게임)`}>
+            <div className="flex gap-2 mb-3">
+              <Button size="sm" variant="ghost" onClick={() => handleRenameSession(session.id!, session.name)}>이름 수정</Button>
+              <Button size="sm" variant="danger" onClick={() => handleDeleteSession(session.id!, session.name)}>세션 삭제</Button>
+            </div>
             <div className="space-y-4">
               {session.games.map((game) => {
                 const team1 = game.picks.filter((p) => p.team === 1);

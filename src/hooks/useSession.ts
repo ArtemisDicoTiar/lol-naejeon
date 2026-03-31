@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db, getActiveSession, getFierlessBans, type Session, type Game, type GamePick, type GameBan } from '@/lib/db';
+import { db, getActiveSession, getFierlessBans, deleteGame as dbDeleteGame, deleteSession as dbDeleteSession, updateSessionName as dbUpdateSessionName, type Session, type Game, type GamePick, type GameBan } from '@/lib/db';
 
 export interface LastGameTeams {
   format: '3v3' | '3v4';
@@ -101,5 +101,20 @@ export function useSession() {
     await refresh();
   };
 
-  return { session, games, fierlessBans, lastGameTeams, loading, refresh, createSession, endSession, addGame, setGameResult };
+  const removeGame = async (gameId: number) => {
+    await dbDeleteGame(gameId);
+    await refresh();
+  };
+
+  const removeSession = async (sessionId: number) => {
+    await dbDeleteSession(sessionId);
+    await refresh();
+  };
+
+  const renameSession = async (sessionId: number, name: string) => {
+    await dbUpdateSessionName(sessionId, name);
+    await refresh();
+  };
+
+  return { session, games, fierlessBans, lastGameTeams, loading, refresh, createSession, endSession, addGame, setGameResult, removeGame, removeSession, renameSession };
 }

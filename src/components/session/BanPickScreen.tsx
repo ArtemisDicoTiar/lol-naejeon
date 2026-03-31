@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
 import type { RecommendedComp } from '@/lib/recommendation/types';
 import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampions } from '@/lib/recommendation/engine';
+import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ProficiencyBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -39,6 +40,9 @@ export function BanPickScreen({
   const [activeSlot, setActiveSlot] = useState<ActiveSlot>({ type: 'ban', team: 1, index: 0 });
   const [search, setSearch] = useState('');
   const [phase, setPhase] = useState<'ban' | 'pick'>('ban');
+  const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
+
+  useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
 
   const getPlayerName = (id: number) => players.find((p) => p.id === id)?.name ?? '';
   const getTeamBans = (team: 1 | 2) => team === 1 ? team1Bans : team2Bans;
@@ -85,11 +89,17 @@ export function BanPickScreen({
   const getCompRecs = (teamPlayerIds: number[]) => {
     const teamPlayerObjs = teamPlayerIds.map((id) => players.find((p) => p.id === id)).filter(Boolean) as Player[];
     if (teamPlayerObjs.length < 3) return [];
-    return generateRecommendations({
+    const recs = generateRecommendations({
       teamPlayers: teamPlayerObjs,
       bannedChampions: [...Array.from(allBannedIds), ...Object.values(picks)],
       allChampions: champions, proficiencies, format,
     }).slice(0, 10);
+    if (wrStats) {
+      for (const rec of recs) {
+        rec.estimatedWinrate = estimateCompWinrate(rec.assignments, wrStats, rec.score);
+      }
+    }
+    return recs;
   };
 
   // Per-player top champions
@@ -300,7 +310,14 @@ export function BanPickScreen({
                   className="cursor-pointer p-1.5 rounded border border-lol-border hover:border-lol-gold/50 bg-lol-dark/30 transition-colors">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] text-lol-gold">{comp.archetypeName}</span>
-                    <span className="text-[10px] text-lol-gold-light/50 font-mono">{Math.round(comp.score * 100)}</span>
+                    <div className="flex items-center gap-1.5">
+                      {comp.estimatedWinrate != null && (
+                        <span className={`text-[10px] font-mono ${comp.estimatedWinrate >= 55 ? 'text-prof-high' : comp.estimatedWinrate >= 45 ? 'text-lol-gold' : 'text-prof-low'}`}>
+                          {Math.round(comp.estimatedWinrate)}%
+                        </span>
+                      )}
+                      <span className="text-[10px] text-lol-gold-light/50 font-mono">{Math.round(comp.score * 100)}</span>
+                    </div>
                   </div>
                   <div className="flex gap-1">
                     {comp.assignments.map((a) => {
