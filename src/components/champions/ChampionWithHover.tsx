@@ -30,17 +30,17 @@ export function ChampionWithHover({
     const mx = e.clientX;
     const my = e.clientY;
 
-    // Default: to the right and above the cursor
-    let x = mx + 16;
-    let y = my - CARD_H - 8;
+    // Default: right of cursor, vertically centered on cursor
+    let x = mx + 12;
+    let y = my - CARD_H / 2;
 
-    // If card overflows right, show to the left of cursor
-    if (x + CARD_W > vw - PAD) x = mx - CARD_W - 16;
-    // If card overflows left, clamp
+    // If overflows right, flip to left of cursor
+    if (x + CARD_W > vw - PAD) x = mx - CARD_W - 12;
+    // Clamp left
     if (x < PAD) x = PAD;
-    // If not enough room above, show below cursor
-    if (y < PAD) y = my + 20;
-    // If overflows bottom, clamp
+    // Clamp top
+    if (y < PAD) y = PAD;
+    // Clamp bottom
     if (y + CARD_H > vh - PAD) y = vh - CARD_H - PAD;
 
     setPos({ x, y });
