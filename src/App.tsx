@@ -8,6 +8,7 @@ import { Session } from '@/pages/Session';
 import { NewGame } from '@/pages/NewGame';
 import { History } from '@/pages/History';
 import { Settings } from '@/pages/Settings';
+import { Stats } from '@/pages/Stats';
 
 function AppContent() {
   const location = useLocation();
@@ -24,6 +25,7 @@ function AppContent() {
           <Route path="/champions" element={<Champions />} />
           <Route path="/session" element={<Session />} />
           <Route path="/session/new-game" element={<NewGame />} />
+          <Route path="/stats" element={<Stats />} />
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>

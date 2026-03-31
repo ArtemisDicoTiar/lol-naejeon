@@ -5,6 +5,7 @@ const links = [
   { to: '/session', label: '내전 세션' },
   { to: '/players', label: '선수 관리' },
   { to: '/champions', label: '챔피언' },
+  { to: '/stats', label: '통계' },
   { to: '/history', label: '기록' },
   { to: '/settings', label: '설정' },
 ];
