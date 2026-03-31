@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
 import type { WinrateStats } from '@/lib/recommendation/winrate';
 import { ChampionHoverCard } from './ChampionHoverCard';
@@ -13,20 +14,41 @@ interface ChampionWithHoverProps {
   disabled?: boolean;
 }
 
+const CARD_W = 270;
+const CARD_H = 320;
+const PAD = 8;
+
 export function ChampionWithHover({
   champion, wrStats, allPlayers, proficiencies, highlightPlayerIds, children, disabled,
 }: ChampionWithHoverProps) {
   const [hovered, setHovered] = useState(false);
-  const [position, setPosition] = useState<'top' | 'bottom'>('top');
+  const [pos, setPos] = useState({ x: 0, y: 0 });
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (hovered && ref.current) {
-      const rect = ref.current.getBoundingClientRect();
-      // If not enough room above (card is ~280px tall), show below
-      setPosition(rect.top < 300 ? 'bottom' : 'top');
+  const updatePosition = useCallback(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Default: center above the element
+    let x = rect.left + rect.width / 2 - CARD_W / 2;
+    let y = rect.top - CARD_H - PAD;
+
+    // If not enough room above, show below
+    if (y < PAD) {
+      y = rect.bottom + PAD;
     }
-  }, [hovered]);
+    // If still overflows bottom, clamp to bottom
+    if (y + CARD_H > vh - PAD) {
+      y = vh - CARD_H - PAD;
+    }
+    // Clamp horizontal: don't overflow left or right
+    if (x < PAD) x = PAD;
+    if (x + CARD_W > vw - PAD) x = vw - CARD_W - PAD;
+
+    setPos({ x, y });
+  }, []);
 
   if (disabled) return <>{children}</>;
 
@@ -34,16 +56,15 @@ export function ChampionWithHover({
     <div
       ref={ref}
       className="relative"
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={() => { updatePosition(); setHovered(true); }}
       onMouseLeave={() => setHovered(false)}
     >
       {children}
-      {hovered && (
-        <div className={`absolute z-50 pointer-events-none ${
-          position === 'top'
-            ? 'bottom-full left-1/2 -translate-x-1/2 mb-2'
-            : 'top-full left-1/2 -translate-x-1/2 mt-2'
-        }`}>
+      {hovered && createPortal(
+        <div
+          className="fixed pointer-events-none"
+          style={{ left: pos.x, top: pos.y, zIndex: 9999 }}
+        >
           <ChampionHoverCard
             champion={champion}
             wrStats={wrStats}
@@ -51,7 +72,8 @@ export function ChampionWithHover({
             proficiencies={proficiencies}
             highlightPlayerIds={highlightPlayerIds}
           />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
