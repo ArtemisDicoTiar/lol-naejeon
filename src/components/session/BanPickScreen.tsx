@@ -4,6 +4,7 @@ import type { RecommendedComp } from '@/lib/recommendation/types';
 import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampions } from '@/lib/recommendation/engine';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
+import { ChampionHoverCard } from '@/components/champions/ChampionHoverCard';
 import { ProficiencyBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 
@@ -40,7 +41,8 @@ export function BanPickScreen({
   const [activeSlot, setActiveSlot] = useState<ActiveSlot>({ type: 'ban', team: 1, index: 0 });
   const [search, setSearch] = useState('');
   const [phase, setPhase] = useState<'ban' | 'pick'>('ban');
-  const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set()); // playerId set
+  const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
+  const [hoveredChamp, setHoveredChamp] = useState<string | null>(null);
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
@@ -593,18 +595,15 @@ export function BanPickScreen({
                 }
               }
 
-              const tooltip = [
-                champ.nameKo,
-                `ARAM ${champ.aramTier}티어 ${champ.aramWinrate}%`,
-                ...oppTooltipParts,
-              ].join('\n');
+              const isHovered = hoveredChamp === champ.id;
 
               return (
                 <div
                   key={champ.id}
                   onClick={() => !disabled && handleChampionSelect(champ.id)}
-                  title={tooltip}
-                  className={`group relative flex flex-col items-center gap-0.5 p-1 rounded border transition-colors ${
+                  onMouseEnter={() => setHoveredChamp(champ.id)}
+                  onMouseLeave={() => setHoveredChamp(null)}
+                  className={`relative flex flex-col items-center gap-0.5 p-1 rounded border transition-colors ${
                     disabled
                       ? 'border-transparent opacity-20 cursor-not-allowed'
                       : 'border-lol-border hover:border-lol-gold cursor-pointer bg-lol-blue/50'
@@ -625,6 +624,18 @@ export function BanPickScreen({
                     }`}>
                       vs {oppWr}
                     </span>
+                  )}
+                  {/* Hover Card */}
+                  {isHovered && !disabled && (
+                    <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none">
+                      <ChampionHoverCard
+                        champion={champ}
+                        wrStats={wrStats}
+                        allPlayers={players}
+                        proficiencies={proficiencies}
+                        highlightPlayerIds={opponentIds}
+                      />
+                    </div>
                   )}
                 </div>
               );

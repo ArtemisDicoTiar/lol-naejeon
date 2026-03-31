@@ -18,9 +18,19 @@ export interface PlayerOverallStats {
   topChampions: { championId: string; wins: number; losses: number; picks: number }[];
 }
 
+export interface ChampionFullStats {
+  picks: number;
+  wins: number;
+  losses: number;
+  winrate: number;
+  pickRate: number;   // picks / totalGames * 100
+  bans: number;
+  banRate: number;    // bans / totalGames * 100
+}
+
 export interface WinrateStats {
   playerChampStats: PlayerChampionStats[];
-  champOverallStats: Record<string, { wins: number; losses: number; winrate: number }>;
+  champOverallStats: Record<string, ChampionFullStats>;
   playerOverallStats: Record<number, PlayerOverallStats>;
   totalGames: number;
 }
@@ -63,10 +73,37 @@ export async function computeWinrateStats(): Promise<WinrateStats> {
     });
   }
 
-  const champOverallStats: Record<string, { wins: number; losses: number; winrate: number }> = {};
-  for (const [cid, stats] of champMap) {
-    const total = stats.wins + stats.losses;
-    champOverallStats[cid] = { ...stats, winrate: total > 0 ? (stats.wins / total) * 100 : 50 };
+  // Count picks per champion (regardless of result)
+  const champPickCount = new Map<string, number>();
+  for (const pick of allPicks) {
+    champPickCount.set(pick.championId, (champPickCount.get(pick.championId) ?? 0) + 1);
+  }
+
+  // Count bans per champion
+  const allBans = await db.gameBans.toArray();
+  const champBanCount = new Map<string, number>();
+  for (const ban of allBans) {
+    champBanCount.set(ban.championId, (champBanCount.get(ban.championId) ?? 0) + 1);
+  }
+
+  const totalGameCount = games.length;
+  const champOverallStats: Record<string, ChampionFullStats> = {};
+  // Merge all champion IDs from picks, bans, and wins
+  const allChampIds = new Set([...champMap.keys(), ...champPickCount.keys(), ...champBanCount.keys()]);
+  for (const cid of allChampIds) {
+    const wr = champMap.get(cid) ?? { wins: 0, losses: 0 };
+    const total = wr.wins + wr.losses;
+    const picks = champPickCount.get(cid) ?? 0;
+    const bans = champBanCount.get(cid) ?? 0;
+    champOverallStats[cid] = {
+      picks,
+      wins: wr.wins,
+      losses: wr.losses,
+      winrate: total > 0 ? (wr.wins / total) * 100 : 0,
+      pickRate: totalGameCount > 0 ? (picks / totalGameCount) * 100 : 0,
+      bans,
+      banRate: totalGameCount > 0 ? (bans / totalGameCount) * 100 : 0,
+    };
   }
 
   // Player overall stats
