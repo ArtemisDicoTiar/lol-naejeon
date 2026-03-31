@@ -23,29 +23,25 @@ export function ChampionWithHover({
 }: ChampionWithHoverProps) {
   const [hovered, setHovered] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
-  const ref = useRef<HTMLDivElement>(null);
 
-  const updatePosition = useCallback(() => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
+  const updatePosition = useCallback((e: React.MouseEvent) => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const mx = e.clientX;
+    const my = e.clientY;
 
-    // Default: center above the element
-    let x = rect.left + rect.width / 2 - CARD_W / 2;
-    let y = rect.top - CARD_H - PAD;
+    // Default: to the right and above the cursor
+    let x = mx + 16;
+    let y = my - CARD_H - 8;
 
-    // If not enough room above, show below
-    if (y < PAD) {
-      y = rect.bottom + PAD;
-    }
-    // If still overflows bottom, clamp to bottom
-    if (y + CARD_H > vh - PAD) {
-      y = vh - CARD_H - PAD;
-    }
-    // Clamp horizontal: don't overflow left or right
+    // If card overflows right, show to the left of cursor
+    if (x + CARD_W > vw - PAD) x = mx - CARD_W - 16;
+    // If card overflows left, clamp
     if (x < PAD) x = PAD;
-    if (x + CARD_W > vw - PAD) x = vw - CARD_W - PAD;
+    // If not enough room above, show below cursor
+    if (y < PAD) y = my + 20;
+    // If overflows bottom, clamp
+    if (y + CARD_H > vh - PAD) y = vh - CARD_H - PAD;
 
     setPos({ x, y });
   }, []);
@@ -54,9 +50,9 @@ export function ChampionWithHover({
 
   return (
     <div
-      ref={ref}
       className="relative"
-      onMouseEnter={() => { updatePosition(); setHovered(true); }}
+      onMouseEnter={(e) => { updatePosition(e); setHovered(true); }}
+      onMouseMove={updatePosition}
       onMouseLeave={() => setHovered(false)}
     >
       {children}
