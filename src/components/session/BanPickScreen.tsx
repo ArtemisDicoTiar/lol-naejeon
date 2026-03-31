@@ -440,11 +440,51 @@ export function BanPickScreen({
               const disabled = isBanned || isPicked;
               const profLevel = activeSlot?.type === 'pick'
                 ? proficiencies[activeSlot.playerId]?.get(champ.id) : undefined;
+
+              // Opponent winrate for this champion
+              const opponentIds = activeSlot?.type === 'ban'
+                ? (activeSlot.team === 1 ? team2PlayerIds : team1PlayerIds)
+                : (activeSlot?.type === 'pick'
+                  ? (team1PlayerIds.includes(activeSlot.playerId) ? team2PlayerIds : team1PlayerIds)
+                  : []);
+              let oppWr: string | null = null;
+              let oppTooltipParts: string[] = [];
+              if (wrStats && opponentIds.length > 0) {
+                const oppStats = wrStats.playerChampStats.filter(
+                  (s) => s.championId === champ.id && opponentIds.includes(s.playerId)
+                );
+                if (oppStats.length > 0) {
+                  const totalW = oppStats.reduce((a, s) => a + s.wins, 0);
+                  const totalL = oppStats.reduce((a, s) => a + s.losses, 0);
+                  if (totalW + totalL > 0) {
+                    oppWr = `${Math.round((totalW / (totalW + totalL)) * 100)}%`;
+                  }
+                  oppTooltipParts = oppStats.map((s) => {
+                    const name = getPlayerName(s.playerId);
+                    return `${name}: ${s.wins}승 ${s.losses}패 (${Math.round(s.winrate)}%)`;
+                  });
+                }
+                // Also show proficiency info in tooltip
+                for (const oid of opponentIds) {
+                  const prof = proficiencies[oid]?.get(champ.id);
+                  if (prof && prof !== '없음' && !oppStats.some((s) => s.playerId === oid)) {
+                    oppTooltipParts.push(`${getPlayerName(oid)}: 숙련도 ${prof}`);
+                  }
+                }
+              }
+
+              const tooltip = [
+                champ.nameKo,
+                `ARAM ${champ.aramTier}티어 ${champ.aramWinrate}%`,
+                ...oppTooltipParts,
+              ].join('\n');
+
               return (
                 <div
                   key={champ.id}
                   onClick={() => !disabled && handleChampionSelect(champ.id)}
-                  className={`flex flex-col items-center gap-0.5 p-1 rounded border transition-colors ${
+                  title={tooltip}
+                  className={`group relative flex flex-col items-center gap-0.5 p-1 rounded border transition-colors ${
                     disabled
                       ? 'border-transparent opacity-20 cursor-not-allowed'
                       : 'border-lol-border hover:border-lol-gold cursor-pointer bg-lol-blue/50'
@@ -458,6 +498,13 @@ export function BanPickScreen({
                   </span>
                   {profLevel && profLevel !== '없음' && (
                     <ProficiencyBadge level={profLevel} size="sm" />
+                  )}
+                  {oppWr && !disabled && (
+                    <span className={`text-[9px] font-mono ${
+                      parseInt(oppWr) >= 60 ? 'text-prof-low' : parseInt(oppWr) >= 40 ? 'text-lol-gold-light/50' : 'text-prof-high'
+                    }`}>
+                      vs {oppWr}
+                    </span>
                   )}
                 </div>
               );
