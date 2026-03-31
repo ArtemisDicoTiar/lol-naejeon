@@ -16,7 +16,7 @@ export function Nav() {
       <div className="max-w-6xl mx-auto px-4">
         <div className="flex items-center h-14 gap-1">
           <NavLink to="/" className="text-lol-gold font-bold text-lg mr-6 shrink-0">
-            LoL 내전
+            눈오는 헤네시스
           </NavLink>
           <div className="flex gap-1 overflow-x-auto">
             {links.map((link) => (

@@ -36,7 +36,7 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-lol-gold">LoL 내전 대시보드</h1>
+        <h1 className="text-2xl font-bold text-lol-gold">눈오는 헤네시스</h1>
         <span className="text-sm text-lol-gold-light/60">
           {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
         </span>
