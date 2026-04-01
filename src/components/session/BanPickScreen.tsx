@@ -281,7 +281,7 @@ export function BanPickScreen({
     const bgClass = team === 1 ? 'bg-blue-950/20 border-blue-900/40' : 'bg-red-950/20 border-red-900/40';
 
     return (
-      <div className={`w-[320px] shrink-0 rounded-lg border ${bgClass} p-3 space-y-3 overflow-y-auto max-h-[calc(100vh-180px)]`}>
+      <div className={`w-[360px] shrink-0 rounded-lg border ${bgClass} p-3 space-y-3 overflow-y-auto max-h-[calc(100vh-180px)]`}>
         {/* Team Header */}
         <h3 className={`text-center font-bold text-${teamColor}-400`}>Team {team}</h3>
 
@@ -337,7 +337,7 @@ export function BanPickScreen({
                 return (
                   <div key={oppId}>
                     <div className="text-[10px] text-lol-gold-light/40 mb-0.5">{getPlayerName(oppId)}</div>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                       {recs.map((rec) => {
                         const champ = champions.find((c) => c.id === rec.championId);
                         if (!champ) return null;
@@ -349,7 +349,7 @@ export function BanPickScreen({
                             <div
                               onClick={() => canClick && !isBanned && handleChampionSelect(rec.championId)}
                               className={`${canClick && !isBanned ? 'cursor-pointer hover:opacity-100' : ''} ${isBanned ? 'opacity-20' : 'opacity-70'}`}>
-                              <ChampionIcon champion={champ} size="sm" disabled={isBanned} />
+                              <ChampionIcon champion={champ} size="md" disabled={isBanned} />
                             </div>
                           </ChampionWithHover>
                         );
@@ -456,10 +456,10 @@ export function BanPickScreen({
                 {/* Player header with stats */}
                 <div className="flex items-center gap-2 mb-1">
                   {pickedChamp ? (
-                    <ChampionIcon champion={pickedChamp} size="sm" selected={isActive && !isLocked} />
+                    <ChampionIcon champion={pickedChamp} size="md" selected={isActive && !isLocked} />
                   ) : (
-                    <div className={`w-8 h-8 rounded border-2 border-dashed flex items-center justify-center ${isActive ? 'border-lol-gold' : 'border-gray-600'}`}>
-                      <span className="text-gray-500 text-xs">?</span>
+                    <div className={`w-12 h-12 rounded border-2 border-dashed flex items-center justify-center ${isActive ? 'border-lol-gold' : 'border-gray-600'}`}>
+                      <span className="text-gray-500 text-sm">?</span>
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
@@ -518,12 +518,12 @@ export function BanPickScreen({
                           <div
                             onClick={(e) => { e.stopPropagation(); if (!isLocked) setPicks((prev) => ({ ...prev, [pid]: c.id })); }}
                             className="cursor-pointer relative">
-                            <ChampionIcon champion={c} size="sm"
+                            <ChampionIcon champion={c} size="md"
                               selected={picks[pid] === c.id}
                               disabled={isUnavailable} />
                             {cs && (cs.wins + cs.losses > 0) && (
-                              <div className={`absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[8px] font-mono px-0.5 rounded ${
-                                cs.winrate >= 60 ? 'text-prof-high' : cs.winrate >= 40 ? 'text-lol-gold-light/50' : 'text-prof-low'
+                              <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] font-mono font-bold px-1 rounded bg-lol-dark/80 ${
+                                cs.winrate >= 60 ? 'text-prof-high' : cs.winrate >= 40 ? 'text-lol-gold-light/70' : 'text-prof-low'
                               }`}>
                                 {Math.round(cs.winrate)}%
                               </div>
@@ -626,7 +626,7 @@ export function BanPickScreen({
               </div>
             )}
           </div>
-          <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-1 max-h-[calc(100vh-320px)] overflow-y-auto">
+          <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-9 gap-1.5 max-h-[calc(100vh-320px)] overflow-y-auto">
             {gridChampions.map((champ) => {
               const isBanned = allBannedIds.has(champ.id);
               const isPicked = pickedIds.has(champ.id);
