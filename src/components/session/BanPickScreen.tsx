@@ -42,6 +42,7 @@ export function BanPickScreen({
   const [search, setSearch] = useState('');
   const [phase, setPhase] = useState<'ban' | 'pick'>('ban');
   const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
+  const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
@@ -251,17 +252,21 @@ export function BanPickScreen({
     if (search) {
       list = list.filter((c) => c.nameKo.includes(search) || c.id.toLowerCase().includes(search.toLowerCase()));
     }
-    // Sort: available first, then by tier
     const tierOrder: Record<string, number> = { S: 0, A: 1, B: 2, C: 3, D: 4 };
+    const profOrder: Record<string, number> = { '상': 0, '중': 1, '하': 2, '없음': 3 };
     const isDisabled = (c: Champion) => allBannedIds.has(c.id) || pickedIds.has(c.id);
+
+    const mode = sortMode === 'auto' ? (phase === 'pick' ? 'proficiency' : 'tier') : sortMode;
+
     list.sort((a, b) => {
       const dA = isDisabled(a) ? 1 : 0;
       const dB = isDisabled(b) ? 1 : 0;
       if (dA !== dB) return dA - dB;
-      // If picking, sort by proficiency for active player
-      if (activeSlot?.type === 'pick') {
+
+      if (mode === 'name') return a.nameKo.localeCompare(b.nameKo, 'ko');
+      if (mode === 'winrate') return b.aramWinrate - a.aramWinrate;
+      if (mode === 'proficiency' && activeSlot?.type === 'pick') {
         const profMap = proficiencies[activeSlot.playerId] ?? new Map();
-        const profOrder: Record<string, number> = { '상': 0, '중': 1, '하': 2, '없음': 3 };
         const pA = profOrder[profMap.get(a.id) ?? '없음'] ?? 3;
         const pB = profOrder[profMap.get(b.id) ?? '없음'] ?? 3;
         if (pA !== pB) return pA - pB;
@@ -591,13 +596,31 @@ export function BanPickScreen({
 
         {/* Center: Champion Grid */}
         <div className="flex-1 min-w-0 space-y-2">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="챔피언 검색..."
-            className="w-full bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="챔피언 검색..."
+              className="flex-1 bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
+            />
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as any)}
+              className="bg-lol-blue border border-lol-border rounded px-2 py-1.5 text-xs text-lol-gold-light cursor-pointer"
+            >
+              <option value="auto">자동 정렬</option>
+              <option value="tier">티어순</option>
+              <option value="name">이름순</option>
+              <option value="winrate">승률순</option>
+            </select>
+            {phase === 'ban' && activeSlot?.type === 'ban' && (
+              <button onClick={handleSkipBan}
+                className="cursor-pointer px-3 py-1.5 text-xs rounded bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700 hover:text-gray-300 shrink-0">
+                밴 없음
+              </button>
+            )}
+          </div>
           <div className="text-xs text-center space-y-1">
             <div className="text-lol-gold-light/40">
               {activeSlot
