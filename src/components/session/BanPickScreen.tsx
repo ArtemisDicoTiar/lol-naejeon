@@ -204,12 +204,11 @@ export function BanPickScreen({
   const allLocked = [...team1PlayerIds, ...team2PlayerIds].every((id) => lockedPicks.has(id));
   const canConfirm = allPicked && allLocked;
 
-  // Swap mode
-  const [swapMode, setSwapMode] = useState(false);
+  // Swap
   const [swapFirst, setSwapFirst] = useState<number | null>(null);
+  const swapMode = swapFirst !== null;
 
   const handleSwapClick = (pid: number) => {
-    if (!swapMode) return;
     if (swapFirst === null) {
       setSwapFirst(pid);
     } else {
@@ -217,7 +216,6 @@ export function BanPickScreen({
         setPicks((prev) => ({ ...prev, [swapFirst]: prev[pid], [pid]: prev[swapFirst] }));
       }
       setSwapFirst(null);
-      setSwapMode(false);
     }
   };
 
@@ -446,17 +444,13 @@ export function BanPickScreen({
             return (
               <div key={pid}
                 onClick={() => {
-                  if (swapMode) { handleSwapClick(pid); return; }
                   if (!isLocked) { setActiveSlot({ type: 'pick', playerId: pid }); setPhase('pick'); }
                 }}
                 className={`p-2 rounded border transition-all ${
-                  swapMode
-                    ? swapFirst === pid
-                      ? 'border-purple-500 bg-purple-950/30 cursor-pointer ring-1 ring-purple-500/50'
-                      : 'border-purple-800/50 hover:border-purple-500 cursor-pointer'
-                    : isLocked ? 'border-prof-high/50 bg-prof-high/5'
-                    : isActive ? 'border-lol-gold bg-lol-gold/10 cursor-pointer'
-                    : 'border-lol-border/50 hover:border-lol-gold/30 cursor-pointer'
+                  swapFirst === pid ? 'border-purple-500 bg-purple-950/30 ring-1 ring-purple-500/50'
+                  : isLocked ? 'border-prof-high/50 bg-prof-high/5'
+                  : isActive ? 'border-lol-gold bg-lol-gold/10 cursor-pointer'
+                  : 'border-lol-border/50 hover:border-lol-gold/30 cursor-pointer'
                 }`}>
                 {/* Player header with stats */}
                 <div className="flex items-center gap-2 mb-1">
@@ -491,23 +485,42 @@ export function BanPickScreen({
                       )}
                     </div>
                   </div>
-                  {/* Lock-in button */}
-                  {pickedChamp && !isLocked && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); lockPick(pid); }}
-                      className="cursor-pointer px-2 py-1 text-[10px] rounded bg-prof-high/20 text-prof-high border border-prof-high/40 hover:bg-prof-high/30 transition-colors shrink-0"
-                    >
-                      락인
-                    </button>
-                  )}
-                  {isLocked && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); unlockPick(pid); }}
-                      className="cursor-pointer px-2 py-1 text-[10px] rounded bg-lol-gray text-lol-gold-light/50 border border-lol-border hover:text-lol-gold-light transition-colors shrink-0"
-                    >
-                      해제
-                    </button>
-                  )}
+                  {/* Lock-in + Swap buttons */}
+                  <div className="flex gap-1 shrink-0">
+                    {pickedChamp && !isLocked && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); lockPick(pid); }}
+                        className="cursor-pointer px-2 py-1 text-[10px] rounded bg-prof-high/20 text-prof-high border border-prof-high/40 hover:bg-prof-high/30 transition-colors"
+                      >
+                        락인
+                      </button>
+                    )}
+                    {isLocked && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); unlockPick(pid); }}
+                        className="cursor-pointer px-2 py-1 text-[10px] rounded bg-lol-gray text-lol-gold-light/50 border border-lol-border hover:text-lol-gold-light transition-colors"
+                      >
+                        해제
+                      </button>
+                    )}
+                    {/* Swap button */}
+                    {pickedChamp && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSwapClick(pid);
+                        }}
+                        className={`cursor-pointer px-2 py-1 text-[10px] rounded border transition-colors ${
+                          swapFirst === pid
+                            ? 'bg-purple-900/50 text-purple-300 border-purple-600 ring-1 ring-purple-500/50'
+                            : 'bg-lol-gray text-lol-gold-light/40 border-lol-border hover:text-purple-300 hover:border-purple-600'
+                        }`}
+                        title={swapFirst === pid ? '스왑 대상을 선택하세요' : swapFirst ? '이 플레이어와 스왑' : '스왑'}
+                      >
+                        {swapFirst === pid ? '...' : '↔'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {/* Top champions with pick rate bars */}
                 {!isLocked && (
@@ -561,14 +574,6 @@ export function BanPickScreen({
             className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'pick' ? 'bg-lol-gold/30 text-lol-gold border border-lol-gold/50' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
             픽
           </button>
-          {allLocked && (
-            <button onClick={() => { setSwapMode(!swapMode); setSwapFirst(null); }}
-              className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${
-                swapMode ? 'bg-purple-900/50 text-purple-300 border border-purple-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'
-              }`}>
-              {swapMode ? (swapFirst ? '스왑 대상 선택...' : '스왑 모드') : '스왑'}
-            </button>
-          )}
         </div>
         <Button onClick={handleConfirm} disabled={!canConfirm || swapMode}>
           {!allPicked ? '픽 미완료' : !allLocked ? `락인 대기 (${lockedPicks.size}/${team1PlayerIds.length + team2PlayerIds.length})` : '게임 시작!'}
