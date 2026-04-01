@@ -17,7 +17,8 @@ export function Nav({ identity }: { identity: ReturnType<typeof useIdentity> }) 
     <nav className="bg-lol-blue border-b border-lol-border">
       <div className="max-w-[1920px] mx-auto px-4">
         <div className="flex items-center h-14 gap-1">
-          <NavLink to="/" className="text-lol-gold font-bold text-lg mr-4 shrink-0">
+          <NavLink to="/" className="text-lol-gold font-bold text-lg mr-4 shrink-0 flex items-center gap-2">
+            <img src="/favicon.svg" alt="" className="w-7 h-7" />
             눈오는 헤네시스
           </NavLink>
           <div className="flex gap-1 overflow-x-auto flex-1">
