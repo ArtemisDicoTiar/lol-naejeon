@@ -329,15 +329,15 @@ export function BanPickScreen({
         {phase === 'ban' && Object.keys(banRecs).length > 0 && (
           <div>
             <div className="text-xs text-lol-gold-light/50 mb-1.5">추천 밴 (상대 플레이어별)</div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {(team === 1 ? team2PlayerIds : team1PlayerIds).map((oppId) => {
                 const recs = banRecs[oppId];
                 if (!recs || recs.length === 0) return null;
                 const canClick = activeSlot?.type === 'ban' && activeSlot.team === team;
                 return (
-                  <div key={oppId}>
-                    <div className="text-[10px] text-lol-gold-light/40 mb-0.5">{getPlayerName(oppId)}</div>
-                    <div className="flex flex-wrap gap-1.5">
+                  <div key={oppId} className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-lol-gold-light/40 shrink-0 w-8 truncate">{getPlayerName(oppId)}</span>
+                    <div className="flex gap-1 overflow-x-auto">
                       {recs.map((rec) => {
                         const champ = champions.find((c) => c.id === rec.championId);
                         if (!champ) return null;
@@ -348,8 +348,8 @@ export function BanPickScreen({
                             highlightPlayerIds={[oppId]} disabled={isBanned}>
                             <div
                               onClick={() => canClick && !isBanned && handleChampionSelect(rec.championId)}
-                              className={`${canClick && !isBanned ? 'cursor-pointer hover:opacity-100' : ''} ${isBanned ? 'opacity-20' : 'opacity-70'}`}>
-                              <ChampionIcon champion={champ} size="md" disabled={isBanned} />
+                              className={`shrink-0 ${canClick && !isBanned ? 'cursor-pointer hover:opacity-100' : ''} ${isBanned ? 'opacity-20' : 'opacity-70'}`}>
+                              <ChampionIcon champion={champ} size="sm" disabled={isBanned} />
                             </div>
                           </ChampionWithHover>
                         );
@@ -626,7 +626,7 @@ export function BanPickScreen({
               </div>
             )}
           </div>
-          <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-9 gap-1.5 max-h-[calc(100vh-320px)] overflow-y-auto">
+          <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-0.5 max-h-[calc(100vh-320px)] overflow-y-auto">
             {gridChampions.map((champ) => {
               const isBanned = allBannedIds.has(champ.id);
               const isPicked = pickedIds.has(champ.id);
@@ -678,13 +678,13 @@ export function BanPickScreen({
                 >
                   <div
                     onClick={() => !disabled && handleChampionSelect(champ.id)}
-                    className={`flex flex-col items-center gap-0.5 p-1 rounded border transition-colors ${
+                    className={`flex flex-col items-center gap-0.5 p-0.5 rounded border transition-colors ${
                       disabled
                         ? 'border-transparent opacity-20 cursor-not-allowed'
                         : 'border-lol-border hover:border-lol-gold cursor-pointer bg-lol-blue/50'
                     }`}
                   >
-                    <div className="w-9 h-9 rounded overflow-hidden">
+                    <div className="w-11 h-11 rounded overflow-hidden">
                       <img src={champ.imageUrl} className={`w-full h-full ${disabled ? 'grayscale' : ''}`} loading="lazy" />
                     </div>
                     <span className="text-[9px] text-lol-gold-light/60 text-center leading-tight truncate w-full">
