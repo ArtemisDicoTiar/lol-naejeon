@@ -1,5 +1,5 @@
-// Auto-generated seed data from lol-naejeon-backup-2026-03-30.json
-// This file is bundled with the app and loaded on first visit
+// Auto-generated seed data
+// Updated with CSV import data
 
 export const seedData = {
   "version": 1,
@@ -1483,6 +1483,18 @@ export const seedData = {
       "createdAt": "2026-03-30T14:53:14.362Z",
       "endedAt": null,
       "id": 5
+    },
+    {
+      "id": 6,
+      "name": "2026.03.27 내전 (CSV)",
+      "createdAt": "2026-03-27T10:00:00.000Z",
+      "endedAt": "2026-03-27T23:00:00.000Z"
+    },
+    {
+      "id": 7,
+      "name": "2026.03.20 내전 (CSV)",
+      "createdAt": "2026-03-27T10:00:00.000Z",
+      "endedAt": "2026-03-27T23:00:00.000Z"
     }
   ],
   "games": [
@@ -1503,6 +1515,150 @@ export const seedData = {
       "winningTeam": 1,
       "notes": "",
       "id": 2
+    },
+    {
+      "id": 3,
+      "sessionId": 6,
+      "gameNumber": 1,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 2,
+      "notes": ""
+    },
+    {
+      "id": 4,
+      "sessionId": 6,
+      "gameNumber": 2,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 2,
+      "notes": ""
+    },
+    {
+      "id": 5,
+      "sessionId": 6,
+      "gameNumber": 3,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 2,
+      "notes": ""
+    },
+    {
+      "id": 6,
+      "sessionId": 6,
+      "gameNumber": 4,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 2,
+      "notes": ""
+    },
+    {
+      "id": 7,
+      "sessionId": 6,
+      "gameNumber": 5,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 1,
+      "notes": ""
+    },
+    {
+      "id": 8,
+      "sessionId": 6,
+      "gameNumber": 6,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 1,
+      "notes": ""
+    },
+    {
+      "id": 9,
+      "sessionId": 6,
+      "gameNumber": 7,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 1,
+      "notes": ""
+    },
+    {
+      "id": 10,
+      "sessionId": 6,
+      "gameNumber": 8,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 1,
+      "notes": ""
+    },
+    {
+      "id": 11,
+      "sessionId": 6,
+      "gameNumber": 9,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 2,
+      "notes": ""
+    },
+    {
+      "id": 12,
+      "sessionId": 6,
+      "gameNumber": 10,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 2,
+      "notes": ""
+    },
+    {
+      "id": 13,
+      "sessionId": 6,
+      "gameNumber": 11,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 1,
+      "notes": ""
+    },
+    {
+      "id": 14,
+      "sessionId": 6,
+      "gameNumber": 12,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 1,
+      "notes": ""
+    },
+    {
+      "id": 15,
+      "sessionId": 6,
+      "gameNumber": 13,
+      "format": "3v4",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 2,
+      "notes": ""
+    },
+    {
+      "id": 16,
+      "sessionId": 7,
+      "gameNumber": 1,
+      "format": "3v3",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 1,
+      "notes": ""
+    },
+    {
+      "id": 17,
+      "sessionId": 7,
+      "gameNumber": 2,
+      "format": "3v3",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 2,
+      "notes": ""
+    },
+    {
+      "id": 18,
+      "sessionId": 7,
+      "gameNumber": 3,
+      "format": "3v3",
+      "playedAt": "2026-03-27T10:00:00.000Z",
+      "winningTeam": 1,
+      "notes": ""
     }
   ],
   "gamePicks": [
@@ -1589,6 +1745,769 @@ export const seedData = {
       "team": 2,
       "gameId": 2,
       "id": 12
+    },
+    {
+      "id": 13,
+      "gameId": 3,
+      "playerId": 7,
+      "championId": "Rengar",
+      "team": 1
+    },
+    {
+      "id": 14,
+      "gameId": 3,
+      "playerId": 4,
+      "championId": "Braum",
+      "team": 1
+    },
+    {
+      "id": 15,
+      "gameId": 3,
+      "playerId": 3,
+      "championId": "Nidalee",
+      "team": 1
+    },
+    {
+      "id": 16,
+      "gameId": 3,
+      "playerId": 2,
+      "championId": "JarvanIV",
+      "team": 1
+    },
+    {
+      "id": 17,
+      "gameId": 3,
+      "playerId": 1,
+      "championId": "Ahri",
+      "team": 2
+    },
+    {
+      "id": 18,
+      "gameId": 3,
+      "playerId": 5,
+      "championId": "Gangplank",
+      "team": 2
+    },
+    {
+      "id": 19,
+      "gameId": 3,
+      "playerId": 6,
+      "championId": "Zyra",
+      "team": 2
+    },
+    {
+      "id": 20,
+      "gameId": 4,
+      "playerId": 7,
+      "championId": "Nocturne",
+      "team": 1
+    },
+    {
+      "id": 21,
+      "gameId": 4,
+      "playerId": 5,
+      "championId": "Shyvana",
+      "team": 1
+    },
+    {
+      "id": 22,
+      "gameId": 4,
+      "playerId": 2,
+      "championId": "Camille",
+      "team": 1
+    },
+    {
+      "id": 23,
+      "gameId": 4,
+      "playerId": 6,
+      "championId": "Leblanc",
+      "team": 2
+    },
+    {
+      "id": 24,
+      "gameId": 4,
+      "playerId": 1,
+      "championId": "Draven",
+      "team": 2
+    },
+    {
+      "id": 25,
+      "gameId": 4,
+      "playerId": 4,
+      "championId": "Shen",
+      "team": 2
+    },
+    {
+      "id": 26,
+      "gameId": 4,
+      "playerId": 3,
+      "championId": "Urgot",
+      "team": 2
+    },
+    {
+      "id": 27,
+      "gameId": 5,
+      "playerId": 7,
+      "championId": "Zaahen",
+      "team": 1
+    },
+    {
+      "id": 28,
+      "gameId": 5,
+      "playerId": 5,
+      "championId": "MasterYi",
+      "team": 1
+    },
+    {
+      "id": 29,
+      "gameId": 5,
+      "playerId": 3,
+      "championId": "Kennen",
+      "team": 1
+    },
+    {
+      "id": 30,
+      "gameId": 5,
+      "playerId": 2,
+      "championId": "Varus",
+      "team": 2
+    },
+    {
+      "id": 31,
+      "gameId": 5,
+      "playerId": 6,
+      "championId": "Karma",
+      "team": 2
+    },
+    {
+      "id": 32,
+      "gameId": 5,
+      "playerId": 1,
+      "championId": "Ekko",
+      "team": 2
+    },
+    {
+      "id": 33,
+      "gameId": 5,
+      "playerId": 4,
+      "championId": "Nautilus",
+      "team": 2
+    },
+    {
+      "id": 34,
+      "gameId": 6,
+      "playerId": 7,
+      "championId": "Fizz",
+      "team": 1
+    },
+    {
+      "id": 35,
+      "gameId": 6,
+      "playerId": 5,
+      "championId": "Zeri",
+      "team": 1
+    },
+    {
+      "id": 36,
+      "gameId": 6,
+      "playerId": 4,
+      "championId": "Thresh",
+      "team": 1
+    },
+    {
+      "id": 37,
+      "gameId": 6,
+      "playerId": 2,
+      "championId": "Elise",
+      "team": 2
+    },
+    {
+      "id": 38,
+      "gameId": 6,
+      "playerId": 3,
+      "championId": "Irelia",
+      "team": 2
+    },
+    {
+      "id": 39,
+      "gameId": 6,
+      "playerId": 6,
+      "championId": "Bard",
+      "team": 2
+    },
+    {
+      "id": 40,
+      "gameId": 6,
+      "playerId": 1,
+      "championId": "LeeSin",
+      "team": 2
+    },
+    {
+      "id": 41,
+      "gameId": 7,
+      "playerId": 7,
+      "championId": "Nasus",
+      "team": 1
+    },
+    {
+      "id": 42,
+      "gameId": 7,
+      "playerId": 2,
+      "championId": "Poppy",
+      "team": 1
+    },
+    {
+      "id": 43,
+      "gameId": 7,
+      "playerId": 3,
+      "championId": "Volibear",
+      "team": 1
+    },
+    {
+      "id": 44,
+      "gameId": 7,
+      "playerId": 4,
+      "championId": "Seraphine",
+      "team": 1
+    },
+    {
+      "id": 45,
+      "gameId": 7,
+      "playerId": 5,
+      "championId": "Jax",
+      "team": 2
+    },
+    {
+      "id": 46,
+      "gameId": 7,
+      "playerId": 6,
+      "championId": "Amumu",
+      "team": 2
+    },
+    {
+      "id": 47,
+      "gameId": 7,
+      "playerId": 1,
+      "championId": "Taliyah",
+      "team": 2
+    },
+    {
+      "id": 48,
+      "gameId": 8,
+      "playerId": 7,
+      "championId": "Sylas",
+      "team": 1
+    },
+    {
+      "id": 49,
+      "gameId": 8,
+      "playerId": 2,
+      "championId": "Darius",
+      "team": 1
+    },
+    {
+      "id": 50,
+      "gameId": 8,
+      "playerId": 3,
+      "championId": "Zoe",
+      "team": 1
+    },
+    {
+      "id": 51,
+      "gameId": 8,
+      "playerId": 4,
+      "championId": "Hwei",
+      "team": 1
+    },
+    {
+      "id": 52,
+      "gameId": 8,
+      "playerId": 5,
+      "championId": "Diana",
+      "team": 2
+    },
+    {
+      "id": 53,
+      "gameId": 8,
+      "playerId": 6,
+      "championId": "Orianna",
+      "team": 2
+    },
+    {
+      "id": 54,
+      "gameId": 8,
+      "playerId": 1,
+      "championId": "Vayne",
+      "team": 2
+    },
+    {
+      "id": 55,
+      "gameId": 9,
+      "playerId": 7,
+      "championId": "Singed",
+      "team": 1
+    },
+    {
+      "id": 56,
+      "gameId": 9,
+      "playerId": 2,
+      "championId": "Heimerdinger",
+      "team": 1
+    },
+    {
+      "id": 57,
+      "gameId": 9,
+      "playerId": 6,
+      "championId": "Teemo",
+      "team": 1
+    },
+    {
+      "id": 58,
+      "gameId": 9,
+      "playerId": 3,
+      "championId": "Pyke",
+      "team": 1
+    },
+    {
+      "id": 59,
+      "gameId": 9,
+      "playerId": 1,
+      "championId": "Kalista",
+      "team": 2
+    },
+    {
+      "id": 60,
+      "gameId": 9,
+      "playerId": 5,
+      "championId": "Swain",
+      "team": 2
+    },
+    {
+      "id": 61,
+      "gameId": 9,
+      "playerId": 4,
+      "championId": "Leona",
+      "team": 2
+    },
+    {
+      "id": 62,
+      "gameId": 10,
+      "playerId": 7,
+      "championId": "Malphite",
+      "team": 1
+    },
+    {
+      "id": 63,
+      "gameId": 10,
+      "playerId": 2,
+      "championId": "Jayce",
+      "team": 1
+    },
+    {
+      "id": 64,
+      "gameId": 10,
+      "playerId": 6,
+      "championId": "Malzahar",
+      "team": 1
+    },
+    {
+      "id": 65,
+      "gameId": 10,
+      "playerId": 3,
+      "championId": "MissFortune",
+      "team": 1
+    },
+    {
+      "id": 66,
+      "gameId": 10,
+      "playerId": 1,
+      "championId": "Renekton",
+      "team": 2
+    },
+    {
+      "id": 67,
+      "gameId": 10,
+      "playerId": 5,
+      "championId": "XinZhao",
+      "team": 2
+    },
+    {
+      "id": 68,
+      "gameId": 10,
+      "playerId": 4,
+      "championId": "Lux",
+      "team": 2
+    },
+    {
+      "id": 69,
+      "gameId": 11,
+      "playerId": 7,
+      "championId": "Yorick",
+      "team": 1
+    },
+    {
+      "id": 70,
+      "gameId": 11,
+      "playerId": 2,
+      "championId": "Pantheon",
+      "team": 1
+    },
+    {
+      "id": 71,
+      "gameId": 11,
+      "playerId": 6,
+      "championId": "Anivia",
+      "team": 1
+    },
+    {
+      "id": 72,
+      "gameId": 11,
+      "playerId": 3,
+      "championId": "Azir",
+      "team": 2
+    },
+    {
+      "id": 73,
+      "gameId": 11,
+      "playerId": 1,
+      "championId": "Ambessa",
+      "team": 2
+    },
+    {
+      "id": 74,
+      "gameId": 11,
+      "playerId": 5,
+      "championId": "Ezreal",
+      "team": 2
+    },
+    {
+      "id": 75,
+      "gameId": 11,
+      "playerId": 4,
+      "championId": "Morgana",
+      "team": 2
+    },
+    {
+      "id": 76,
+      "gameId": 12,
+      "playerId": 7,
+      "championId": "Rumble",
+      "team": 1
+    },
+    {
+      "id": 77,
+      "gameId": 12,
+      "playerId": 2,
+      "championId": "Quinn",
+      "team": 1
+    },
+    {
+      "id": 78,
+      "gameId": 12,
+      "playerId": 6,
+      "championId": "Zyra",
+      "team": 1
+    },
+    {
+      "id": 79,
+      "gameId": 12,
+      "playerId": 3,
+      "championId": "Caitlyn",
+      "team": 2
+    },
+    {
+      "id": 80,
+      "gameId": 12,
+      "playerId": 1,
+      "championId": "Mel",
+      "team": 2
+    },
+    {
+      "id": 81,
+      "gameId": 12,
+      "playerId": 5,
+      "championId": "Alistar",
+      "team": 2
+    },
+    {
+      "id": 82,
+      "gameId": 12,
+      "playerId": 4,
+      "championId": "Fiddlesticks",
+      "team": 2
+    },
+    {
+      "id": 83,
+      "gameId": 13,
+      "playerId": 7,
+      "championId": "Xerath",
+      "team": 1
+    },
+    {
+      "id": 84,
+      "gameId": 13,
+      "playerId": 4,
+      "championId": "Mordekaiser",
+      "team": 1
+    },
+    {
+      "id": 85,
+      "gameId": 13,
+      "playerId": 2,
+      "championId": "Blitzcrank",
+      "team": 1
+    },
+    {
+      "id": 86,
+      "gameId": 13,
+      "playerId": 6,
+      "championId": "Xayah",
+      "team": 1
+    },
+    {
+      "id": 87,
+      "gameId": 13,
+      "playerId": 3,
+      "championId": "Galio",
+      "team": 2
+    },
+    {
+      "id": 88,
+      "gameId": 13,
+      "playerId": 1,
+      "championId": "Aurora",
+      "team": 2
+    },
+    {
+      "id": 89,
+      "gameId": 13,
+      "playerId": 5,
+      "championId": "Olaf",
+      "team": 2
+    },
+    {
+      "id": 90,
+      "gameId": 14,
+      "playerId": 7,
+      "championId": "Lissandra",
+      "team": 1
+    },
+    {
+      "id": 91,
+      "gameId": 14,
+      "playerId": 4,
+      "championId": "Sejuani",
+      "team": 1
+    },
+    {
+      "id": 92,
+      "gameId": 14,
+      "playerId": 2,
+      "championId": "Garen",
+      "team": 1
+    },
+    {
+      "id": 93,
+      "gameId": 14,
+      "playerId": 6,
+      "championId": "Corki",
+      "team": 1
+    },
+    {
+      "id": 94,
+      "gameId": 14,
+      "playerId": 3,
+      "championId": "Kayle",
+      "team": 2
+    },
+    {
+      "id": 95,
+      "gameId": 14,
+      "playerId": 1,
+      "championId": "Aatrox",
+      "team": 2
+    },
+    {
+      "id": 96,
+      "gameId": 14,
+      "playerId": 5,
+      "championId": "Yunara",
+      "team": 2
+    },
+    {
+      "id": 97,
+      "gameId": 15,
+      "playerId": 7,
+      "championId": "Akali",
+      "team": 1
+    },
+    {
+      "id": 98,
+      "gameId": 15,
+      "playerId": 4,
+      "championId": "Maokai",
+      "team": 1
+    },
+    {
+      "id": 99,
+      "gameId": 15,
+      "playerId": 2,
+      "championId": "Ahri",
+      "team": 1
+    },
+    {
+      "id": 100,
+      "gameId": 15,
+      "playerId": 6,
+      "championId": "Ashe",
+      "team": 1
+    },
+    {
+      "id": 101,
+      "gameId": 15,
+      "playerId": 3,
+      "championId": "TahmKench",
+      "team": 2
+    },
+    {
+      "id": 102,
+      "gameId": 15,
+      "playerId": 1,
+      "championId": "Neeko",
+      "team": 2
+    },
+    {
+      "id": 103,
+      "gameId": 15,
+      "playerId": 5,
+      "championId": "Gangplank",
+      "team": 2
+    },
+    {
+      "id": 104,
+      "gameId": 16,
+      "playerId": 7,
+      "championId": "Yorick",
+      "team": 1
+    },
+    {
+      "id": 105,
+      "gameId": 16,
+      "playerId": 4,
+      "championId": "Lux",
+      "team": 1
+    },
+    {
+      "id": 106,
+      "gameId": 16,
+      "playerId": 6,
+      "championId": "Kaisa",
+      "team": 1
+    },
+    {
+      "id": 107,
+      "gameId": 16,
+      "playerId": 2,
+      "championId": "Quinn",
+      "team": 2
+    },
+    {
+      "id": 108,
+      "gameId": 16,
+      "playerId": 5,
+      "championId": "Singed",
+      "team": 2
+    },
+    {
+      "id": 109,
+      "gameId": 16,
+      "playerId": 1,
+      "championId": "Blitzcrank",
+      "team": 2
+    },
+    {
+      "id": 110,
+      "gameId": 17,
+      "playerId": 7,
+      "championId": "Nasus",
+      "team": 1
+    },
+    {
+      "id": 111,
+      "gameId": 17,
+      "playerId": 4,
+      "championId": "Seraphine",
+      "team": 1
+    },
+    {
+      "id": 112,
+      "gameId": 17,
+      "playerId": 1,
+      "championId": "Ahri",
+      "team": 1
+    },
+    {
+      "id": 113,
+      "gameId": 17,
+      "playerId": 2,
+      "championId": "Shen",
+      "team": 2
+    },
+    {
+      "id": 114,
+      "gameId": 17,
+      "playerId": 5,
+      "championId": "Brand",
+      "team": 2
+    },
+    {
+      "id": 115,
+      "gameId": 17,
+      "playerId": 6,
+      "championId": "Renekton",
+      "team": 2
+    },
+    {
+      "id": 116,
+      "gameId": 18,
+      "playerId": 7,
+      "championId": "Senna",
+      "team": 1
+    },
+    {
+      "id": 117,
+      "gameId": 18,
+      "playerId": 2,
+      "championId": "Garen",
+      "team": 1
+    },
+    {
+      "id": 118,
+      "gameId": 18,
+      "playerId": 5,
+      "championId": "Vex",
+      "team": 1
+    },
+    {
+      "id": 119,
+      "gameId": 18,
+      "playerId": 1,
+      "championId": "Aurora",
+      "team": 2
+    },
+    {
+      "id": 120,
+      "gameId": 18,
+      "playerId": 4,
+      "championId": "Leona",
+      "team": 2
+    },
+    {
+      "id": 121,
+      "gameId": 18,
+      "playerId": 6,
+      "championId": "Tristana",
+      "team": 2
     }
   ],
   "gameBans": [

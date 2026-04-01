@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom';
+import { IdentitySelector } from './IdentitySelector';
+import type { useIdentity } from '@/hooks/useIdentity';
 
 const links = [
   { to: '/', label: '대시보드' },
@@ -10,15 +12,15 @@ const links = [
   { to: '/settings', label: '설정' },
 ];
 
-export function Nav() {
+export function Nav({ identity }: { identity: ReturnType<typeof useIdentity> }) {
   return (
     <nav className="bg-lol-blue border-b border-lol-border">
-      <div className="max-w-6xl mx-auto px-4">
+      <div className="max-w-[1920px] mx-auto px-4">
         <div className="flex items-center h-14 gap-1">
-          <NavLink to="/" className="text-lol-gold font-bold text-lg mr-6 shrink-0">
+          <NavLink to="/" className="text-lol-gold font-bold text-lg mr-4 shrink-0">
             눈오는 헤네시스
           </NavLink>
-          <div className="flex gap-1 overflow-x-auto">
+          <div className="flex gap-1 overflow-x-auto flex-1">
             {links.map((link) => (
               <NavLink
                 key={link.to}
@@ -34,6 +36,17 @@ export function Nav() {
                 {link.label}
               </NavLink>
             ))}
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <span className={`text-xs ${identity.isMaster ? 'text-lol-gold' : 'text-lol-gold-light/60'}`}>
+              {identity.isMaster && '[M] '}{identity.playerName}
+            </span>
+            <IdentitySelector
+              players={identity.players}
+              onSelect={identity.setUserId}
+              currentId={identity.userId}
+              inline
+            />
           </div>
         </div>
       </div>

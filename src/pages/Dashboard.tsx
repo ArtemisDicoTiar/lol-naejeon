@@ -5,8 +5,10 @@ import { usePlayers } from '@/hooks/usePlayers';
 import { useChampions } from '@/hooks/useChampions';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { useIdentityContext } from '@/App';
 
 export function Dashboard() {
+  const { isMaster } = useIdentityContext();
   const { session, games, fierlessBans, loading: sessionLoading, createSession } = useSession();
   const { players } = usePlayers();
   const { champions, syncing } = useChampions();
@@ -43,7 +45,7 @@ export function Dashboard() {
       </div>
 
       {/* No active session */}
-      {!session && (
+      {!session && isMaster && (
         <Card title="새 세션 시작">
           <p className="text-sm text-lol-gold-light/60 mb-4">
             내전을 시작하려면 새 세션을 만드세요. 세션 안에서 여러 게임을 진행하고, 피어리스 밴이 누적됩니다.
