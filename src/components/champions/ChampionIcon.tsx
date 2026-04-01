@@ -2,7 +2,7 @@ import type { Champion } from '@/lib/db';
 
 interface ChampionIconProps {
   champion: Champion;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'base' | 'md' | 'lg';
   disabled?: boolean;
   selected?: boolean;
   onClick?: () => void;
@@ -11,6 +11,7 @@ interface ChampionIconProps {
 
 const sizes = {
   sm: 'w-8 h-8',
+  base: 'w-10 h-10',
   md: 'w-12 h-12',
   lg: 'w-16 h-16',
 };

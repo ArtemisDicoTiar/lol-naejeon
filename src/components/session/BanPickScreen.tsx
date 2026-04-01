@@ -518,7 +518,7 @@ export function BanPickScreen({
                           <div
                             onClick={(e) => { e.stopPropagation(); if (!isLocked) setPicks((prev) => ({ ...prev, [pid]: c.id })); }}
                             className="cursor-pointer relative">
-                            <ChampionIcon champion={c} size="sm"
+                            <ChampionIcon champion={c} size="base"
                               selected={picks[pid] === c.id}
                               disabled={isUnavailable} />
                             {cs && (cs.wins + cs.losses > 0) && (
