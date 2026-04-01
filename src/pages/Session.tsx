@@ -37,7 +37,8 @@ export function Session() {
 
   const handleEndSession = async () => {
     if (!confirm('세션을 종료하시겠습니까? 종료 후에는 게임을 추가할 수 없습니다.')) return;
-    await endSession();
+    const syncMsg = await endSession();
+    if (syncMsg) alert(syncMsg);
     navigate('/');
   };
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { db, type Player } from '@/lib/db';
 
 const STORAGE_KEY = 'lol-naejeon-userId';
-const MASTER_PLAYER_NAME = '마참';
+const MASTER_PLAYER_NAME = '12시';
 
 export function useIdentity() {
   const [userId, setUserIdState] = useState<number | null>(() => {

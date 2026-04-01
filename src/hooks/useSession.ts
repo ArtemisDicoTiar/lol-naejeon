@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db, getActiveSession, getFierlessBans, deleteGame as dbDeleteGame, deleteSession as dbDeleteSession, updateSessionName as dbUpdateSessionName, type Session, type Game, type GamePick, type GameBan } from '@/lib/db';
+import { syncToGithub, getGithubToken } from '@/lib/auto-sync';
 
 export interface LastGameTeams {
   format: '3v3' | '3v4';
@@ -63,10 +64,17 @@ export function useSession() {
     return (await db.sessions.get(id))!;
   };
 
-  const endSession = async () => {
-    if (!session) return;
+  const endSession = async (): Promise<string | null> => {
+    if (!session) return null;
     await db.sessions.update(session.id!, { endedAt: new Date() });
     await refresh();
+
+    // Auto-sync to GitHub if token is configured
+    if (getGithubToken()) {
+      const result = await syncToGithub();
+      return result.message;
+    }
+    return null;
   };
 
   const addGame = async (
