@@ -506,7 +506,7 @@ export function BanPickScreen({
                 </div>
                 {/* Top champions with pick rate bars */}
                 {!isLocked && (
-                  <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="flex flex-wrap gap-0.5 mt-1">
                     {recs.map((c) => {
                       const cs = wrStats?.playerChampStats.find((s) => s.playerId === pid && s.championId === c.id);
                       const isUnavailable = pickedIds.has(c.id) && picks[pid] !== c.id;
@@ -518,11 +518,11 @@ export function BanPickScreen({
                           <div
                             onClick={(e) => { e.stopPropagation(); if (!isLocked) setPicks((prev) => ({ ...prev, [pid]: c.id })); }}
                             className="cursor-pointer relative">
-                            <ChampionIcon champion={c} size="md"
+                            <ChampionIcon champion={c} size="sm"
                               selected={picks[pid] === c.id}
                               disabled={isUnavailable} />
                             {cs && (cs.wins + cs.losses > 0) && (
-                              <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] font-mono font-bold px-1 rounded bg-lol-dark/80 ${
+                              <div className={`absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[8px] font-mono font-bold px-0.5 rounded bg-lol-dark/80 ${
                                 cs.winrate >= 60 ? 'text-prof-high' : cs.winrate >= 40 ? 'text-lol-gold-light/70' : 'text-prof-low'
                               }`}>
                                 {Math.round(cs.winrate)}%
@@ -626,7 +626,7 @@ export function BanPickScreen({
               </div>
             )}
           </div>
-          <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-0.5 max-h-[calc(100vh-320px)] overflow-y-auto">
+          <div className="grid grid-cols-6 sm:grid-cols-7 md:grid-cols-9 lg:grid-cols-11 gap-px max-h-[calc(100vh-320px)] overflow-y-auto">
             {gridChampions.map((champ) => {
               const isBanned = allBannedIds.has(champ.id);
               const isPicked = pickedIds.has(champ.id);
