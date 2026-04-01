@@ -107,39 +107,61 @@ class LolDB extends Dexie {
 
 export const db = new LolDB();
 
-export async function seedIfEmpty(): Promise<boolean> {
-  const count = await db.players.count();
-  if (count > 0) return false;
-
-  const { seedData } = await import('@/data/seed-data');
-
+async function importDataIntoDb(data: any) {
   await db.transaction('rw', [db.players, db.proficiencies, db.sessions, db.games, db.gamePicks, db.gameBans], async () => {
-    await db.players.bulkAdd(seedData.players.map((p: any) => ({
+    await db.gameBans.clear();
+    await db.gamePicks.clear();
+    await db.games.clear();
+    await db.sessions.clear();
+    await db.proficiencies.clear();
+    await db.players.clear();
+
+    await db.players.bulkAdd((data.players ?? []).map((p: any) => ({
       ...p,
       createdAt: new Date(p.createdAt),
     })));
-    await db.proficiencies.bulkAdd([...seedData.proficiencies] as any[]);
-    if (seedData.sessions?.length) {
-      await db.sessions.bulkAdd(seedData.sessions.map((s: any) => ({
+    await db.proficiencies.bulkAdd([...(data.proficiencies ?? [])] as any[]);
+    if (data.sessions?.length) {
+      await db.sessions.bulkAdd(data.sessions.map((s: any) => ({
         ...s,
         createdAt: new Date(s.createdAt),
         endedAt: s.endedAt ? new Date(s.endedAt) : null,
       })));
     }
-    if (seedData.games?.length) {
-      await db.games.bulkAdd(seedData.games.map((g: any) => ({
+    if (data.games?.length) {
+      await db.games.bulkAdd(data.games.map((g: any) => ({
         ...g,
         playedAt: new Date(g.playedAt),
       })));
     }
-    if (seedData.gamePicks?.length) {
-      await db.gamePicks.bulkAdd([...seedData.gamePicks] as any[]);
+    if (data.gamePicks?.length) {
+      await db.gamePicks.bulkAdd([...data.gamePicks] as any[]);
     }
-    if (seedData.gameBans?.length) {
-      await db.gameBans.bulkAdd([...seedData.gameBans] as any[]);
+    if (data.gameBans?.length) {
+      await db.gameBans.bulkAdd([...data.gameBans] as any[]);
     }
   });
+}
 
+export async function seedIfEmpty(): Promise<boolean> {
+  const count = await db.players.count();
+  if (count > 0) return false;
+
+  // Try loading from Vercel Blob first (shared data)
+  try {
+    const { loadFromVercel } = await import('./auto-sync');
+    const cloudData = await loadFromVercel();
+    if (cloudData && cloudData.players?.length > 0) {
+      await importDataIntoDb(cloudData);
+      return true;
+    }
+  } catch {
+    // Fall through to seed data
+  }
+
+  // Fallback: use bundled seed data
+  const { seedData } = await import('@/data/seed-data');
+  await importDataIntoDb(seedData);
   return true;
 }
 

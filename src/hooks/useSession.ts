@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db, getActiveSession, getFierlessBans, deleteGame as dbDeleteGame, deleteSession as dbDeleteSession, updateSessionName as dbUpdateSessionName, type Session, type Game, type GamePick, type GameBan } from '@/lib/db';
-import { syncToGithub, getGithubToken } from '@/lib/auto-sync';
+import { syncToVercel } from '@/lib/auto-sync';
 
 export interface LastGameTeams {
   format: '3v3' | '3v4';
@@ -69,12 +69,9 @@ export function useSession() {
     await db.sessions.update(session.id!, { endedAt: new Date() });
     await refresh();
 
-    // Auto-sync to GitHub if token is configured
-    if (getGithubToken()) {
-      const result = await syncToGithub();
-      return result.message;
-    }
-    return null;
+    // Auto-sync to Vercel Blob
+    const result = await syncToVercel();
+    return result.message;
   };
 
   const addGame = async (

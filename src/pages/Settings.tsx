@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { exportData, importData, downloadJson } from '@/lib/backup';
 import { importRecords, IMPORT_EXAMPLE, type ImportData } from '@/lib/import-records';
-import { getGithubToken, setGithubToken, syncToGithub } from '@/lib/auto-sync';
+import { syncToVercel } from '@/lib/auto-sync';
 import { useIdentityContext } from '@/App';
 import { db } from '@/lib/db';
 
@@ -11,7 +11,6 @@ export function Settings() {
   const { isMaster } = useIdentityContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recordInputRef = useRef<HTMLInputElement>(null);
-  const [ghToken, setGhToken] = useState(getGithubToken() ?? '');
   const [message, setMessage] = useState('');
 
   const handleExport = async () => {
@@ -76,40 +75,20 @@ export function Settings() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-lol-gold">설정</h1>
 
-      {/* GitHub Auto-Sync (Master only) */}
+      {/* Vercel Auto-Sync (Master only) */}
       {isMaster && (
-        <Card title="자동 동기화 (GitHub)">
+        <Card title="데이터 동기화">
           <p className="text-sm text-lol-gold-light/60 mb-3">
-            세션 종료 시 자동으로 GitHub에 데이터를 동기화합니다.
-            Vercel이 자동 재배포하여 모든 유저에게 반영됩니다.
+            세션 종료 시 자동으로 데이터가 서버에 저장됩니다.
+            다른 유저가 새로고침하면 최신 데이터를 볼 수 있습니다.
           </p>
-          <div className="flex gap-3 mb-3">
-            <input
-              type="password"
-              value={ghToken}
-              onChange={(e) => setGhToken(e.target.value)}
-              placeholder="GitHub Personal Access Token"
-              className="flex-1 bg-lol-blue border border-lol-border rounded px-3 py-2 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
-            />
-            <Button onClick={() => { setGithubToken(ghToken); setMessage('토큰이 저장되었습니다.'); }}>
-              저장
-            </Button>
-          </div>
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={async () => {
-              setMessage('동기화 중...');
-              const result = await syncToGithub();
-              setMessage(result.message);
-            }}>
-              수동 동기화
-            </Button>
-            {getGithubToken() && (
-              <span className="text-xs text-prof-high self-center">토큰 등록됨</span>
-            )}
-          </div>
-          <p className="text-xs text-lol-gold-light/30 mt-2">
-            토큰 생성: GitHub Settings → Developer settings → Personal access tokens → repo 권한
-          </p>
+          <Button variant="secondary" onClick={async () => {
+            setMessage('동기화 중...');
+            const result = await syncToVercel();
+            setMessage(result.message);
+          }}>
+            수동 동기화
+          </Button>
         </Card>
       )}
 

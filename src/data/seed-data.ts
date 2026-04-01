@@ -1,5 +1,5 @@
 // Auto-generated seed data
-// Updated with CSV import data
+// Last synced: 2026-04-01
 
 export const seedData = {
   "version": 1,
@@ -1461,27 +1461,9 @@ export const seedData = {
       "endedAt": "2026-03-30T14:47:12.575Z"
     },
     {
-      "createdAt": "2026-03-29T15:31:06.337Z",
-      "id": 2,
-      "name": "2026-03-29",
-      "endedAt": "2026-03-30T14:47:12.575Z"
-    },
-    {
-      "createdAt": "2026-03-30T14:31:59.897Z",
-      "id": 3,
-      "name": "2026-03-30",
-      "endedAt": "2026-03-30T14:47:12.575Z"
-    },
-    {
-      "createdAt": "2026-03-30T14:31:59.897Z",
-      "id": 4,
-      "name": "2026-03-30",
-      "endedAt": "2026-03-30T14:47:12.575Z"
-    },
-    {
       "name": "3. 30. 내전",
       "createdAt": "2026-03-30T14:53:14.362Z",
-      "endedAt": null,
+      "endedAt": "2026-03-30T23:00:00.000Z",
       "id": 5
     },
     {
