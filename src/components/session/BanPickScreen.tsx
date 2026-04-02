@@ -591,65 +591,6 @@ export function BanPickScreen({
           })}
         </div>
 
-        {/* Team Composition Summary: AP/AD bar + traits */}
-        {(() => {
-          const teamPicks = playerIds.map((pid) => picks[pid]).filter(Boolean);
-          if (teamPicks.length === 0) return null;
-          const teamChamps = teamPicks.map((id) => champions.find((c) => c.id === id)).filter(Boolean);
-          let ap = 0, ad = 0, hybrid = 0;
-          for (const c of teamChamps) {
-            if (c!.damageType === 'AP') ap++;
-            else if (c!.damageType === 'AD') ad++;
-            else hybrid++;
-          }
-          const total = ap + ad + hybrid;
-          const apPct = total > 0 ? ((ap + hybrid * 0.5) / total) * 100 : 50;
-          const adPct = total > 0 ? ((ad + hybrid * 0.5) / total) * 100 : 50;
-
-          // Collect team mechanic tags
-          const tagCounts = new Map<string, number>();
-          for (const c of teamChamps) {
-            const traits = championTraits[c!.id];
-            if (!traits) continue;
-            for (const t of traits.mechanics) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
-          }
-
-          // Group tags for display
-          const traitDisplay: { label: string; present: boolean; color: string }[] = [
-            { label: 'CC', present: tagCounts.has('aoe_cc') || tagCounts.has('knockup') || tagCounts.has('pull'), color: 'text-yellow-300 bg-yellow-800/60' },
-            { label: '포크', present: tagCounts.has('poke_long') || tagCounts.has('poke_mid'), color: 'text-blue-300 bg-blue-800/60' },
-            { label: '힐', present: tagCounts.has('heal'), color: 'text-green-300 bg-green-800/60' },
-            { label: '쉴드', present: tagCounts.has('shield'), color: 'text-cyan-300 bg-cyan-800/60' },
-            { label: '치감', present: tagCounts.has('anti_heal'), color: 'text-red-300 bg-red-800/60' },
-            { label: '탱킹', present: tagCounts.has('diving'), color: 'text-amber-300 bg-amber-800/60' },
-            { label: '탱커파쇄', present: tagCounts.has('tank_shred'), color: 'text-red-300 bg-red-800/60' },
-            { label: '버스트', present: tagCounts.has('burst'), color: 'text-orange-300 bg-orange-800/60' },
-          ];
-
-          return (
-            <div className="space-y-1.5 pt-1 border-t border-lol-border/30">
-              {/* AP/AD Balance Bar */}
-              <div>
-                <div className="flex justify-between text-[9px] text-lol-gold-light/40 mb-0.5">
-                  <span>AP {Math.round(apPct)}%</span>
-                  <span>AD {Math.round(adPct)}%</span>
-                </div>
-                <div className="h-1.5 rounded-full overflow-hidden flex bg-lol-dark/50">
-                  <div className="bg-blue-500/70 transition-all" style={{ width: `${apPct}%` }} />
-                  <div className="bg-red-500/70 transition-all" style={{ width: `${adPct}%` }} />
-                </div>
-              </div>
-              {/* Team Traits */}
-              <div className="flex flex-wrap gap-1">
-                {traitDisplay.map((t) => (
-                  <span key={t.label} className={`text-[9px] px-1.5 py-0.5 rounded ${t.present ? t.color : 'text-gray-600 bg-lol-dark/30 line-through'}`}>
-                    {t.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
       </div>
     );
   };
@@ -688,6 +629,78 @@ export function BanPickScreen({
         </div>
       )}
 
+      {/* Team Composition Summary — both teams side by side */}
+      {(() => {
+        const renderTeamSummary = (teamPlayerIds: number[], team: 1 | 2) => {
+          const teamPicks = teamPlayerIds.map((pid) => picks[pid]).filter(Boolean);
+          const teamChamps = teamPicks.map((id) => champions.find((c) => c.id === id)).filter(Boolean);
+          if (teamChamps.length === 0) return <div className="flex-1 text-center text-[10px] text-lol-gold-light/20">픽 대기중</div>;
+
+          let ap = 0, ad = 0, hybrid = 0;
+          for (const c of teamChamps) {
+            if (c!.damageType === 'AP') ap++;
+            else if (c!.damageType === 'AD') ad++;
+            else hybrid++;
+          }
+          const total = ap + ad + hybrid;
+          const apPct = total > 0 ? ((ap + hybrid * 0.5) / total) * 100 : 50;
+          const adPct = 100 - apPct;
+
+          const tagCounts = new Map<string, number>();
+          for (const c of teamChamps) {
+            const traits = championTraits[c!.id];
+            if (!traits) continue;
+            for (const t of traits.mechanics) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+          }
+
+          const traitDisplay = [
+            { label: 'CC', present: tagCounts.has('aoe_cc') || tagCounts.has('knockup') || tagCounts.has('pull'), color: 'text-yellow-300 bg-yellow-800/60' },
+            { label: '포크', present: tagCounts.has('poke_long') || tagCounts.has('poke_mid'), color: 'text-blue-300 bg-blue-800/60' },
+            { label: '힐', present: tagCounts.has('heal'), color: 'text-green-300 bg-green-800/60' },
+            { label: '쉴드', present: tagCounts.has('shield'), color: 'text-cyan-300 bg-cyan-800/60' },
+            { label: '치감', present: tagCounts.has('anti_heal'), color: 'text-red-300 bg-red-800/60' },
+            { label: '탱킹', present: tagCounts.has('diving'), color: 'text-amber-300 bg-amber-800/60' },
+            { label: '탱파', present: tagCounts.has('tank_shred'), color: 'text-red-300 bg-red-800/60' },
+            { label: '버스트', present: tagCounts.has('burst'), color: 'text-orange-300 bg-orange-800/60' },
+          ];
+
+          const teamColor = team === 1 ? 'blue' : 'red';
+          return (
+            <div className="flex-1 space-y-1">
+              <div className={`text-[10px] text-${teamColor}-400 font-medium text-center`}>Team {team}</div>
+              <div>
+                <div className="flex justify-between text-[8px] text-lol-gold-light/40 mb-0.5">
+                  <span>AP {Math.round(apPct)}%</span>
+                  <span>AD {Math.round(adPct)}%</span>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden flex bg-lol-dark/50">
+                  <div className="bg-blue-500/70 transition-all" style={{ width: `${apPct}%` }} />
+                  <div className="bg-red-500/70 transition-all" style={{ width: `${adPct}%` }} />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-0.5 justify-center">
+                {traitDisplay.map((t) => (
+                  <span key={t.label} className={`text-[8px] px-1 py-0.5 rounded ${t.present ? t.color : 'text-gray-600 bg-lol-dark/30 line-through'}`}>
+                    {t.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        };
+
+        const anyPicks = Object.keys(picks).length > 0;
+        if (!anyPicks) return null;
+
+        return (
+          <div className="flex gap-4 p-2 bg-lol-gray/30 rounded border border-lol-border/30">
+            {renderTeamSummary(team1PlayerIds, 1)}
+            <div className="w-px bg-lol-border/30" />
+            {renderTeamSummary(team2PlayerIds, 2)}
+          </div>
+        );
+      })()}
+
       {/* Main 3-column layout */}
       <div className="flex gap-3">
         {/* Team 1 */}
@@ -713,12 +726,7 @@ export function BanPickScreen({
               <option value="name">이름순</option>
               <option value="winrate">승률순</option>
             </select>
-            {phase === 'ban' && activeSlot?.type === 'ban' && (
-              <button onClick={handleSkipBan}
-                className="cursor-pointer px-3 py-1.5 text-xs rounded bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700 hover:text-gray-300 shrink-0">
-                밴 없음
-              </button>
-            )}
+            {/* Skip ban is now in the champion grid as an X card */}
           </div>
           <div className="text-xs text-center space-y-1">
             <div className="text-lol-gold-light/40">
@@ -749,6 +757,17 @@ export function BanPickScreen({
             )}
           </div>
           <div className="grid grid-cols-6 sm:grid-cols-7 md:grid-cols-9 lg:grid-cols-11 gap-px max-h-[calc(100vh-320px)] overflow-y-auto">
+            {/* Skip Ban card — shown first in ban phase */}
+            {phase === 'ban' && activeSlot?.type === 'ban' && (
+              <div
+                onClick={handleSkipBan}
+                className="cursor-pointer w-full aspect-square rounded border-2 border-dashed border-gray-600 bg-gray-800/40 flex flex-col items-center justify-center hover:border-gray-400 hover:bg-gray-700/40 transition-colors"
+                title="밴 없음"
+              >
+                <span className="text-gray-400 text-lg font-bold">✕</span>
+                <span className="text-[8px] text-gray-500">밴 없음</span>
+              </div>
+            )}
             {gridChampions.map((champ) => {
               const isBanned = allBannedIds.has(champ.id);
               const isPicked = pickedIds.has(champ.id);
