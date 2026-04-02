@@ -45,11 +45,16 @@ export function Dashboard() {
       </div>
 
       {/* No active session */}
-      {!session && isMaster && (
+      {!session && (
         <Card title="새 세션 시작">
           <p className="text-sm text-lol-gold-light/60 mb-4">
             내전을 시작하려면 새 세션을 만드세요. 세션 안에서 여러 게임을 진행하고, 피어리스 밴이 누적됩니다.
           </p>
+          {!isMaster && (
+            <p className="text-xs text-lol-gold-light/40 mb-4">
+              이 세션은 브라우저에만 저장됩니다. 공식 기록은 마스터 계정에서 진행해 주세요.
+            </p>
+          )}
           <div className="flex gap-3">
             <input
               type="text"

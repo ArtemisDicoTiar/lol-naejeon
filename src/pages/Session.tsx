@@ -6,9 +6,11 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { db, type GamePick, type GameBan, type Player } from '@/lib/db';
+import { useIdentityContext } from '@/App';
 
 export function Session() {
   const navigate = useNavigate();
+  const { isMaster } = useIdentityContext();
   const { session, games, fierlessBans, lastGameTeams, loading, setGameResult, endSession, removeGame } = useSession();
   const { champions } = useChampions();
   const [gamePicks, setGamePicks] = useState<Record<number, GamePick[]>>({});
@@ -37,7 +39,7 @@ export function Session() {
 
   const handleEndSession = async () => {
     if (!confirm('세션을 종료하시겠습니까? 종료 후에는 게임을 추가할 수 없습니다.')) return;
-    const syncMsg = await endSession();
+    const syncMsg = await endSession(isMaster);
     if (syncMsg) alert(syncMsg);
     navigate('/');
   };

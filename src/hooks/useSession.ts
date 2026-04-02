@@ -64,14 +64,16 @@ export function useSession() {
     return (await db.sessions.get(id))!;
   };
 
-  const endSession = async (): Promise<string | null> => {
+  const endSession = async (sync = false): Promise<string | null> => {
     if (!session) return null;
     await db.sessions.update(session.id!, { endedAt: new Date() });
     await refresh();
 
-    // Auto-sync to Vercel Blob
-    const result = await syncToVercel();
-    return result.message;
+    if (sync) {
+      const result = await syncToVercel();
+      return result.message;
+    }
+    return null;
   };
 
   const addGame = async (
