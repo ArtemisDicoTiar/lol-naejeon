@@ -629,110 +629,102 @@ export function BanPickScreen({
         </div>
       )}
 
-      {/* Team Composition Summary — both teams side by side */}
+      {/* Team Composition Summary: [T1 summary] [win bar] [T2 summary] */}
       {(() => {
-        const renderTeamSummary = (teamPlayerIds: number[], team: 1 | 2) => {
-          const teamPicks = teamPlayerIds.map((pid) => picks[pid]).filter(Boolean);
-          const teamChamps = teamPicks.map((id) => champions.find((c) => c.id === id)).filter(Boolean);
-          if (teamChamps.length === 0) return <div className="flex-1 text-center text-[10px] text-lol-gold-light/20">픽 대기중</div>;
+        const traitDefs = [
+          { label: 'CC', tags: ['aoe_cc', 'knockup', 'pull'], color: 'text-yellow-300 bg-yellow-900/70' },
+          { label: '포크', tags: ['poke_long', 'poke_mid'], color: 'text-blue-300 bg-blue-900/70' },
+          { label: '힐', tags: ['heal'], color: 'text-green-300 bg-green-900/70' },
+          { label: '쉴드', tags: ['shield'], color: 'text-cyan-300 bg-cyan-900/70' },
+          { label: '치감', tags: ['anti_heal'], color: 'text-red-300 bg-red-900/70' },
+          { label: '탱킹', tags: ['diving'], color: 'text-amber-300 bg-amber-900/70' },
+          { label: '탱파', tags: ['tank_shred'], color: 'text-red-300 bg-red-900/70' },
+          { label: '버스트', tags: ['burst'], color: 'text-orange-300 bg-orange-900/70' },
+        ];
 
+        const getTeamData = (playerIds: number[]) => {
+          const pickedChamps = playerIds.map((pid) => picks[pid]).filter(Boolean)
+            .map((id) => champions.find((c) => c.id === id)).filter(Boolean);
           let ap = 0, ad = 0, hybrid = 0;
-          for (const c of teamChamps) {
+          for (const c of pickedChamps) {
             if (c!.damageType === 'AP') ap++;
             else if (c!.damageType === 'AD') ad++;
             else hybrid++;
           }
           const total = ap + ad + hybrid;
           const apPct = total > 0 ? ((ap + hybrid * 0.5) / total) * 100 : 50;
-          const adPct = 100 - apPct;
-
           const tagCounts = new Map<string, number>();
-          for (const c of teamChamps) {
+          for (const c of pickedChamps) {
             const traits = championTraits[c!.id];
-            if (!traits) continue;
-            for (const t of traits.mechanics) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+            if (traits) for (const t of traits.mechanics) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
           }
-
-          const traitDisplay = [
-            { label: 'CC', present: tagCounts.has('aoe_cc') || tagCounts.has('knockup') || tagCounts.has('pull'), color: 'text-yellow-300 bg-yellow-800/60' },
-            { label: '포크', present: tagCounts.has('poke_long') || tagCounts.has('poke_mid'), color: 'text-blue-300 bg-blue-800/60' },
-            { label: '힐', present: tagCounts.has('heal'), color: 'text-green-300 bg-green-800/60' },
-            { label: '쉴드', present: tagCounts.has('shield'), color: 'text-cyan-300 bg-cyan-800/60' },
-            { label: '치감', present: tagCounts.has('anti_heal'), color: 'text-red-300 bg-red-800/60' },
-            { label: '탱킹', present: tagCounts.has('diving'), color: 'text-amber-300 bg-amber-800/60' },
-            { label: '탱파', present: tagCounts.has('tank_shred'), color: 'text-red-300 bg-red-800/60' },
-            { label: '버스트', present: tagCounts.has('burst'), color: 'text-orange-300 bg-orange-800/60' },
-          ];
-
-          const teamColor = team === 1 ? 'blue' : 'red';
-          return (
-            <div className="flex-1 space-y-1">
-              <div className={`text-[10px] text-${teamColor}-400 font-medium text-center`}>Team {team}</div>
-              <div>
-                <div className="flex justify-between text-[8px] text-lol-gold-light/40 mb-0.5">
-                  <span>AP {Math.round(apPct)}%</span>
-                  <span>AD {Math.round(adPct)}%</span>
-                </div>
-                <div className="h-1.5 rounded-full overflow-hidden flex bg-lol-dark/50">
-                  <div className="bg-blue-500/70 transition-all" style={{ width: `${apPct}%` }} />
-                  <div className="bg-red-500/70 transition-all" style={{ width: `${adPct}%` }} />
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-0.5 justify-center">
-                {traitDisplay.map((t) => (
-                  <span key={t.label} className={`text-[8px] px-1 py-0.5 rounded ${t.present ? t.color : 'text-gray-600 bg-lol-dark/30 line-through'}`}>
-                    {t.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          );
+          const avgWr = pickedChamps.length > 0
+            ? pickedChamps.reduce((s, c) => s + c!.aramWinrate, 0) / pickedChamps.length : 50;
+          return { apPct, adPct: 100 - apPct, tagCounts, avgWr, count: pickedChamps.length };
         };
 
         const anyPicks = Object.keys(picks).length > 0;
         if (!anyPicks) return null;
 
-        // Win probability bar: based on picked champions' ARAM winrate average
-        const calcTeamWr = (playerIds: number[]) => {
-          const pickedChamps = playerIds.map((pid) => picks[pid]).filter(Boolean)
-            .map((id) => champions.find((c) => c.id === id)).filter(Boolean);
-          if (pickedChamps.length === 0) return 50;
-          const avgWr = pickedChamps.reduce((sum, c) => sum + c!.aramWinrate, 0) / pickedChamps.length;
-          return avgWr;
-        };
-        const t1Wr = calcTeamWr(team1PlayerIds);
-        const t2Wr = calcTeamWr(team2PlayerIds);
-        // Normalize to 100%
-        const total = t1Wr + t2Wr;
-        const t1Pct = total > 0 ? Math.round((t1Wr / total) * 100) : 50;
+        const t1 = getTeamData(team1PlayerIds);
+        const t2 = getTeamData(team2PlayerIds);
+        const wrTotal = t1.avgWr + t2.avgWr;
+        const t1Pct = wrTotal > 0 ? Math.round((t1.avgWr / wrTotal) * 100) : 50;
         const t2Pct = 100 - t1Pct;
         const t1Winning = t1Pct >= t2Pct;
 
-        return (
-          <div className="p-2 bg-lol-gray/30 rounded border border-lol-border/30 space-y-2">
-            {/* Win Probability Bar */}
-            <div>
-              <div className="flex justify-between items-center text-[10px] mb-0.5">
-                <span className={`font-bold font-mono ${t1Winning ? 'text-green-400' : 'text-blue-400/70'}`}>
-                  T1 {t1Pct}%
-                </span>
-                <span className="text-lol-gold-light/30 text-[8px]">승리 예측</span>
-                <span className={`font-bold font-mono ${!t1Winning ? 'text-green-400' : 'text-red-400/70'}`}>
-                  {t2Pct}% T2
-                </span>
+        const renderSummary = (data: ReturnType<typeof getTeamData>, team: 1 | 2) => {
+          if (data.count === 0) return <div className="w-[360px] shrink-0 text-center text-xs text-lol-gold-light/20 py-2">픽 대기중</div>;
+          const teamColor = team === 1 ? 'blue' : 'red';
+          return (
+            <div className="w-[360px] shrink-0 space-y-1.5">
+              <div className={`text-xs text-${teamColor}-400 font-bold text-center`}>Team {team}</div>
+              <div>
+                <div className="flex justify-between text-[10px] text-lol-gold-light/50 mb-0.5">
+                  <span>AP {Math.round(data.apPct)}%</span>
+                  <span>AD {Math.round(data.adPct)}%</span>
+                </div>
+                <div className="h-2 rounded-full overflow-hidden flex bg-lol-dark/50">
+                  <div className="bg-blue-500/70 transition-all" style={{ width: `${data.apPct}%` }} />
+                  <div className="bg-red-500/70 transition-all" style={{ width: `${data.adPct}%` }} />
+                </div>
               </div>
-              <div className="h-2 rounded-full overflow-hidden flex bg-lol-dark/50">
-                <div className={`${t1Winning ? 'bg-green-500/80' : 'bg-blue-500/50'} transition-all`} style={{ width: `${t1Pct}%` }} />
-                <div className={`${!t1Winning ? 'bg-green-500/80' : 'bg-red-500/50'} transition-all`} style={{ width: `${t2Pct}%` }} />
+              <div className="flex flex-wrap gap-1 justify-center">
+                {traitDefs.map((t) => {
+                  const present = t.tags.some((tag) => data.tagCounts.has(tag));
+                  return (
+                    <span key={t.label} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${present ? t.color : 'text-gray-600 bg-lol-dark/40 line-through'}`}>
+                      {t.label}
+                    </span>
+                  );
+                })}
               </div>
             </div>
+          );
+        };
 
-            {/* Team summaries side by side */}
-            <div className="flex gap-4">
-              {renderTeamSummary(team1PlayerIds, 1)}
-              <div className="w-px bg-lol-border/30" />
-              {renderTeamSummary(team2PlayerIds, 2)}
+        return (
+          <div className="flex items-start gap-3">
+            {renderSummary(t1, 1)}
+            {/* Win probability — centered between the two team summaries */}
+            <div className="flex-1 min-w-0 flex flex-col items-center justify-center pt-4">
+              <div className="w-full max-w-[280px]">
+                <div className="flex justify-between items-center text-xs mb-1">
+                  <span className={`font-bold font-mono ${t1Winning ? 'text-green-400' : 'text-blue-400/60'}`}>
+                    {t1Pct}%
+                  </span>
+                  <span className="text-lol-gold-light/30 text-[10px]">승리 예측</span>
+                  <span className={`font-bold font-mono ${!t1Winning ? 'text-green-400' : 'text-red-400/60'}`}>
+                    {t2Pct}%
+                  </span>
+                </div>
+                <div className="h-2.5 rounded-full overflow-hidden flex bg-lol-dark/50">
+                  <div className={`${t1Winning ? 'bg-green-500/80' : 'bg-blue-500/40'} transition-all`} style={{ width: `${t1Pct}%` }} />
+                  <div className={`${!t1Winning ? 'bg-green-500/80' : 'bg-red-500/40'} transition-all`} style={{ width: `${t2Pct}%` }} />
+                </div>
+              </div>
             </div>
+            {renderSummary(t2, 2)}
           </div>
         );
       })()}
