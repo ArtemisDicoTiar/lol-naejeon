@@ -3,14 +3,23 @@ import type { RecommendationInput, RecommendedComp, ChampionAssignment, BanRecom
 import { scoreComposition } from './scoring';
 import { compArchetypes } from '@/data/comp-archetypes';
 import type { AramTier } from '@/data/aram-champion-meta';
+import { championTraits, type ChampionTraits } from '@/data/champion-tags';
+import { synergyRules, synergyOverrides } from '@/data/synergy-rules';
+import { counterRules } from '@/data/counter-rules';
+import type { SynergyCounterData } from './data-loader';
+
+function buildTraitsMap(): Map<string, ChampionTraits> {
+  return new Map(Object.entries(championTraits));
+}
 
 const CANDIDATES_PER_SLOT = 5;
 const MAX_RESULTS = 10;
 
 export function generateRecommendations(input: RecommendationInput): RecommendedComp[] {
-  const { teamPlayers, bannedChampions, allChampions, proficiencies, opponentPicks } = input;
+  const { teamPlayers, bannedChampions, allChampions, proficiencies, opponentPicks, matchData } = input;
   const bannedSet = new Set(bannedChampions);
   const champMap = new Map(allChampions.map((c) => [c.id, c]));
+  const traitsMap = buildTraitsMap();
 
   // Build available champion pools per player
   const playerPools: Map<number, Champion[]> = new Map();
@@ -73,8 +82,10 @@ export function generateRecommendations(input: RecommendationInput): Recommended
       const { score, breakdown } = scoreComposition(
         assignments,
         champMap,
+        traitsMap,
         archetype.id,
-        opponentPicks
+        opponentPicks,
+        matchData
       );
 
       const damageProfile = { ap: 0, ad: 0, hybrid: 0 };
@@ -204,12 +215,102 @@ function deduplicateComps(comps: RecommendedComp[]): RecommendedComp[] {
 const PROF_THREAT: Record<string, number> = { '상': 3, '중': 1.5, '하': 0.5 };
 const TIER_WEIGHT: Record<AramTier, number> = { S: 2.5, A: 2, B: 1.5, C: 1, D: 0.5 };
 
+// Compute how much banning a champion reduces opponent synergy potential
+function calcSynergyDenial(
+  banChampId: string,
+  opponentPools: Map<number, string[]>,
+  traitsMap: Map<string, ChampionTraits>
+): number {
+  const banTraits = traitsMap.get(banChampId);
+  if (!banTraits) return 0;
+
+  let denial = 0;
+  for (const rule of synergyRules) {
+    const isSource = rule.source.every((t) => banTraits.mechanics.includes(t));
+    const isTarget = rule.target.every((t) => banTraits.mechanics.includes(t));
+    if (!isSource && !isTarget) continue;
+
+    const checkTags = isSource ? rule.target : rule.source;
+    let partnerCount = 0;
+    for (const [, pool] of opponentPools) {
+      for (const cid of pool) {
+        if (cid === banChampId) continue;
+        const traits = traitsMap.get(cid);
+        if (traits && checkTags.every((t) => traits.mechanics.includes(t))) {
+          partnerCount++;
+        }
+      }
+    }
+    denial += rule.bonus * Math.min(partnerCount, 3);
+  }
+
+  // Check override pairs
+  for (const [c1, c2, score] of synergyOverrides) {
+    if (banChampId !== c1 && banChampId !== c2) continue;
+    const partnerId = banChampId === c1 ? c2 : c1;
+    for (const [, pool] of opponentPools) {
+      if (pool.includes(partnerId)) {
+        denial += score;
+        break;
+      }
+    }
+  }
+
+  return Math.min(denial / 2.0, 1.0);
+}
+
+// Compute how much banning a champion protects our team from being countered
+function calcCounterBanValue(
+  banChampId: string,
+  ourTeamLikelyPicks: string[],
+  traitsMap: Map<string, ChampionTraits>
+): number {
+  const banTraits = traitsMap.get(banChampId);
+  if (!banTraits) return 0;
+
+  let counterValue = 0;
+  for (const rule of counterRules) {
+    if (!rule.counterTags.every((t) => banTraits.mechanics.includes(t))) continue;
+    for (const ourId of ourTeamLikelyPicks) {
+      const ourTraits = traitsMap.get(ourId);
+      if (ourTraits && rule.victimTags.every((t) => ourTraits.mechanics.includes(t))) {
+        counterValue += rule.advantage;
+      }
+    }
+  }
+  return Math.min(counterValue, 1.0);
+}
+
 export function generatePerPlayerBanRecs(
   input: BanRecommendationInput
 ): Record<number, BanRecommendation[]> {
   const { opponentPlayerIds, proficiencies, allChampions, alreadyBanned } = input;
   const bannedSet = new Set(alreadyBanned);
+  const traitsMap = buildTraitsMap();
   const result: Record<number, BanRecommendation[]> = {};
+
+  // Build opponent champion pools for synergy denial calc
+  const opponentPools = new Map<number, string[]>();
+  for (const pid of opponentPlayerIds) {
+    const profMap = proficiencies[pid] ?? new Map();
+    const pool: string[] = [];
+    for (const champ of allChampions) {
+      if (bannedSet.has(champ.id)) continue;
+      const level = profMap.get(champ.id);
+      if (level && level !== '없음') pool.push(champ.id);
+    }
+    opponentPools.set(pid, pool);
+  }
+
+  // Build our team's likely picks for counter-ban calc
+  const ourTeamPicks: string[] = [];
+  if (input.ourTeamProficiencies) {
+    for (const [, profMap] of Object.entries(input.ourTeamProficiencies)) {
+      for (const [champId, level] of profMap.entries()) {
+        if (level === '상' && !bannedSet.has(champId)) ourTeamPicks.push(champId);
+      }
+    }
+  }
 
   for (const pid of opponentPlayerIds) {
     const profMap = proficiencies[pid] ?? new Map();
@@ -223,9 +324,31 @@ export function generatePerPlayerBanRecs(
 
       const tierW = TIER_WEIGHT[champ.aramTier] ?? 1;
       const wrBonus = Math.max(-0.5, Math.min(0.5, (champ.aramWinrate - 50) * 0.1));
-      const score = profScore * tierW + wrBonus;
 
-      recs.push({ championId: champ.id, championName: champ.nameKo, score, reason: '' });
+      // Factor 1: Proficiency threat (normalized to ~0-1)
+      const profThreat = (profScore * tierW + wrBonus) / 8.0; // max ~7.5+0.5=8
+
+      // Factor 2: Synergy denial
+      const synergyDenial = calcSynergyDenial(champ.id, opponentPools, traitsMap);
+
+      // Factor 3: Counter-ban value
+      const counterBan = ourTeamPicks.length > 0
+        ? calcCounterBanValue(champ.id, ourTeamPicks, traitsMap)
+        : 0;
+
+      const score = profThreat * 0.4 + synergyDenial * 0.3 + counterBan * 0.3;
+
+      // Determine primary reason
+      let reason = '';
+      if (synergyDenial > profThreat && synergyDenial > counterBan) {
+        reason = '시너지 차단';
+      } else if (counterBan > profThreat && counterBan > 0) {
+        reason = '카운터 밴';
+      } else {
+        reason = '고숙련 위협';
+      }
+
+      recs.push({ championId: champ.id, championName: champ.nameKo, score, reason });
     }
 
     recs.sort((a, b) => b.score - a.score);

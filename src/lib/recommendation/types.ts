@@ -1,4 +1,5 @@
 import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
+import type { SynergyCounterData } from './data-loader';
 
 export interface RecommendationInput {
   teamPlayers: Player[];
@@ -7,6 +8,7 @@ export interface RecommendationInput {
   format: '3v3' | '3v4';
   allChampions: Champion[];
   proficiencies: Record<number, Map<string, ProficiencyLevel>>;
+  matchData?: SynergyCounterData | null;
 }
 
 export interface ChampionAssignment {
@@ -44,6 +46,7 @@ export interface BanRecommendationInput {
   proficiencies: Record<number, Map<string, ProficiencyLevel>>;
   allChampions: Champion[];
   alreadyBanned: string[];
+  ourTeamProficiencies?: Record<number, Map<string, ProficiencyLevel>>;
 }
 
 export interface BanRecommendation {

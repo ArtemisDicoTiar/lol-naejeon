@@ -92,6 +92,55 @@ export function Settings() {
         </Card>
       )}
 
+      {isMaster && (
+        <Card title="ARAM 메타 업데이트">
+          <p className="text-sm text-lol-gold-light/60 mb-3">
+            외부 통계 사이트에서 최신 ARAM 승률/티어 데이터를 가져옵니다.
+            챔피언 동기화 시 자동으로 반영됩니다.
+          </p>
+          <Button variant="secondary" onClick={async () => {
+            setMessage('ARAM 메타 업데이트 중...');
+            try {
+              const res = await fetch('/api/aram-meta-update', { method: 'POST' });
+              const data = await res.json();
+              if (data.success) {
+                setMessage(data.message);
+              } else {
+                setMessage(`업데이트 실패: ${data.error}`);
+              }
+            } catch (e) {
+              setMessage(`업데이트 실패: ${(e as Error).message}`);
+            }
+          }}>
+            ARAM 메타 업데이트
+          </Button>
+        </Card>
+      )}
+
+      {isMaster && (
+        <Card title="OP.GG 카운터 데이터">
+          <p className="text-sm text-lol-gold-light/60 mb-3">
+            OP.GG에서 챔피언 카운터 데이터를 가져와 추천 알고리즘에 반영합니다.
+          </p>
+          <Button variant="secondary" onClick={async () => {
+            setMessage('OP.GG 카운터 데이터 업데이트 중...');
+            try {
+              const res = await fetch('/api/opgg-sync', { method: 'POST' });
+              const data = await res.json();
+              if (data.success) {
+                setMessage(data.message);
+              } else {
+                setMessage(`업데이트 실패: ${data.error}`);
+              }
+            } catch (e) {
+              setMessage(`업데이트 실패: ${(e as Error).message}`);
+            }
+          }}>
+            OP.GG 카운터 업데이트
+          </Button>
+        </Card>
+      )}
+
       <Card title="데이터 백업/복원">
         <p className="text-sm text-lol-gold-light/60 mb-4">
           데이터는 브라우저에 저장됩니다. 정기적으로 백업하세요.

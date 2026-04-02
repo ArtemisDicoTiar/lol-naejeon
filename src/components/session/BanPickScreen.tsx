@@ -3,6 +3,7 @@ import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
 import type { RecommendedComp } from '@/lib/recommendation/types';
 import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampions } from '@/lib/recommendation/engine';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
+import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
@@ -44,8 +45,10 @@ export function BanPickScreen({
   const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
   const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
+  const [matchData, setMatchData] = useState<SynergyCounterData | null>(null);
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
+  useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
 
   const getPlayerName = (id: number) => players.find((p) => p.id === id)?.name ?? '';
   const getTeamBans = (team: 1 | 2) => team === 1 ? team1Bans : team2Bans;
@@ -76,17 +79,30 @@ export function BanPickScreen({
     ...team2Bans.filter((b) => b && b !== SKIP_BAN),
   ], [fierlessBans, team1Bans, team2Bans]);
 
+  const team1OurProfs = useMemo(() => {
+    const m: Record<number, Map<string, any>> = {};
+    for (const pid of team1PlayerIds) { if (proficiencies[pid]) m[pid] = proficiencies[pid]; }
+    return m;
+  }, [team1PlayerIds, proficiencies]);
+  const team2OurProfs = useMemo(() => {
+    const m: Record<number, Map<string, any>> = {};
+    for (const pid of team2PlayerIds) { if (proficiencies[pid]) m[pid] = proficiencies[pid]; }
+    return m;
+  }, [team2PlayerIds, proficiencies]);
+
   const team1BanRecs = useMemo(() => generatePerPlayerBanRecs({
     opponentPlayerIds: team2PlayerIds,
     opponentPlayerNames: Object.fromEntries(players.map((p) => [p.id!, p.name])),
     proficiencies, allChampions: champions, alreadyBanned: alreadyBannedAll,
-  }), [team2PlayerIds, players, proficiencies, champions, alreadyBannedAll]);
+    ourTeamProficiencies: team1OurProfs,
+  }), [team2PlayerIds, players, proficiencies, champions, alreadyBannedAll, team1OurProfs]);
 
   const team2BanRecs = useMemo(() => generatePerPlayerBanRecs({
     opponentPlayerIds: team1PlayerIds,
     opponentPlayerNames: Object.fromEntries(players.map((p) => [p.id!, p.name])),
     proficiencies, allChampions: champions, alreadyBanned: alreadyBannedAll,
-  }), [team1PlayerIds, players, proficiencies, champions, alreadyBannedAll]);
+    ourTeamProficiencies: team2OurProfs,
+  }), [team1PlayerIds, players, proficiencies, champions, alreadyBannedAll, team2OurProfs]);
 
   // Opponent picks per team (for counter recommendations)
   const team1Picks = useMemo(() =>
@@ -125,6 +141,7 @@ export function BanPickScreen({
       bannedChampions: [...Array.from(allBannedIds), ...Object.values(picks)],
       allChampions: champions, proficiencies, format,
       opponentPicks: opponentCurrentPicks.length > 0 ? opponentCurrentPicks : undefined,
+      matchData,
     }).slice(0, 10);
     if (wrStats) {
       for (const rec of recs) {
@@ -350,6 +367,7 @@ export function BanPickScreen({
                             allPlayers={players} proficiencies={proficiencies}
                             highlightPlayerIds={[oppId]} disabled={isBanned}>
                             <div
+                              title={rec.reason ? `${champ.nameKo}: ${rec.reason}` : champ.nameKo}
                               onClick={() => canClick && !isBanned && handleChampionSelect(rec.championId)}
                               className={`shrink-0 ${canClick && !isBanned ? 'cursor-pointer hover:opacity-100' : ''} ${isBanned ? 'opacity-20' : 'opacity-70'}`}>
                               <ChampionIcon champion={champ} size="sm" disabled={isBanned} />

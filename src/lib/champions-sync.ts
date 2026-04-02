@@ -16,6 +16,18 @@ export async function getLatestVersion(): Promise<string> {
   return versions[0];
 }
 
+// Try to fetch latest ARAM meta from Vercel Blob
+async function fetchLatestAramMeta(): Promise<Record<string, { aramTier: string; aramWinrate: number }> | null> {
+  try {
+    const metaRes = await fetch('/api/get-aram-meta');
+    if (!metaRes.ok) return null;
+    const data = await metaRes.json();
+    return data?.champions ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function syncChampions(): Promise<{ added: number; updated: number }> {
   const version = await getLatestVersion();
   const res = await fetch(
@@ -24,20 +36,25 @@ export async function syncChampions(): Promise<{ added: number; updated: number 
   const json = await res.json();
   const champions: Record<string, DataDragonChampion> = json.data;
 
+  // Try loading latest ARAM meta from Vercel Blob
+  const latestMeta = await fetchLatestAramMeta();
+
   let added = 0;
   let updated = 0;
 
   await db.transaction('rw', db.champions, async () => {
     for (const [key, champ] of Object.entries(champions)) {
       const meta = aramChampionMeta[key];
+      const live = latestMeta?.[key];
+
       const championData: Champion = {
         id: key,
         nameKo: champ.name,
         tags: champ.tags,
         damageType: meta?.damageType ?? 'AP',
         aramRole: meta?.aramRole ?? 'dps',
-        aramTier: meta?.aramTier ?? 'B',
-        aramWinrate: meta?.aramWinrate ?? 50.0,
+        aramTier: (live?.aramTier as Champion['aramTier']) ?? meta?.aramTier ?? 'B',
+        aramWinrate: live?.aramWinrate ?? meta?.aramWinrate ?? 50.0,
         imageUrl: `${DDRAGON_BASE}/cdn/${version}/img/champion/${champ.image.full}`,
         patchVersion: version,
       };

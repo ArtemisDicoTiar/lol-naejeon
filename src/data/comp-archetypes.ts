@@ -96,25 +96,7 @@ export const compArchetypes: CompArchetype[] = [
   },
 ];
 
-// Synergy pairs: [champion1, champion2, bonus_score, description]
-export const synergyPairs: [string, string, number, string][] = [
-  ['Malphite', 'Yasuo', 0.3, '말파 궁 + 야스오 궁 콤보'],
-  ['Malphite', 'Yone', 0.25, '말파 궁 + 요네 궁 콤보'],
-  ['Orianna', 'Malphite', 0.25, '오리아나 볼 + 말파 이니시'],
-  ['Orianna', 'Wukong', 0.25, '오리아나 볼 + 오공 이니시'],
-  ['Yasuo', 'Diana', 0.2, '다이아나 궁 + 야스오 궁'],
-  ['Lulu', 'KogMaw', 0.25, '룰루 버프 + 코그모 딜'],
-  ['Lulu', 'Jinx', 0.2, '룰루 버프 + 징크스 딜'],
-  ['Amumu', 'Brand', 0.2, '아무무 궁 + 브랜드 궁 AoE'],
-  ['Sona', 'Seraphine', 0.25, '소나 + 세라핀 더블 유틸'],
-  ['Leona', 'MissFortune', 0.2, '레오나 CC + 미포 궁'],
-  ['Thresh', 'Kalista', 0.2, '쓰레쉬 + 칼리스타 궁 콤보'],
-  ['Jarvan IV', 'Brand', 0.2, '자르반 궁 + 브랜드 궁'],
-  ['Galio', 'Camille', 0.15, '갈리오 궁 + 카밀 궁'],
-  ['Zilean', 'Kayle', 0.15, '질리언 부활 + 카일 궁 이중 안전장치'],
-];
-
-// Counter matrix: comp archetype vs comp archetype advantage
+// Counter matrix: comp archetype vs comp archetype advantage (used as fallback)
 export const counterMatrix: Record<string, Record<string, number>> = {
   poke: { engage: -0.15, sustain: 0.15, balanced: 0.05, poke: 0 },
   engage: { poke: 0.15, sustain: -0.15, balanced: 0.05, engage: 0 },
