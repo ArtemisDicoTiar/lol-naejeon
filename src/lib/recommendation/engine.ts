@@ -15,17 +15,52 @@ const CANDIDATES_PER_SLOT = 5;
 const MAX_RESULTS = 10;
 
 export function generateRecommendations(input: RecommendationInput): RecommendedComp[] {
-  const { teamPlayers, bannedChampions, allChampions, proficiencies, opponentPicks, matchData } = input;
+  const { teamPlayers, bannedChampions, allChampions, proficiencies, opponentPicks, matchData, lockedPicks } = input;
   const bannedSet = new Set(bannedChampions);
   const champMap = new Map(allChampions.map((c) => [c.id, c]));
   const traitsMap = buildTraitsMap();
 
-  // Build available champion pools per player
+  // Separate locked players (already picked) from unlocked players
+  const locked = lockedPicks ?? {};
+  const lockedPlayerIds = new Set(Object.keys(locked).map(Number));
+  const lockedChampIds = new Set(Object.values(locked));
+  const unlockedPlayers = teamPlayers.filter((p) => !lockedPlayerIds.has(p.id!));
+
+  // Build locked assignments
+  const lockedAssignments: ChampionAssignment[] = [];
+  for (const [pidStr, champId] of Object.entries(locked)) {
+    const pid = Number(pidStr);
+    const player = teamPlayers.find((p) => p.id === pid);
+    const champ = champMap.get(champId);
+    if (!player || !champ) continue;
+    const profMap = proficiencies[pid] ?? new Map();
+    lockedAssignments.push({
+      playerId: pid,
+      playerName: player.name,
+      championId: champId,
+      championName: champ.nameKo,
+      proficiency: profMap.get(champId) ?? '중',
+    });
+  }
+
+  // If all players are locked, just score that single composition
+  if (unlockedPlayers.length === 0 && lockedAssignments.length > 0) {
+    const { score, breakdown } = scoreComposition(lockedAssignments, champMap, traitsMap, 'balanced', opponentPicks, matchData);
+    const damageProfile = { ap: 0, ad: 0, hybrid: 0 };
+    for (const a of lockedAssignments) {
+      const c = champMap.get(a.championId);
+      if (c) { if (c.damageType === 'AP') damageProfile.ap++; else if (c.damageType === 'AD') damageProfile.ad++; else damageProfile.hybrid++; }
+    }
+    return [{ archetypeId: 'balanced', archetypeName: '현재 조합', assignments: lockedAssignments, score, scoreBreakdown: breakdown, damageProfile, strengths: [], weaknesses: [] }];
+  }
+
+  // Build available champion pools per unlocked player
   const playerPools: Map<number, Champion[]> = new Map();
-  for (const player of teamPlayers) {
+  for (const player of unlockedPlayers) {
     const playerProfs = proficiencies[player.id!] ?? new Map();
     const available = allChampions.filter((c) => {
       if (bannedSet.has(c.id)) return false;
+      if (lockedChampIds.has(c.id)) return false;
       const level = playerProfs.get(c.id);
       if (level === '없음') return false;
       return true;
@@ -34,24 +69,26 @@ export function generateRecommendations(input: RecommendationInput): Recommended
   }
 
   const allResults: RecommendedComp[] = [];
-  const teamSize = teamPlayers.length;
+  const unlockedSize = unlockedPlayers.length;
+  if (unlockedSize === 0) return [];
 
   for (const archetype of compArchetypes) {
-    const slots = teamSize <= 3 ? archetype.slots3 : archetype.slots4;
-    if (slots.length !== teamSize) continue;
+    // Use slot count matching unlocked players
+    const slots = unlockedSize <= 3 ? archetype.slots3 : archetype.slots4;
+    if (slots.length < unlockedSize) continue;
+    const usedSlots = slots.slice(0, unlockedSize);
 
-    // For each slot, find top candidates from each player
+    // For each slot, find top candidates from each unlocked player
     const slotCandidates: { playerId: number; champions: Champion[] }[][] = [];
 
-    for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
-      const slot = slots[slotIdx];
+    for (let slotIdx = 0; slotIdx < usedSlots.length; slotIdx++) {
+      const slot = usedSlots[slotIdx];
       const candidates: { playerId: number; champions: Champion[] }[] = [];
 
-      for (const player of teamPlayers) {
+      for (const player of unlockedPlayers) {
         const pool = playerPools.get(player.id!) ?? [];
         const playerProfs = proficiencies[player.id!] ?? new Map();
 
-        // Filter and rank champions that fit this slot
         const fitting = pool
           .filter((c) => slot.roles.includes(c.aramRole))
           .map((c) => ({
@@ -69,17 +106,20 @@ export function generateRecommendations(input: RecommendationInput): Recommended
       slotCandidates.push(candidates);
     }
 
-    // Generate compositions by assigning players to slots
+    // Generate compositions for unlocked players
     const compositions = generateAssignments(
-      teamPlayers,
+      unlockedPlayers,
       slotCandidates,
       proficiencies,
       champMap
     );
 
-    for (const assignments of compositions) {
+    for (const unlockedAssignments of compositions) {
+      // Combine locked + unlocked for full team scoring
+      const fullAssignments = [...lockedAssignments, ...unlockedAssignments];
+
       const { score, breakdown } = scoreComposition(
-        assignments,
+        fullAssignments,
         champMap,
         traitsMap,
         archetype.id,
@@ -88,7 +128,7 @@ export function generateRecommendations(input: RecommendationInput): Recommended
       );
 
       const damageProfile = { ap: 0, ad: 0, hybrid: 0 };
-      for (const a of assignments) {
+      for (const a of fullAssignments) {
         const champ = champMap.get(a.championId);
         if (champ) {
           switch (champ.damageType) {
@@ -102,7 +142,7 @@ export function generateRecommendations(input: RecommendationInput): Recommended
       allResults.push({
         archetypeId: archetype.id,
         archetypeName: archetype.nameKo,
-        assignments,
+        assignments: fullAssignments,
         score,
         scoreBreakdown: breakdown,
         damageProfile,

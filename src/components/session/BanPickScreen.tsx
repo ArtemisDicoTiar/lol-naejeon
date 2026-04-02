@@ -136,12 +136,27 @@ export function BanPickScreen({
     const teamPlayerObjs = teamPlayerIds.map((id) => players.find((p) => p.id === id)).filter(Boolean) as Player[];
     if (teamPlayerObjs.length < 3) return [];
     const opponentCurrentPicks = team === 1 ? team2Picks : team1Picks;
+
+    // Separate own team's picks (locked) from opponent/other picks (banned)
+    const ownTeamPicks: Record<number, string> = {};
+    const otherPicks: string[] = [];
+    const opponentIds = new Set(team === 1 ? team2PlayerIds : team1PlayerIds);
+    for (const [pidStr, champId] of Object.entries(picks)) {
+      const pid = Number(pidStr);
+      if (teamPlayerIds.includes(pid)) {
+        ownTeamPicks[pid] = champId;
+      } else if (opponentIds.has(pid)) {
+        otherPicks.push(champId);
+      }
+    }
+
     const recs = generateRecommendations({
       teamPlayers: teamPlayerObjs,
-      bannedChampions: [...Array.from(allBannedIds), ...Object.values(picks)],
+      bannedChampions: [...Array.from(allBannedIds), ...otherPicks],
       allChampions: champions, proficiencies, format,
       opponentPicks: opponentCurrentPicks.length > 0 ? opponentCurrentPicks : undefined,
       matchData,
+      lockedPicks: Object.keys(ownTeamPicks).length > 0 ? ownTeamPicks : undefined,
     }).slice(0, 10);
     if (wrStats) {
       for (const rec of recs) {

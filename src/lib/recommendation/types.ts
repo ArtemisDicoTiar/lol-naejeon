@@ -9,6 +9,7 @@ export interface RecommendationInput {
   allChampions: Champion[];
   proficiencies: Record<number, Map<string, ProficiencyLevel>>;
   matchData?: SynergyCounterData | null;
+  lockedPicks?: Record<number, string>;  // playerId → championId (already picked)
 }
 
 export interface ChampionAssignment {
