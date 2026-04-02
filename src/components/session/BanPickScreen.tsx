@@ -328,15 +328,23 @@ export function BanPickScreen({
       if (mode === 'name') return a.nameKo.localeCompare(b.nameKo, 'ko');
       if (mode === 'winrate') return b.aramWinrate - a.aramWinrate;
       if (mode === 'proficiency' && activeSlot?.type === 'pick') {
-        const profMap = proficiencies[activeSlot.playerId] ?? new Map();
+        // Use merged proficiencies (manual + estimated)
+        const profMap = mergedProficiencies[activeSlot.playerId] ?? new Map();
         const pA = profOrder[profMap.get(a.id) ?? '없음'] ?? 3;
         const pB = profOrder[profMap.get(b.id) ?? '없음'] ?? 3;
         if (pA !== pB) return pA - pB;
       }
+      if (mode === 'tier' && activeSlot?.type === 'ban') {
+        // In ban phase, sort by opponent proficiency (highest threat first)
+        const opponentIds = activeSlot.team === 1 ? team2PlayerIds : team1PlayerIds;
+        const bestProfA = Math.min(...opponentIds.map((pid) => profOrder[(mergedProficiencies[pid] ?? new Map()).get(a.id) ?? '없음'] ?? 3));
+        const bestProfB = Math.min(...opponentIds.map((pid) => profOrder[(mergedProficiencies[pid] ?? new Map()).get(b.id) ?? '없음'] ?? 3));
+        if (bestProfA !== bestProfB) return bestProfA - bestProfB;
+      }
       return (tierOrder[a.aramTier] ?? 3) - (tierOrder[b.aramTier] ?? 3);
     });
     return list;
-  }, [champions, fierlessBans, search, allBannedIds, pickedIds, activeSlot, proficiencies]);
+  }, [champions, fierlessBans, search, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds]);
 
   // --- RENDER ---
   const renderTeamPanel = (team: 1 | 2) => {
@@ -832,7 +840,7 @@ export function BanPickScreen({
               const isPicked = pickedIds.has(champ.id);
               const disabled = isBanned || isPicked;
               const profLevel = activeSlot?.type === 'pick'
-                ? proficiencies[activeSlot.playerId]?.get(champ.id) : undefined;
+                ? mergedProficiencies[activeSlot.playerId]?.get(champ.id) : undefined;
 
               // Opponent winrate for this champion
               const opponentIds = activeSlot?.type === 'ban'
