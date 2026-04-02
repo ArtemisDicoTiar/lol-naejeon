@@ -36,9 +36,9 @@ export function BanPickScreen({
   const team1Size = team1PlayerIds.length;
   const team2Size = team2PlayerIds.length;
 
-  // Ban state: each team bans as many as the OPPONENT team's player count
-  const [team1Bans, setTeam1Bans] = useState<string[]>(Array(team2Size).fill(''));
-  const [team2Bans, setTeam2Bans] = useState<string[]>(Array(team1Size).fill(''));
+  // Ban state: each team bans as many as their OWN player count
+  const [team1Bans, setTeam1Bans] = useState<string[]>(Array(team1Size).fill(''));
+  const [team2Bans, setTeam2Bans] = useState<string[]>(Array(team2Size).fill(''));
   const [picks, setPicks] = useState<Record<number, string>>({});
   const [activeSlot, setActiveSlot] = useState<ActiveSlot>({ type: 'ban', team: 1, index: 0 });
   const [search, setSearch] = useState('');
@@ -692,11 +692,47 @@ export function BanPickScreen({
         const anyPicks = Object.keys(picks).length > 0;
         if (!anyPicks) return null;
 
+        // Win probability bar: based on picked champions' ARAM winrate average
+        const calcTeamWr = (playerIds: number[]) => {
+          const pickedChamps = playerIds.map((pid) => picks[pid]).filter(Boolean)
+            .map((id) => champions.find((c) => c.id === id)).filter(Boolean);
+          if (pickedChamps.length === 0) return 50;
+          const avgWr = pickedChamps.reduce((sum, c) => sum + c!.aramWinrate, 0) / pickedChamps.length;
+          return avgWr;
+        };
+        const t1Wr = calcTeamWr(team1PlayerIds);
+        const t2Wr = calcTeamWr(team2PlayerIds);
+        // Normalize to 100%
+        const total = t1Wr + t2Wr;
+        const t1Pct = total > 0 ? Math.round((t1Wr / total) * 100) : 50;
+        const t2Pct = 100 - t1Pct;
+        const t1Winning = t1Pct >= t2Pct;
+
         return (
-          <div className="flex gap-4 p-2 bg-lol-gray/30 rounded border border-lol-border/30">
-            {renderTeamSummary(team1PlayerIds, 1)}
-            <div className="w-px bg-lol-border/30" />
-            {renderTeamSummary(team2PlayerIds, 2)}
+          <div className="p-2 bg-lol-gray/30 rounded border border-lol-border/30 space-y-2">
+            {/* Win Probability Bar */}
+            <div>
+              <div className="flex justify-between items-center text-[10px] mb-0.5">
+                <span className={`font-bold font-mono ${t1Winning ? 'text-green-400' : 'text-blue-400/70'}`}>
+                  T1 {t1Pct}%
+                </span>
+                <span className="text-lol-gold-light/30 text-[8px]">승리 예측</span>
+                <span className={`font-bold font-mono ${!t1Winning ? 'text-green-400' : 'text-red-400/70'}`}>
+                  {t2Pct}% T2
+                </span>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden flex bg-lol-dark/50">
+                <div className={`${t1Winning ? 'bg-green-500/80' : 'bg-blue-500/50'} transition-all`} style={{ width: `${t1Pct}%` }} />
+                <div className={`${!t1Winning ? 'bg-green-500/80' : 'bg-red-500/50'} transition-all`} style={{ width: `${t2Pct}%` }} />
+              </div>
+            </div>
+
+            {/* Team summaries side by side */}
+            <div className="flex gap-4">
+              {renderTeamSummary(team1PlayerIds, 1)}
+              <div className="w-px bg-lol-border/30" />
+              {renderTeamSummary(team2PlayerIds, 2)}
+            </div>
           </div>
         );
       })()}
