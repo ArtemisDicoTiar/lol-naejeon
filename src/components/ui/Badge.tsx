@@ -13,18 +13,21 @@ export function ProficiencyBadge({
   level,
   onClick,
   size = 'md',
+  estimated,
 }: {
   level: ProficiencyLevel;
   onClick?: () => void;
   size?: 'sm' | 'md';
+  estimated?: boolean;
 }) {
   const sizeClass = size === 'sm' ? 'text-xs px-1.5 py-0.5' : 'text-sm px-2 py-1';
   return (
     <span
       onClick={onClick}
-      className={`inline-block rounded border font-medium ${profColors[level]} ${sizeClass} ${onClick ? 'cursor-pointer hover:opacity-80' : ''}`}
+      className={`inline-block rounded font-medium ${profColors[level]} ${sizeClass} ${onClick ? 'cursor-pointer hover:opacity-80' : ''} ${estimated ? 'border-dashed' : 'border'}`}
+      title={estimated ? '게임 기록 기반 추정' : undefined}
     >
-      {level}
+      {estimated ? `~${level}` : level}
     </span>
   );
 }

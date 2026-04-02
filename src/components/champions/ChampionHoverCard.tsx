@@ -1,6 +1,7 @@
 import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
 import type { WinrateStats } from '@/lib/recommendation/winrate';
 import { ProficiencyBadge, TierBadge, RoleBadge } from '@/components/ui/Badge';
+import type { EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
 
 const TAG_LABELS: Partial<Record<MechanicTag, string>> = {
@@ -48,7 +49,8 @@ interface ChampionHoverCardProps {
   wrStats: WinrateStats | null;
   allPlayers: Player[];
   proficiencies: Record<number, Map<string, ProficiencyLevel>>;
-  highlightPlayerIds?: number[]; // players to highlight (e.g. opponent team)
+  highlightPlayerIds?: number[];
+  estimatedMap?: Map<string, Map<string, EstimatedProficiency>>;
 }
 
 export function ChampionHoverCard({
@@ -57,6 +59,7 @@ export function ChampionHoverCard({
   allPlayers,
   proficiencies,
   highlightPlayerIds,
+  estimatedMap,
 }: ChampionHoverCardProps) {
   const cs = wrStats?.champOverallStats[champion.id];
   const playerStats = wrStats?.playerChampStats.filter((s) => s.championId === champion.id) ?? [];
@@ -135,9 +138,12 @@ export function ChampionHoverCard({
             {allPlayers.map((p) => {
               const ps = playerStats.find((s) => s.playerId === p.id!);
               const prof = proficiencies[p.id!]?.get(champion.id);
+              const est = estimatedMap?.get(String(p.id!))?.get(champion.id);
               const isHighlight = highlightPlayerIds?.includes(p.id!);
-              if (!ps && (!prof || prof === '없음')) return null;
+              if (!ps && (!prof || prof === '없음') && !est) return null;
               const total = ps ? ps.wins + ps.losses : 0;
+              const isEstimated = (!prof || prof === '없음') && !!est;
+              const displayProf = isEstimated ? est!.level : prof;
               return (
                 <div key={p.id} className={`flex items-center justify-between px-1.5 py-1 rounded text-[11px] ${
                   isHighlight ? 'bg-red-950/30 border border-red-900/30' : 'bg-lol-blue/50'
@@ -146,7 +152,9 @@ export function ChampionHoverCard({
                     <span className={`font-medium ${isHighlight ? 'text-red-300' : 'text-lol-gold-light/80'}`}>
                       {p.name}
                     </span>
-                    {prof && prof !== '없음' && <ProficiencyBadge level={prof} size="sm" />}
+                    {displayProf && displayProf !== '없음' && (
+                      <ProficiencyBadge level={displayProf} size="sm" estimated={isEstimated} />
+                    )}
                   </div>
                   {ps && total > 0 ? (
                     <div className="flex items-center gap-1.5">

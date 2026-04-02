@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
 import type { WinrateStats } from '@/lib/recommendation/winrate';
+import type { EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
 import { ChampionHoverCard } from './ChampionHoverCard';
 
 interface ChampionWithHoverProps {
@@ -12,6 +13,7 @@ interface ChampionWithHoverProps {
   highlightPlayerIds?: number[];
   children: React.ReactNode;
   disabled?: boolean;
+  estimatedMap?: Map<string, Map<string, EstimatedProficiency>>;
 }
 
 const CARD_W = 270;
@@ -19,7 +21,7 @@ const CARD_H = 320;
 const PAD = 8;
 
 export function ChampionWithHover({
-  champion, wrStats, allPlayers, proficiencies, highlightPlayerIds, children, disabled,
+  champion, wrStats, allPlayers, proficiencies, highlightPlayerIds, children, disabled, estimatedMap,
 }: ChampionWithHoverProps) {
   const [hovered, setHovered] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -67,6 +69,7 @@ export function ChampionWithHover({
             allPlayers={allPlayers}
             proficiencies={proficiencies}
             highlightPlayerIds={highlightPlayerIds}
+            estimatedMap={estimatedMap}
           />
         </div>,
         document.body

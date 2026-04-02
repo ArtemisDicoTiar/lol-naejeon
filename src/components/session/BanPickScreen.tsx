@@ -4,6 +4,7 @@ import type { RecommendedComp } from '@/lib/recommendation/types';
 import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampions } from '@/lib/recommendation/engine';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
 import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
+import { estimatePlayerProficiencies, type EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
 import { championTraits } from '@/data/champion-tags';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
@@ -51,6 +52,36 @@ export function BanPickScreen({
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
   useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
 
+  // Estimated proficiencies: auto-estimate for champions without manual proficiency
+  const { mergedProficiencies, estimatedMap } = useMemo(() => {
+    if (!wrStats) return { mergedProficiencies: proficiencies, estimatedMap: new Map<string, Map<string, EstimatedProficiency>>() };
+
+    const champIds = champions.map((c) => c.id);
+    const aramWrMap = new Map(champions.map((c) => [c.id, c.aramWinrate]));
+    const allPlayerIds = [...team1PlayerIds, ...team2PlayerIds];
+    const estMap = new Map<string, Map<string, EstimatedProficiency>>();
+    const merged = { ...proficiencies };
+
+    for (const pid of allPlayerIds) {
+      const manual = proficiencies[pid] ?? new Map();
+      const estimates = estimatePlayerProficiencies(pid, manual, champIds, aramWrMap, wrStats);
+      estMap.set(String(pid), estimates);
+
+      // Merge: manual proficiency takes priority, estimated fills gaps
+      if (estimates.size > 0) {
+        const mergedMap = new Map(manual);
+        for (const [champId, est] of estimates) {
+          if (!mergedMap.has(champId) || mergedMap.get(champId) === '없음') {
+            mergedMap.set(champId, est.level);
+          }
+        }
+        merged[pid] = mergedMap;
+      }
+    }
+
+    return { mergedProficiencies: merged, estimatedMap: estMap };
+  }, [wrStats, proficiencies, champions, team1PlayerIds, team2PlayerIds]);
+
   const getPlayerName = (id: number) => players.find((p) => p.id === id)?.name ?? '';
   const getTeamBans = (team: 1 | 2) => team === 1 ? team1Bans : team2Bans;
   const setTeamBans = (team: 1 | 2, bans: string[]) => team === 1 ? setTeam1Bans(bans) : setTeam2Bans(bans);
@@ -82,28 +113,28 @@ export function BanPickScreen({
 
   const team1OurProfs = useMemo(() => {
     const m: Record<number, Map<string, any>> = {};
-    for (const pid of team1PlayerIds) { if (proficiencies[pid]) m[pid] = proficiencies[pid]; }
+    for (const pid of team1PlayerIds) { if (mergedProficiencies[pid]) m[pid] = mergedProficiencies[pid]; }
     return m;
   }, [team1PlayerIds, proficiencies]);
   const team2OurProfs = useMemo(() => {
     const m: Record<number, Map<string, any>> = {};
-    for (const pid of team2PlayerIds) { if (proficiencies[pid]) m[pid] = proficiencies[pid]; }
+    for (const pid of team2PlayerIds) { if (mergedProficiencies[pid]) m[pid] = mergedProficiencies[pid]; }
     return m;
   }, [team2PlayerIds, proficiencies]);
 
   const team1BanRecs = useMemo(() => generatePerPlayerBanRecs({
     opponentPlayerIds: team2PlayerIds,
     opponentPlayerNames: Object.fromEntries(players.map((p) => [p.id!, p.name])),
-    proficiencies, allChampions: champions, alreadyBanned: alreadyBannedAll,
+    proficiencies: mergedProficiencies, allChampions: champions, alreadyBanned: alreadyBannedAll,
     ourTeamProficiencies: team1OurProfs,
-  }), [team2PlayerIds, players, proficiencies, champions, alreadyBannedAll, team1OurProfs]);
+  }), [team2PlayerIds, players, mergedProficiencies, champions, alreadyBannedAll, team1OurProfs]);
 
   const team2BanRecs = useMemo(() => generatePerPlayerBanRecs({
     opponentPlayerIds: team1PlayerIds,
     opponentPlayerNames: Object.fromEntries(players.map((p) => [p.id!, p.name])),
-    proficiencies, allChampions: champions, alreadyBanned: alreadyBannedAll,
+    proficiencies: mergedProficiencies, allChampions: champions, alreadyBanned: alreadyBannedAll,
     ourTeamProficiencies: team2OurProfs,
-  }), [team1PlayerIds, players, proficiencies, champions, alreadyBannedAll, team2OurProfs]);
+  }), [team1PlayerIds, players, mergedProficiencies, champions, alreadyBannedAll, team2OurProfs]);
 
   // Opponent picks per team (for counter recommendations)
   const team1Picks = useMemo(() =>
@@ -154,7 +185,7 @@ export function BanPickScreen({
     const recs = generateRecommendations({
       teamPlayers: teamPlayerObjs,
       bannedChampions: [...Array.from(allBannedIds), ...otherPicks],
-      allChampions: champions, proficiencies, format,
+      allChampions: champions, proficiencies: mergedProficiencies, format,
       opponentPicks: opponentCurrentPicks.length > 0 ? opponentCurrentPicks : undefined,
       matchData,
       lockedPicks: Object.keys(ownTeamPicks).length > 0 ? ownTeamPicks : undefined,
@@ -169,7 +200,7 @@ export function BanPickScreen({
 
   // Per-player top champions
   const getPlayerRecs = (playerId: number) => {
-    const profMap = proficiencies[playerId] ?? new Map();
+    const profMap = mergedProficiencies[playerId] ?? new Map();
     return getPlayerTopChampions(playerId, profMap, availableChampions.filter((c) => !pickedIds.has(c.id) || picks[playerId] === c.id), 7);
   };
 
@@ -380,7 +411,7 @@ export function BanPickScreen({
                         const isBanned = allBannedIds.has(champ.id);
                         return (
                           <ChampionWithHover key={rec.championId} champion={champ} wrStats={wrStats}
-                            allPlayers={players} proficiencies={proficiencies}
+                            allPlayers={players} proficiencies={proficiencies} estimatedMap={estimatedMap}
                             highlightPlayerIds={[oppId]} disabled={isBanned}>
                             <div
                               title={rec.reason ? `${champ.nameKo}: ${rec.reason}` : champ.nameKo}
@@ -564,7 +595,7 @@ export function BanPickScreen({
                       const isUnavailable = pickedIds.has(c.id) && picks[pid] !== c.id;
                       return (
                         <ChampionWithHover key={c.id} champion={c} wrStats={wrStats}
-                          allPlayers={players} proficiencies={proficiencies}
+                          allPlayers={players} proficiencies={proficiencies} estimatedMap={estimatedMap}
                           highlightPlayerIds={team1PlayerIds.includes(pid) ? team2PlayerIds : team1PlayerIds}
                           disabled={isUnavailable}>
                           <div
@@ -842,6 +873,7 @@ export function BanPickScreen({
                   wrStats={wrStats}
                   allPlayers={players}
                   proficiencies={proficiencies}
+                  estimatedMap={estimatedMap}
                   highlightPlayerIds={opponentIds}
                   disabled={disabled}
                 >
