@@ -4,6 +4,7 @@ import type { RecommendedComp } from '@/lib/recommendation/types';
 import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampions } from '@/lib/recommendation/engine';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
 import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
+import { championTraits } from '@/data/champion-tags';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
@@ -35,9 +36,9 @@ export function BanPickScreen({
   const team1Size = team1PlayerIds.length;
   const team2Size = team2PlayerIds.length;
 
-  // Ban state: each slot can be a champion id, SKIP_BAN, or empty string
-  const [team1Bans, setTeam1Bans] = useState<string[]>(Array(team1Size).fill(''));
-  const [team2Bans, setTeam2Bans] = useState<string[]>(Array(team2Size).fill(''));
+  // Ban state: each team bans as many as the OPPONENT team's player count
+  const [team1Bans, setTeam1Bans] = useState<string[]>(Array(team2Size).fill(''));
+  const [team2Bans, setTeam2Bans] = useState<string[]>(Array(team1Size).fill(''));
   const [picks, setPicks] = useState<Record<number, string>>({});
   const [activeSlot, setActiveSlot] = useState<ActiveSlot>({ type: 'ban', team: 1, index: 0 });
   const [search, setSearch] = useState('');
@@ -589,6 +590,66 @@ export function BanPickScreen({
             );
           })}
         </div>
+
+        {/* Team Composition Summary: AP/AD bar + traits */}
+        {(() => {
+          const teamPicks = playerIds.map((pid) => picks[pid]).filter(Boolean);
+          if (teamPicks.length === 0) return null;
+          const teamChamps = teamPicks.map((id) => champions.find((c) => c.id === id)).filter(Boolean);
+          let ap = 0, ad = 0, hybrid = 0;
+          for (const c of teamChamps) {
+            if (c!.damageType === 'AP') ap++;
+            else if (c!.damageType === 'AD') ad++;
+            else hybrid++;
+          }
+          const total = ap + ad + hybrid;
+          const apPct = total > 0 ? ((ap + hybrid * 0.5) / total) * 100 : 50;
+          const adPct = total > 0 ? ((ad + hybrid * 0.5) / total) * 100 : 50;
+
+          // Collect team mechanic tags
+          const tagCounts = new Map<string, number>();
+          for (const c of teamChamps) {
+            const traits = championTraits[c!.id];
+            if (!traits) continue;
+            for (const t of traits.mechanics) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+          }
+
+          // Group tags for display
+          const traitDisplay: { label: string; present: boolean; color: string }[] = [
+            { label: 'CC', present: tagCounts.has('aoe_cc') || tagCounts.has('knockup') || tagCounts.has('pull'), color: 'text-yellow-300 bg-yellow-800/60' },
+            { label: '포크', present: tagCounts.has('poke_long') || tagCounts.has('poke_mid'), color: 'text-blue-300 bg-blue-800/60' },
+            { label: '힐', present: tagCounts.has('heal'), color: 'text-green-300 bg-green-800/60' },
+            { label: '쉴드', present: tagCounts.has('shield'), color: 'text-cyan-300 bg-cyan-800/60' },
+            { label: '치감', present: tagCounts.has('anti_heal'), color: 'text-red-300 bg-red-800/60' },
+            { label: '탱킹', present: tagCounts.has('diving'), color: 'text-amber-300 bg-amber-800/60' },
+            { label: '탱커파쇄', present: tagCounts.has('tank_shred'), color: 'text-red-300 bg-red-800/60' },
+            { label: '버스트', present: tagCounts.has('burst'), color: 'text-orange-300 bg-orange-800/60' },
+          ];
+
+          return (
+            <div className="space-y-1.5 pt-1 border-t border-lol-border/30">
+              {/* AP/AD Balance Bar */}
+              <div>
+                <div className="flex justify-between text-[9px] text-lol-gold-light/40 mb-0.5">
+                  <span>AP {Math.round(apPct)}%</span>
+                  <span>AD {Math.round(adPct)}%</span>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden flex bg-lol-dark/50">
+                  <div className="bg-blue-500/70 transition-all" style={{ width: `${apPct}%` }} />
+                  <div className="bg-red-500/70 transition-all" style={{ width: `${adPct}%` }} />
+                </div>
+              </div>
+              {/* Team Traits */}
+              <div className="flex flex-wrap gap-1">
+                {traitDisplay.map((t) => (
+                  <span key={t.label} className={`text-[9px] px-1.5 py-0.5 rounded ${t.present ? t.color : 'text-gray-600 bg-lol-dark/30 line-through'}`}>
+                    {t.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   };
