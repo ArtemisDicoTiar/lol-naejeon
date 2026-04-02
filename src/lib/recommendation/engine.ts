@@ -6,7 +6,6 @@ import type { AramTier } from '@/data/aram-champion-meta';
 import { championTraits, type ChampionTraits } from '@/data/champion-tags';
 import { synergyRules, synergyOverrides } from '@/data/synergy-rules';
 import { counterRules } from '@/data/counter-rules';
-import type { SynergyCounterData } from './data-loader';
 
 function buildTraitsMap(): Map<string, ChampionTraits> {
   return new Map(Object.entries(championTraits));
