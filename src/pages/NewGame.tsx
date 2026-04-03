@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSession } from '@/hooks/useSession';
 import { usePlayers } from '@/hooks/usePlayers';
 import { useChampions } from '@/hooks/useChampions';
+import { useLcuContext } from '@/App';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { BanPickScreen } from '@/components/session/BanPickScreen';
@@ -18,6 +19,7 @@ export function NewGame() {
   const { session, fierlessBans, lastGameTeams, addGame } = useSession();
   const { players } = usePlayers();
   const { champions } = useChampions();
+  const lcu = useLcuContext();
 
   const [step, setStep] = useState<Step>(keepTeams && lastGameTeams ? 'banpick' : 'setup');
   const [format, setFormat] = useState<'3v3' | '3v4'>(lastGameTeams?.format ?? '3v4');
@@ -49,6 +51,59 @@ export function NewGame() {
       }
     }
   }, [keepTeams, lastGameTeams]);
+
+  // Auto-detect teams from LCU when champ select starts
+  const playerNameToId = useMemo(() => {
+    return new Map(players.map(p => [p.name, p.id!]));
+  }, [players]);
+
+  useEffect(() => {
+    if (!lcu.connected || !lcu.champSelectActive || !lcu.lastState) return;
+    if (step === 'banpick') return; // already in banpick, handled by BanPickScreen
+
+    const state = lcu.lastState;
+    const t1Aliases = state.team1Picks.map(p => p.alias).filter(Boolean) as string[];
+    const t2Aliases = state.team2Picks.map(p => p.alias).filter(Boolean) as string[];
+
+    if (t1Aliases.length === 0 && t2Aliases.length === 0) return;
+
+    // Build team assignments from LCU aliases
+    const newAssignments: Record<number, 1 | 2> = {};
+    const matched = new Set<number>();
+
+    for (const alias of t1Aliases) {
+      const pid = playerNameToId.get(alias);
+      if (pid) { newAssignments[pid] = 1; matched.add(pid); }
+    }
+    for (const alias of t2Aliases) {
+      const pid = playerNameToId.get(alias);
+      if (pid) { newAssignments[pid] = 2; matched.add(pid); }
+    }
+
+    if (matched.size === 0) return;
+
+    // Determine format
+    const t1Size = t1Aliases.length;
+    const t2Size = t2Aliases.length;
+    const detectedFormat: '3v3' | '3v4' = (t1Size + t2Size >= 7) ? '3v4' : '3v3';
+
+    setFormat(detectedFormat);
+    setTeamAssignments(newAssignments);
+
+    // If 3v3, figure out who's sitting out
+    if (detectedFormat === '3v3') {
+      const sitting = allPlayerIds.find(id => !matched.has(id));
+      if (sitting) setSittingOut(sitting);
+    }
+
+    // Auto-advance to banpick if all players assigned
+    const t1Count = Object.values(newAssignments).filter(t => t === 1).length;
+    const t2Count = Object.values(newAssignments).filter(t => t === 2).length;
+    const expectedTotal = detectedFormat === '3v3' ? 6 : 7;
+    if (t1Count + t2Count >= expectedTotal) {
+      setStep('banpick');
+    }
+  }, [lcu.connected, lcu.champSelectActive, lcu.lastState, playerNameToId, step, allPlayerIds]);
 
   // Load proficiencies
   useEffect(() => {

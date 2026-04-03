@@ -10,7 +10,7 @@ import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { useLcuBridge } from '@/hooks/useLcuBridge';
+import { useLcuContext } from '@/App';
 
 interface BanPickScreenProps {
   format: '3v3' | '3v4';
@@ -50,7 +50,7 @@ export function BanPickScreen({
   const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
   const [matchData, setMatchData] = useState<SynergyCounterData | null>(null);
-  const lcu = useLcuBridge();
+  const lcu = useLcuContext();
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
   useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
@@ -743,25 +743,7 @@ export function BanPickScreen({
     <div className="space-y-3">
       {/* Phase indicator + LCU bridge */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button onClick={onBack} className="text-lol-gold hover:text-lol-gold-light cursor-pointer">&larr;</button>
-          {/* LCU Bridge toggle */}
-          <button
-            onClick={() => lcu.connected ? lcu.disconnect() : lcu.connect()}
-            className={`cursor-pointer px-2 py-1 rounded text-[10px] border transition-colors ${
-              lcu.connected
-                ? lcu.champSelectActive
-                  ? 'bg-prof-high/20 text-prof-high border-prof-high/40'
-                  : 'bg-blue-900/30 text-blue-300 border-blue-700/50'
-                : 'bg-lol-gray text-lol-gold-light/40 border-lol-border hover:text-lol-gold-light'
-            }`}
-            title={lcu.connected ? '브릿지 연결됨 (클릭하여 해제)' : '롤 클라이언트 브릿지 연결 (bridge 실행 필요)'}
-          >
-            {lcu.connected
-              ? lcu.champSelectActive ? '🟢 챔셀 감지 중' : '🔵 브릿지 연결됨'
-              : '🔌 클라이언트 연결'}
-          </button>
-        </div>
+        <button onClick={onBack} className="text-lol-gold hover:text-lol-gold-light cursor-pointer">&larr; 돌아가기</button>
         <div className="flex gap-2">
           <button onClick={() => { setPhase('ban'); const idx = team1Bans.findIndex((b) => !b); if (idx >= 0) setActiveSlot({ type: 'ban', team: 1, index: idx }); }}
             className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'ban' ? 'bg-red-900/50 text-red-300 border border-red-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>

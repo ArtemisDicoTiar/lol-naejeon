@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { IdentitySelector } from './IdentitySelector';
 import type { useIdentity } from '@/hooks/useIdentity';
+import type { useLcuBridge } from '@/hooks/useLcuBridge';
 
 const links = [
   { to: '/', label: '대시보드' },
@@ -12,7 +13,7 @@ const links = [
   { to: '/settings', label: '설정' },
 ];
 
-export function Nav({ identity }: { identity: ReturnType<typeof useIdentity> }) {
+export function Nav({ identity, lcu }: { identity: ReturnType<typeof useIdentity>; lcu: ReturnType<typeof useLcuBridge> }) {
   return (
     <nav className="bg-lol-blue border-b border-lol-border">
       <div className="max-w-[1920px] mx-auto px-4">
@@ -39,6 +40,22 @@ export function Nav({ identity }: { identity: ReturnType<typeof useIdentity> }) 
             ))}
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-2">
+            {/* LCU Bridge status */}
+            <button
+              onClick={() => lcu.connected ? lcu.disconnect() : lcu.connect()}
+              className={`cursor-pointer px-2 py-1 rounded text-[10px] border transition-colors ${
+                lcu.connected
+                  ? lcu.champSelectActive
+                    ? 'bg-prof-high/20 text-prof-high border-prof-high/40'
+                    : 'bg-blue-900/30 text-blue-300 border-blue-700/50'
+                  : 'bg-lol-gray text-lol-gold-light/40 border-lol-border hover:text-lol-gold-light'
+              }`}
+              title={lcu.connected ? '클라이언트 연결됨' : '클라이언트 연결 (bridge 실행 필요)'}
+            >
+              {lcu.connected
+                ? lcu.champSelectActive ? '🟢 챔셀' : '🔵 연결됨'
+                : '🔌 클라'}
+            </button>
             <span className={`text-xs ${identity.isMaster ? 'text-lol-gold' : 'text-lol-gold-light/60'}`}>
               {identity.isMaster && '[M] '}{identity.playerName}
             </span>
