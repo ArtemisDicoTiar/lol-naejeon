@@ -67,6 +67,28 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
           </RadarChart>
         </ResponsiveContainer>
       )}
+
+      {/* Formula descriptions */}
+      <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] text-lol-gold-light/40">
+        <div className="p-1.5 bg-lol-blue/30 rounded">
+          <span className="text-lol-gold-light/60 font-medium">승률</span> = 전체 승수 / 전체 게임수 × 100
+        </div>
+        <div className="p-1.5 bg-lol-blue/30 rounded">
+          <span className="text-lol-gold-light/60 font-medium">포크</span> = 포크챔프 픽비율 × 해당 승률 × 200
+        </div>
+        <div className="p-1.5 bg-lol-blue/30 rounded">
+          <span className="text-lol-gold-light/60 font-medium">인게이지</span> = 인게이지/탱크 픽비율 × 해당 승률 × 200
+        </div>
+        <div className="p-1.5 bg-lol-blue/30 rounded">
+          <span className="text-lol-gold-light/60 font-medium">서스테인</span> = 서스테인/유틸 픽비율 × 해당 승률 × 200
+        </div>
+        <div className="p-1.5 bg-lol-blue/30 rounded">
+          <span className="text-lol-gold-light/60 font-medium">챔피언 폭</span> = 고유 챔프 수 / 20 × 100
+        </div>
+        <div className="p-1.5 bg-lol-blue/30 rounded">
+          <span className="text-lol-gold-light/60 font-medium">캐리력</span> = S/상/중 챔프 승수 / S/상/중 챔프 게임수 × 100
+        </div>
+      </div>
     </Card>
   );
 }

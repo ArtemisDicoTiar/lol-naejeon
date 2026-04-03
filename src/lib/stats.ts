@@ -102,11 +102,11 @@ export async function computeFullStats(): Promise<FullStats> {
     const uniqueChamps = new Set(playerPicks.map((p) => p.championId));
     const poolScore = Math.min(100, (uniqueChamps.size / 20) * 100); // 20 unique = 100
 
-    // Carry: winrate on proficiency 상/중 champions
+    // Carry: winrate on proficiency S/상/중 champions
     let carryWins = 0, carryTotal = 0;
     for (const pick of playerPicks) {
       const prof = profMap.get(pick.championId);
-      if (prof === '상' || prof === '중') {
+      if (prof === 'S' || prof === '상' || prof === '중') {
         const game = allGames.find((g) => g.id === pick.gameId);
         if (game?.winningTeam !== null) {
           carryTotal++;
