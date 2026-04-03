@@ -207,6 +207,7 @@ export function BanPickScreen({
   // Handle champion click from grid
   const handleChampionSelect = (champId: string) => {
     if (!activeSlot) return;
+    setSearch(''); // clear search on any selection
     if (activeSlot.type === 'ban') {
       const bans = [...getTeamBans(activeSlot.team)];
       bans[activeSlot.index] = champId;
@@ -780,8 +781,15 @@ export function BanPickScreen({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="챔피언 검색..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && search && activeSlot) {
+                  const first = gridChampions.find((c) => !allBannedIds.has(c.id) && !pickedIds.has(c.id));
+                  if (first) { handleChampionSelect(first.id); setSearch(''); }
+                }
+              }}
+              placeholder="검색 후 Enter로 즉시 선택..."
               className="flex-1 bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
+              autoFocus
             />
             <select
               value={sortMode}
