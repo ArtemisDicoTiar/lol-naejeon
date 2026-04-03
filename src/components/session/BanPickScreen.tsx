@@ -440,7 +440,7 @@ export function BanPickScreen({
         )}
 
         {/* Comp Recommendations */}
-        {phase === 'pick' && compRecs.length > 0 && (
+        {compRecs.length > 0 && (
           <div>
             <div className="text-xs text-lol-gold-light/50 mb-1">추천 조합 ({compRecs.length})</div>
             <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
@@ -777,20 +777,30 @@ export function BanPickScreen({
         {/* Center: Champion Grid */}
         <div className="flex-1 min-w-0 space-y-2">
           <div className="flex gap-2">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && search && activeSlot) {
-                  const first = gridChampions.find((c) => !allBannedIds.has(c.id) && !pickedIds.has(c.id));
-                  if (first) { handleChampionSelect(first.id); setSearch(''); }
-                }
-              }}
-              placeholder="검색 후 Enter로 즉시 선택..."
-              className="flex-1 bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
-              autoFocus
-            />
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && search && activeSlot) {
+                    const first = gridChampions.find((c) => !allBannedIds.has(c.id) && !pickedIds.has(c.id));
+                    if (first) { handleChampionSelect(first.id); setSearch(''); }
+                  }
+                }}
+                placeholder="검색 후 Enter로 즉시 선택..."
+                className="w-full bg-lol-blue border border-lol-border rounded px-3 py-1.5 pr-8 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
+                autoFocus
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-lol-gold-light/40 hover:text-lol-gold-light cursor-pointer text-sm"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
             <select
               value={sortMode}
               onChange={(e) => setSortMode(e.target.value as any)}
