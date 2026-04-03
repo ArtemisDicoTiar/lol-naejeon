@@ -131,6 +131,12 @@ export function NewGame() {
         proficiencies={proficiencies}
         onConfirm={handleBanPickConfirm}
         onBack={() => setStep('setup')}
+        onReorderTeams={(newT1, newT2) => {
+          const newAssignments: Record<number, 1 | 2> = {};
+          newT1.forEach(id => { newAssignments[id] = 1; });
+          newT2.forEach(id => { newAssignments[id] = 2; });
+          setTeamAssignments(newAssignments);
+        }}
       />
     );
   }

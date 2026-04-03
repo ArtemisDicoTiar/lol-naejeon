@@ -22,6 +22,7 @@ interface BanPickScreenProps {
   proficiencies: Record<number, Map<string, ProficiencyLevel>>;
   onConfirm: (result: { bans: Record<1 | 2, string[]>; picks: Record<number, string> }) => void;
   onBack: () => void;
+  onReorderTeams?: (team1: number[], team2: number[]) => void;
 }
 
 type ActiveSlot =
@@ -33,7 +34,7 @@ const SKIP_BAN = '__SKIP__';
 
 export function BanPickScreen({
   format, team1PlayerIds, team2PlayerIds, players, champions,
-  fierlessBans, proficiencies, onConfirm, onBack,
+  fierlessBans, proficiencies, onConfirm, onBack, onReorderTeams,
 }: BanPickScreenProps) {
   const team1Size = team1PlayerIds.length;
   const team2Size = team2PlayerIds.length;
@@ -97,25 +98,49 @@ export function BanPickScreen({
       });
     }
 
-    // Apply picks: match by alias (summoner name → app player name)
-    const allPlayerIds = [...team1PlayerIds, ...team2PlayerIds];
-    const playerNameToId = new Map(allPlayerIds.map(id => {
+    // Reorder teams to match LCU cellId order (client's visual order)
+    const playerNameToId = new Map<string, number>();
+    for (const id of [...team1PlayerIds, ...team2PlayerIds]) {
       const name = players.find(p => p.id === id)?.name ?? '';
-      return [name, id];
-    }));
+      if (name) playerNameToId.set(name, id);
+    }
 
+    const reorderByLcu = (lcuPicks: typeof state.team1Picks, currentIds: number[]) => {
+      // Sort by cellId, then map alias → player id
+      const sorted = [...lcuPicks].sort((a, b) => a.cellId - b.cellId);
+      const reordered: number[] = [];
+      for (const p of sorted) {
+        if (p.alias && playerNameToId.has(p.alias)) {
+          reordered.push(playerNameToId.get(p.alias)!);
+        }
+      }
+      // Fill remaining (unmatched) with original order
+      for (const id of currentIds) {
+        if (!reordered.includes(id)) reordered.push(id);
+      }
+      return reordered;
+    };
+
+    if (state.team1Picks.some(p => p.alias) || state.team2Picks.some(p => p.alias)) {
+      const newT1 = reorderByLcu(state.team1Picks, team1PlayerIds);
+      const newT2 = reorderByLcu(state.team2Picks, team2PlayerIds);
+      const t1Changed = JSON.stringify(newT1) !== JSON.stringify(team1PlayerIds);
+      const t2Changed = JSON.stringify(newT2) !== JSON.stringify(team2PlayerIds);
+      if ((t1Changed || t2Changed) && onReorderTeams) {
+        onReorderTeams(newT1, newT2);
+      }
+    }
+
+    // Apply picks: match by alias
     const applyPicks = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
       const result: Record<number, string> = {};
       lcuPicks.forEach((p, i) => {
         if (p.champId <= 0) return;
         const champStrId = champKeyMap.get(p.champId);
         if (!champStrId) return;
-
-        // Try alias match first
         if (p.alias && playerNameToId.has(p.alias)) {
           result[playerNameToId.get(p.alias)!] = champStrId;
         } else if (i < fallbackIds.length) {
-          // Fallback: position order
           result[fallbackIds[i]] = champStrId;
         }
       });
@@ -129,7 +154,7 @@ export function BanPickScreen({
       setPicks(prev => ({ ...prev, ...picks1, ...picks2 }));
       setPhase('pick');
     }
-  }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds]);
+  }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds, players, onReorderTeams]);
 
   // Estimated proficiencies: auto-estimate for champions without manual proficiency
   const { mergedProficiencies, estimatedMap } = useMemo(() => {
