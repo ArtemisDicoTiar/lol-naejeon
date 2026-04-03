@@ -6,11 +6,12 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { db, type GamePick, type GameBan, type Player } from '@/lib/db';
-import { useIdentityContext } from '@/App';
+import { useIdentityContext, useLcuContext } from '@/App';
 
 export function Session() {
   const navigate = useNavigate();
   const { isMaster } = useIdentityContext();
+  const lcu = useLcuContext();
   const { session, games, fierlessBans, lastGameTeams, loading, setGameResult, endSession, removeGame } = useSession();
   const { champions } = useChampions();
   const [gamePicks, setGamePicks] = useState<Record<number, GamePick[]>>({});
@@ -18,6 +19,13 @@ export function Session() {
   const [players, setPlayers] = useState<Player[]>([]);
 
   useEffect(() => { db.players.toArray().then(setPlayers); }, []);
+
+  // Auto-navigate to new game when LCU detects champion select
+  useEffect(() => {
+    if (lcu.connected && lcu.champSelectActive && session && isMaster) {
+      navigate('/session/new-game?fromLcu=true');
+    }
+  }, [lcu.champSelectActive, lcu.connected, session, isMaster, navigate]);
 
   useEffect(() => {
     (async () => {

@@ -176,12 +176,30 @@ async function parseChampSelectState(data) {
     }
   }
 
+  // Build a map of cellId → pick action champion (including hover/intent)
+  const cellPickChamp = new Map();
+  const cellPickCompleted = new Map();
+  if (data.actions) {
+    for (const actionGroup of data.actions) {
+      for (const action of actionGroup) {
+        if (action.type === 'pick' && action.championId > 0) {
+          cellPickChamp.set(action.actorCellId, action.championId);
+          cellPickCompleted.set(action.actorCellId, action.completed);
+        }
+      }
+    }
+  }
+
   // Parse picks with summoner name resolution
   for (const member of (data.myTeam || [])) {
     const summoner = await resolveSummoner(member.summonerId);
+    // Use action champion (includes hover) over member.championId
+    const champId = cellPickChamp.get(member.cellId) || member.championId || 0;
+    const locked = cellPickCompleted.get(member.cellId) || false;
     team1Picks.push({
       cellId: member.cellId,
-      champId: member.championId || 0,
+      champId,
+      locked,
       summonerId: member.summonerId,
       gameName: summoner?.gameName ?? '',
       alias: summoner?.alias ?? null,
@@ -190,9 +208,12 @@ async function parseChampSelectState(data) {
 
   for (const member of (data.theirTeam || [])) {
     const summoner = await resolveSummoner(member.summonerId);
+    const champId = cellPickChamp.get(member.cellId) || member.championId || 0;
+    const locked = cellPickCompleted.get(member.cellId) || false;
     team2Picks.push({
       cellId: member.cellId,
-      champId: member.championId || 0,
+      champId,
+      locked,
       summonerId: member.summonerId,
       gameName: summoner?.gameName ?? '',
       alias: summoner?.alias ?? null,

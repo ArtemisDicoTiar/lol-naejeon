@@ -6,8 +6,8 @@ export interface LcuChampSelectState {
   phase: string;
   team1Bans: number[];
   team2Bans: number[];
-  team1Picks: { cellId: number; champId: number; summonerId: number; gameName?: string; alias?: string | null }[];
-  team2Picks: { cellId: number; champId: number; summonerId: number; gameName?: string; alias?: string | null }[];
+  team1Picks: { cellId: number; champId: number; locked?: boolean; summonerId: number; gameName?: string; alias?: string | null }[];
+  team2Picks: { cellId: number; champId: number; locked?: boolean; summonerId: number; gameName?: string; alias?: string | null }[];
 }
 
 export function useLcuBridge() {

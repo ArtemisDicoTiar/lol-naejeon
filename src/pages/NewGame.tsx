@@ -15,13 +15,14 @@ export function NewGame() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const keepTeams = searchParams.get('keepTeams') === 'true';
+  const fromLcu = searchParams.get('fromLcu') === 'true';
 
   const { session, fierlessBans, lastGameTeams, addGame } = useSession();
   const { players } = usePlayers();
   const { champions } = useChampions();
   const lcu = useLcuContext();
 
-  const [step, setStep] = useState<Step>(keepTeams && lastGameTeams ? 'banpick' : 'setup');
+  const [step, setStep] = useState<Step>((keepTeams && lastGameTeams) || fromLcu ? 'banpick' : 'setup');
   const [format, setFormat] = useState<'3v3' | '3v4'>(lastGameTeams?.format ?? '3v4');
   const [sittingOut, setSittingOut] = useState<number | null>(null); // 3v3에서 빠지는 플레이어
   const [teamAssignments, setTeamAssignments] = useState<Record<number, 1 | 2>>({});

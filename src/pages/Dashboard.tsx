@@ -1,19 +1,28 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@/hooks/useSession';
 import { usePlayers } from '@/hooks/usePlayers';
 import { useChampions } from '@/hooks/useChampions';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { useIdentityContext } from '@/App';
+import { useIdentityContext, useLcuContext } from '@/App';
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const { isMaster } = useIdentityContext();
+  const lcu = useLcuContext();
   const { session, games, fierlessBans, loading: sessionLoading, createSession } = useSession();
   const { players } = usePlayers();
   const { champions, syncing } = useChampions();
   const [sessionName, setSessionName] = useState('');
   const [creating, setCreating] = useState(false);
+
+  // Auto-navigate to new game when LCU detects champion select
+  useEffect(() => {
+    if (lcu.connected && lcu.champSelectActive && session && isMaster) {
+      navigate('/session/new-game?fromLcu=true');
+    }
+  }, [lcu.champSelectActive, lcu.connected, session, isMaster, navigate]);
 
   if (sessionLoading || syncing) {
     return (

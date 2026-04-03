@@ -332,23 +332,20 @@ export function BanPickScreen({
   };
 
   const advanceBanSlot = (team: 1 | 2, index: number) => {
-    // Find next empty ban slot
-    const allBans = team === 1 ? [...team1Bans] : [...team2Bans];
-    allBans[index] = 'filled'; // mark current
-    const otherBans = team === 1 ? team2Bans : team1Bans;
-    const otherTeam = team === 1 ? 2 : 1;
+    // Use latest state by reading from the setter callbacks
+    // Build snapshot of what bans look like AFTER current assignment
+    const currentT1 = [...team1Bans];
+    const currentT2 = [...team2Bans];
+    if (team === 1) currentT1[index] = 'filled';
+    else currentT2[index] = 'filled';
 
-    // Check same team next slot
-    const nextSame = allBans.findIndex((b, i) => i > index && !b);
-    if (nextSame >= 0) { setActiveSlot({ type: 'ban', team, index: nextSame }); return; }
+    // Check T1 next empty
+    const nextT1 = currentT1.findIndex((b) => !b);
+    // Check T2 next empty
+    const nextT2 = currentT2.findIndex((b) => !b);
 
-    // Check other team
-    const nextOther = otherBans.findIndex((b) => !b);
-    if (nextOther >= 0) { setActiveSlot({ type: 'ban', team: otherTeam as 1 | 2, index: nextOther }); return; }
-
-    // Check same team from start
-    const nextFromStart = allBans.findIndex((b) => !b);
-    if (nextFromStart >= 0) { setActiveSlot({ type: 'ban', team, index: nextFromStart }); return; }
+    if (nextT1 >= 0) { setActiveSlot({ type: 'ban', team: 1, index: nextT1 }); return; }
+    if (nextT2 >= 0) { setActiveSlot({ type: 'ban', team: 2, index: nextT2 }); return; }
 
     // All bans done, switch to pick phase
     setPhase('pick');
