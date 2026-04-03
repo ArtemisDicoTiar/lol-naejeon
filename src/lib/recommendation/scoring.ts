@@ -8,7 +8,8 @@ import type { ChampionTraits } from '@/data/champion-tags';
 import type { SynergyCounterData } from './data-loader';
 
 const PROF_SCORES: Record<ProficiencyLevel, number> = {
-  '상': 1.0,
+  'S': 1.0,
+  '상': 0.9,
   '중': 0.6,
   '하': 0.3,
   '없음': 0,

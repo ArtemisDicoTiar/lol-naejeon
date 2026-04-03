@@ -165,7 +165,7 @@ function getChampionSlotScore(
   let score = 0;
 
   // Proficiency weight
-  const profScores: Record<string, number> = { '상': 3, '중': 2, '하': 1 };
+  const profScores: Record<string, number> = { 'S': 5, '상': 3, '중': 2, '하': 1 };
   score += profScores[proficiency ?? ''] ?? 0;
 
   // Tier weight
@@ -251,7 +251,7 @@ function deduplicateComps(comps: RecommendedComp[]): RecommendedComp[] {
 
 // --- Ban Recommendation ---
 
-const PROF_THREAT: Record<string, number> = { '상': 3, '중': 1.5, '하': 0.5 };
+const PROF_THREAT: Record<string, number> = { 'S': 5, '상': 3, '중': 1.5, '하': 0.5 };
 const TIER_WEIGHT: Record<AramTier, number> = { S: 2.5, A: 2, B: 1.5, C: 1, D: 0.5 };
 
 // Compute how much banning a champion reduces opponent synergy potential

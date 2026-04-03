@@ -18,7 +18,7 @@ export interface Champion {
   patchVersion: string;
 }
 
-export type ProficiencyLevel = '상' | '중' | '하' | '없음';
+export type ProficiencyLevel = 'S' | '상' | '중' | '하' | '없음';
 
 export interface Proficiency {
   id?: number;

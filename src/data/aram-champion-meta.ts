@@ -203,6 +203,7 @@ export const ARAM_TIER_LABELS: Record<AramTier, string> = {
 };
 
 export const PROFICIENCY_LABELS: Record<string, string> = {
+  'S': 'S (모스트)',
   '상': '상 (잘함)',
   '중': '중 (보통)',
   '하': '하 (못함)',

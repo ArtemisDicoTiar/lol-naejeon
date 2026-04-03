@@ -8,7 +8,7 @@ import { ProficiencyBadge, TierBadge, RoleBadge } from '@/components/ui/Badge';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ARAM_ROLE_LABELS, type AramRole, type AramTier } from '@/data/aram-champion-meta';
 
-const LEVELS: ProficiencyLevel[] = ['상', '중', '하', '없음'];
+const LEVELS: ProficiencyLevel[] = ['S', '상', '중', '하', '없음'];
 
 export function PlayerDetail() {
   const { id } = useParams<{ id: string }>();
@@ -55,7 +55,7 @@ export function PlayerDetail() {
   }, [champions, search, roleFilter, tierFilter, profFilter, proficiencies]);
 
   const stats = useMemo(() => {
-    const counts: Record<ProficiencyLevel, number> = { '상': 0, '중': 0, '하': 0, '없음': 0 };
+    const counts: Record<ProficiencyLevel, number> = { 'S': 0, '상': 0, '중': 0, '하': 0, '없음': 0 };
     for (const c of champions) {
       const level = proficiencies.get(c.id) ?? '없음';
       counts[level]++;

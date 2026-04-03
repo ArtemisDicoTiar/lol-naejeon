@@ -315,7 +315,7 @@ export function BanPickScreen({
       list = list.filter((c) => c.nameKo.includes(search) || c.id.toLowerCase().includes(search.toLowerCase()));
     }
     const tierOrder: Record<string, number> = { S: 0, A: 1, B: 2, C: 3, D: 4 };
-    const profOrder: Record<string, number> = { '상': 0, '중': 1, '하': 2, '없음': 3 };
+    const profOrder: Record<string, number> = { 'S': 0, '상': 1, '중': 2, '하': 3, '없음': 4 };
     const isDisabled = (c: Champion) => allBannedIds.has(c.id) || pickedIds.has(c.id);
 
     const mode = sortMode === 'auto' ? (phase === 'pick' ? 'proficiency' : 'tier') : sortMode;

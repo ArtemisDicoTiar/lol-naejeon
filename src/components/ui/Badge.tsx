@@ -3,6 +3,7 @@ import type { AramTier, AramRole } from '@/data/aram-champion-meta';
 import { ARAM_ROLE_LABELS } from '@/data/aram-champion-meta';
 
 const profColors: Record<ProficiencyLevel, string> = {
+  'S': 'bg-tier-s/20 text-tier-s border-tier-s/40',
   '상': 'bg-prof-high/20 text-prof-high border-prof-high/40',
   '중': 'bg-prof-mid/20 text-prof-mid border-prof-mid/40',
   '하': 'bg-prof-low/20 text-prof-low border-prof-low/40',
