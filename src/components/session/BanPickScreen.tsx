@@ -97,21 +97,36 @@ export function BanPickScreen({
       });
     }
 
-    // Apply picks: map LCU team picks to our player slots (by position order)
-    const lcuPicks1 = state.team1Picks.filter(p => p.champId > 0).map(p => champKeyMap.get(p.champId) ?? '').filter(Boolean);
-    const lcuPicks2 = state.team2Picks.filter(p => p.champId > 0).map(p => champKeyMap.get(p.champId) ?? '').filter(Boolean);
+    // Apply picks: match by alias (summoner name → app player name)
+    const allPlayerIds = [...team1PlayerIds, ...team2PlayerIds];
+    const playerNameToId = new Map(allPlayerIds.map(id => {
+      const name = players.find(p => p.id === id)?.name ?? '';
+      return [name, id];
+    }));
 
-    if (lcuPicks1.length > 0 || lcuPicks2.length > 0) {
-      setPicks(prev => {
-        const newPicks = { ...prev };
-        lcuPicks1.forEach((champId, i) => {
-          if (i < team1PlayerIds.length) newPicks[team1PlayerIds[i]] = champId;
-        });
-        lcuPicks2.forEach((champId, i) => {
-          if (i < team2PlayerIds.length) newPicks[team2PlayerIds[i]] = champId;
-        });
-        return newPicks;
+    const applyPicks = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
+      const result: Record<number, string> = {};
+      lcuPicks.forEach((p, i) => {
+        if (p.champId <= 0) return;
+        const champStrId = champKeyMap.get(p.champId);
+        if (!champStrId) return;
+
+        // Try alias match first
+        if (p.alias && playerNameToId.has(p.alias)) {
+          result[playerNameToId.get(p.alias)!] = champStrId;
+        } else if (i < fallbackIds.length) {
+          // Fallback: position order
+          result[fallbackIds[i]] = champStrId;
+        }
       });
+      return result;
+    };
+
+    const picks1 = applyPicks(state.team1Picks, team1PlayerIds);
+    const picks2 = applyPicks(state.team2Picks, team2PlayerIds);
+
+    if (Object.keys(picks1).length > 0 || Object.keys(picks2).length > 0) {
+      setPicks(prev => ({ ...prev, ...picks1, ...picks2 }));
       setPhase('pick');
     }
   }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds]);

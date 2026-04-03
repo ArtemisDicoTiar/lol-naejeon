@@ -5,6 +5,23 @@ import { WebSocketServer } from 'ws';
 
 const WS_PORT = 8234;
 
+// Summoner name → app alias mapping
+const SUMMONER_ALIAS = {
+  'TwelveOClock': '12시',
+  'Twelveoclock': '12시',
+  'twelveoclock': '12시',
+  'RabiEddin': '11시',
+  'Rabieddin': '11시',
+  'rabieddin': '11시',
+  'Gomjkhan': '곰',
+  'gomjkhan': '곰',
+  '인왕산와일드보어': '엔디',
+  '행복한욕조견': '마참',
+  '감귤 아저씨': '귤아저씨',
+  '감귤아저씨': '귤아저씨',
+  '기장앞바다벨코즈': '그리',
+};
+
 console.log('🎮 눈오는 헤네시스 - LoL 브릿지');
 console.log('================================');
 
@@ -33,11 +50,55 @@ function broadcast(data) {
   }
 }
 
+// --- Summoner name cache (summonerId → { gameName, alias }) ---
+const summonerCache = new Map();
+let credentials = null;
+
+async function resolveSummoner(summonerId) {
+  if (!summonerId || summonerId === 0) return null;
+  if (summonerCache.has(summonerId)) return summonerCache.get(summonerId);
+
+  try {
+    const resp = await createHttp1Request({
+      method: 'GET',
+      url: `/lol-summoner/v2/summoners?ids=[${summonerId}]`,
+    }, credentials);
+
+    if (resp.status === 200) {
+      const summoners = resp.json();
+      if (summoners.length > 0) {
+        const name = summoners[0].gameName || summoners[0].displayName || '';
+        const alias = findAlias(name);
+        const result = { gameName: name, alias };
+        summonerCache.set(summonerId, result);
+        console.log(`   👤 ${name} → ${alias ?? '(매핑 없음)'}`);
+        return result;
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
+function findAlias(gameName) {
+  // Try exact match first
+  if (SUMMONER_ALIAS[gameName]) return SUMMONER_ALIAS[gameName];
+  // Try case-insensitive
+  const lower = gameName.toLowerCase();
+  for (const [key, val] of Object.entries(SUMMONER_ALIAS)) {
+    if (key.toLowerCase() === lower) return val;
+  }
+  // Try partial match (contains)
+  for (const [key, val] of Object.entries(SUMMONER_ALIAS)) {
+    if (lower.includes(key.toLowerCase()) || key.toLowerCase().includes(lower)) return val;
+  }
+  return null;
+}
+
 // --- LCU Connection ---
 async function connectToLCU() {
   console.log('🔍 LoL 클라이언트 탐색 중...');
 
-  let credentials;
   try {
     credentials = await authenticate({ awaitConnection: true, pollInterval: 3000 });
     console.log(`✅ LoL 클라이언트 발견! (포트: ${credentials.port})`);
@@ -46,14 +107,13 @@ async function connectToLCU() {
     process.exit(1);
   }
 
-  // Subscribe to champion select events via WebSocket
   const ws = await createWebSocketConnection(credentials);
   console.log('✅ LCU WebSocket 연결 완료');
   console.log('⏳ 챔피언 셀렉트 대기 중...\n');
 
   let lastState = null;
 
-  ws.on('message', (messageBuffer) => {
+  ws.on('message', async (messageBuffer) => {
     const message = messageBuffer.toString();
     if (!message.startsWith('[')) return;
 
@@ -63,7 +123,6 @@ async function connectToLCU() {
 
       const { uri, data, eventType } = payload;
 
-      // Champion select session update
       if (uri === '/lol-champ-select/v1/session') {
         if (eventType === 'Delete') {
           console.log('⚡ 챔피언 셀렉트 종료');
@@ -72,24 +131,25 @@ async function connectToLCU() {
           return;
         }
 
-        const state = parseChampSelectState(data);
+        const state = await parseChampSelectState(data);
         if (stateChanged(lastState, state)) {
           lastState = state;
-          console.log(`⚡ 밴/픽 업데이트: T1 밴[${state.team1Bans.join(',')}] T2 밴[${state.team2Bans.join(',')}] T1 픽[${state.team1Picks.map(p=>p.champId).join(',')}] T2 픽[${state.team2Picks.map(p=>p.champId).join(',')}]`);
+          const t1Info = state.team1Picks.map(p => `${p.alias ?? '?'}=${p.champId}`).join(', ');
+          const t2Info = state.team2Picks.map(p => `${p.alias ?? '?'}=${p.champId}`).join(', ');
+          console.log(`⚡ 업데이트 | T1 밴[${state.team1Bans}] 픽[${t1Info}] | T2 밴[${state.team2Bans}] 픽[${t2Info}]`);
           broadcast({ type: 'champSelectUpdate', ...state });
         }
       }
     } catch {}
   });
 
-  // Subscribe to all champ-select events
   ws.send(JSON.stringify([5, 'OnJsonApiEvent_lol-champ-select_v1_session']));
 
-  // Also poll initially in case already in champ select
+  // Poll in case already in champ select
   try {
     const resp = await createHttp1Request({ method: 'GET', url: '/lol-champ-select/v1/session' }, credentials);
     if (resp.status === 200) {
-      const state = parseChampSelectState(resp.json());
+      const state = await parseChampSelectState(resp.json());
       lastState = state;
       console.log('⚡ 이미 챔피언 셀렉트 중!');
       broadcast({ type: 'champSelectUpdate', ...state });
@@ -97,53 +157,48 @@ async function connectToLCU() {
   } catch {}
 }
 
-function parseChampSelectState(data) {
+async function parseChampSelectState(data) {
   const team1Bans = [];
   const team2Bans = [];
   const team1Picks = [];
   const team2Picks = [];
 
-  // Parse bans from actions
+  // Parse bans
   if (data.actions) {
     for (const actionGroup of data.actions) {
       for (const action of actionGroup) {
         if (action.type === 'ban' && action.completed && action.championId > 0) {
-          // Determine which team based on actor cell
           const isTeam1 = (data.myTeam || []).some(p => p.cellId === action.actorCellId);
-          if (isTeam1) {
-            team1Bans.push(action.championId);
-          } else {
-            team2Bans.push(action.championId);
-          }
+          if (isTeam1) team1Bans.push(action.championId);
+          else team2Bans.push(action.championId);
         }
       }
     }
   }
 
-  // Parse picks from myTeam and theirTeam
+  // Parse picks with summoner name resolution
   for (const member of (data.myTeam || [])) {
-    if (member.championId > 0) {
-      team1Picks.push({
-        cellId: member.cellId,
-        champId: member.championId,
-        summonerId: member.summonerId,
-        assignedPosition: member.assignedPosition || '',
-      });
-    }
+    const summoner = await resolveSummoner(member.summonerId);
+    team1Picks.push({
+      cellId: member.cellId,
+      champId: member.championId || 0,
+      summonerId: member.summonerId,
+      gameName: summoner?.gameName ?? '',
+      alias: summoner?.alias ?? null,
+    });
   }
 
   for (const member of (data.theirTeam || [])) {
-    if (member.championId > 0) {
-      team2Picks.push({
-        cellId: member.cellId,
-        champId: member.championId,
-        summonerId: member.summonerId,
-        assignedPosition: member.assignedPosition || '',
-      });
-    }
+    const summoner = await resolveSummoner(member.summonerId);
+    team2Picks.push({
+      cellId: member.cellId,
+      champId: member.championId || 0,
+      summonerId: member.summonerId,
+      gameName: summoner?.gameName ?? '',
+      alias: summoner?.alias ?? null,
+    });
   }
 
-  // Parse phase
   const timer = data.timer || {};
   const phase = timer.phase || 'UNKNOWN';
 
@@ -155,7 +210,6 @@ function stateChanged(prev, next) {
   return JSON.stringify(prev) !== JSON.stringify(next);
 }
 
-// Handle graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n👋 브릿지 종료');
   wss.close();
