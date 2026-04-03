@@ -10,6 +10,7 @@ import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { useLcuBridge } from '@/hooks/useLcuBridge';
 
 interface BanPickScreenProps {
   format: '3v3' | '3v4';
@@ -48,9 +49,72 @@ export function BanPickScreen({
   const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
   const [matchData, setMatchData] = useState<SynergyCounterData | null>(null);
+  const lcu = useLcuBridge();
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
   useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
+
+  // --- LCU Bridge: auto-apply champion select data ---
+  // Build numeric champion key → string ID mapping from Data Dragon
+  const [champKeyMap, setChampKeyMap] = useState<Map<number, string>>(new Map());
+  useEffect(() => {
+    // Fetch champion data to get numeric key mapping
+    fetch('https://ddragon.leagueoflegends.com/api/versions.json')
+      .then(r => r.json())
+      .then(versions => fetch(`https://ddragon.leagueoflegends.com/cdn/${versions[0]}/data/ko_KR/champion.json`))
+      .then(r => r.json())
+      .then(data => {
+        const map = new Map<number, string>();
+        for (const [key, champ] of Object.entries(data.data as Record<string, any>)) {
+          map.set(parseInt(champ.key), key);
+        }
+        setChampKeyMap(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Apply LCU state to ban/pick slots
+  useEffect(() => {
+    if (!lcu.lastState || champKeyMap.size === 0) return;
+    const state = lcu.lastState;
+
+    // Apply bans (LCU uses numeric champion IDs)
+    const lcuBans1 = state.team1Bans.map(id => champKeyMap.get(id) ?? '').filter(Boolean);
+    const lcuBans2 = state.team2Bans.map(id => champKeyMap.get(id) ?? '').filter(Boolean);
+
+    if (lcuBans1.length > 0) {
+      setTeam1Bans(prev => {
+        const newBans = [...prev];
+        lcuBans1.forEach((champId, i) => { if (i < newBans.length) newBans[i] = champId; });
+        return newBans;
+      });
+    }
+    if (lcuBans2.length > 0) {
+      setTeam2Bans(prev => {
+        const newBans = [...prev];
+        lcuBans2.forEach((champId, i) => { if (i < newBans.length) newBans[i] = champId; });
+        return newBans;
+      });
+    }
+
+    // Apply picks: map LCU team picks to our player slots (by position order)
+    const lcuPicks1 = state.team1Picks.filter(p => p.champId > 0).map(p => champKeyMap.get(p.champId) ?? '').filter(Boolean);
+    const lcuPicks2 = state.team2Picks.filter(p => p.champId > 0).map(p => champKeyMap.get(p.champId) ?? '').filter(Boolean);
+
+    if (lcuPicks1.length > 0 || lcuPicks2.length > 0) {
+      setPicks(prev => {
+        const newPicks = { ...prev };
+        lcuPicks1.forEach((champId, i) => {
+          if (i < team1PlayerIds.length) newPicks[team1PlayerIds[i]] = champId;
+        });
+        lcuPicks2.forEach((champId, i) => {
+          if (i < team2PlayerIds.length) newPicks[team2PlayerIds[i]] = champId;
+        });
+        return newPicks;
+      });
+      setPhase('pick');
+    }
+  }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds]);
 
   // Estimated proficiencies: auto-estimate for champions without manual proficiency
   const { mergedProficiencies, estimatedMap } = useMemo(() => {
@@ -637,9 +701,27 @@ export function BanPickScreen({
 
   return (
     <div className="space-y-3">
-      {/* Phase indicator */}
+      {/* Phase indicator + LCU bridge */}
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="text-lol-gold hover:text-lol-gold-light cursor-pointer">&larr; 돌아가기</button>
+        <div className="flex items-center gap-2">
+          <button onClick={onBack} className="text-lol-gold hover:text-lol-gold-light cursor-pointer">&larr;</button>
+          {/* LCU Bridge toggle */}
+          <button
+            onClick={() => lcu.connected ? lcu.disconnect() : lcu.connect()}
+            className={`cursor-pointer px-2 py-1 rounded text-[10px] border transition-colors ${
+              lcu.connected
+                ? lcu.champSelectActive
+                  ? 'bg-prof-high/20 text-prof-high border-prof-high/40'
+                  : 'bg-blue-900/30 text-blue-300 border-blue-700/50'
+                : 'bg-lol-gray text-lol-gold-light/40 border-lol-border hover:text-lol-gold-light'
+            }`}
+            title={lcu.connected ? '브릿지 연결됨 (클릭하여 해제)' : '롤 클라이언트 브릿지 연결 (bridge 실행 필요)'}
+          >
+            {lcu.connected
+              ? lcu.champSelectActive ? '🟢 챔셀 감지 중' : '🔵 브릿지 연결됨'
+              : '🔌 클라이언트 연결'}
+          </button>
+        </div>
         <div className="flex gap-2">
           <button onClick={() => { setPhase('ban'); const idx = team1Bans.findIndex((b) => !b); if (idx >= 0) setActiveSlot({ type: 'ban', team: 1, index: idx }); }}
             className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'ban' ? 'bg-red-900/50 text-red-300 border border-red-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>

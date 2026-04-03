@@ -1,0 +1,13 @@
+{
+  "name": "lol-naejeon-bridge",
+  "version": "1.0.0",
+  "description": "LoL LCU → 눈오는 헤네시스 브릿지",
+  "type": "module",
+  "bin": {
+    "lol-bridge": "./index.js"
+  },
+  "dependencies": {
+    "league-connect": "^6.0.0-rc13",
+    "ws": "^8.18.0"
+  }
+}
