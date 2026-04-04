@@ -44,7 +44,7 @@ export function Nav({ identity, lcu }: { identity: ReturnType<typeof useIdentity
             {!lcu.connected && (
               <a
                 href="lol-bridge://start"
-                onClick={(e) => {
+                onClick={() => {
                   // Try WebSocket first; if already connected, prevent default
                   lcu.connect();
                   // Allow the link to open the custom URL scheme
