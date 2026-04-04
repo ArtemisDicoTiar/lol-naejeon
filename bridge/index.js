@@ -264,8 +264,20 @@ async function connectToLCU() {
 }
 
 async function parseChampSelectState(data) {
+  // Debug: log team structure on first parse
+  const myIds = (data.myTeam || []).map(m => `cell${m.cellId}:sid${m.summonerId}`);
+  const theirIds = (data.theirTeam || []).map(m => `cell${m.cellId}:sid${m.summonerId}`);
+  console.log(`   📋 myTeam: [${myIds}] theirTeam: [${theirIds}]`);
+
+  // Log all action types
+  if (data.actions) {
+    const actionSummary = data.actions.map((group, gi) =>
+      group.map(a => `${a.type}:cell${a.actorCellId}:champ${a.championId}:${a.completed ? 'done' : 'pending'}`).join(',')
+    ).join(' | ');
+    console.log(`   📋 actions: ${actionSummary}`);
+  }
+
   // Determine blue/red by cellId: blue = 0~4, red = 5~9
-  // Combine all members from both arrays, then split by cellId
   const allMembers = [
     ...(data.myTeam || []).map(m => ({ ...m, _src: 'my' })),
     ...(data.theirTeam || []).map(m => ({ ...m, _src: 'their' })),
@@ -283,14 +295,19 @@ async function parseChampSelectState(data) {
   const team2Picks = [];
 
   // Parse bans — assign to blue/red based on actorCellId
+  // Include both completed bans and in-progress bans (with championId selected)
   if (data.actions) {
     for (const actionGroup of data.actions) {
       for (const action of actionGroup) {
-        if (action.type === 'ban' && action.completed && action.championId > 0) {
-          if (blueCellIds.has(action.actorCellId)) team1Bans.push(action.championId);
+        if (action.type === 'ban' && action.championId > 0) {
+          const isBlue = blueCellIds.has(action.actorCellId);
+          if (isBlue) team1Bans.push(action.championId);
           else team2Bans.push(action.championId);
         }
       }
+    }
+    if (team1Bans.length > 0 || team2Bans.length > 0) {
+      console.log(`   🚫 밴 감지 | T1: [${team1Bans}] T2: [${team2Bans}]`);
     }
   }
 
