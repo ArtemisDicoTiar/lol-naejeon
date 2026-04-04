@@ -171,26 +171,25 @@ export function BanPickScreen({
     const picks2 = applyPicks(state.team2Picks, team2PlayerIds);
 
     if (Object.keys(picks1).length > 0 || Object.keys(picks2).length > 0) {
-      setPicks(prev => {
-        const newPicks = { ...prev, ...picks1, ...picks2 };
-
-        // Auto lock-in: if LCU says a player's pick is locked, lock them in the app
-        const newLocked = new Set(lockedPicks);
-        for (const lcuPick of [...state.team1Picks, ...state.team2Picks]) {
-          if (lcuPick.locked && lcuPick.champId > 0 && lcuPick.alias) {
-            const pid = playerNameToId.get(lcuPick.alias);
-            if (pid && newPicks[pid]) {
-              newLocked.add(pid);
-            }
-          }
-        }
-        if (newLocked.size !== lockedPicks.size) {
-          setLockedPicks(newLocked);
-        }
-
-        return newPicks;
-      });
+      setPicks(prev => ({ ...prev, ...picks1, ...picks2 }));
       setPhase('pick');
+    }
+
+    // Auto lock-in: separate from setPicks to avoid stale state
+    const allLcuPicks = [...state.team1Picks, ...state.team2Picks];
+    const newLocked = new Set(lockedPicks);
+    let changed = false;
+    for (const lcuPick of allLcuPicks) {
+      if (lcuPick.locked && lcuPick.champId > 0 && lcuPick.alias) {
+        const pid = playerNameToId.get(lcuPick.alias);
+        if (pid && !newLocked.has(pid)) {
+          newLocked.add(pid);
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      setLockedPicks(newLocked);
     }
   }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds, players, onReorderTeams, lockedPicks]);
 
@@ -308,7 +307,7 @@ export function BanPickScreen({
   // Comp recommendations (with opponent counter logic)
   const getCompRecs = (teamPlayerIds: number[], team: 1 | 2) => {
     const teamPlayerObjs = teamPlayerIds.map((id) => players.find((p) => p.id === id)).filter(Boolean) as Player[];
-    if (teamPlayerObjs.length < 3) return [];
+    if (teamPlayerObjs.length === 0) return [];
     const opponentCurrentPicks = team === 1 ? team2Picks : team1Picks;
 
     // Separate own team's picks (locked) from opponent/other picks (banned)
