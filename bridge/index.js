@@ -99,31 +99,38 @@ async function cacheLobbyMembers() {
       const allMembers = [...(lobby.members || []), ...team100, ...team200];
 
       for (const m of allMembers) {
-        if (m.summonerId && !summonerCache.has(m.summonerId)) {
-          const name = m.summonerName || m.gameName || '';
-          if (name) {
-            const alias = findAlias(name);
-            summonerCache.set(m.summonerId, { gameName: name, alias });
-            console.log(`   👤 (로비) ${name} → ${alias ?? '(매핑 없음)'}`);
-          }
+        const name = extractName(m);
+        if (m.summonerId && name && !summonerCache.has(m.summonerId)) {
+          const alias = findAlias(name);
+          summonerCache.set(m.summonerId, { gameName: name, alias });
+          console.log(`   👤 (로비) ${name} → ${alias ?? '(매핑 없음)'}`);
+        } else if (m.summonerId && !summonerCache.has(m.summonerId)) {
+          await resolveSummoner(m.summonerId);
         }
       }
 
       // Broadcast lobby teams
       if (team100.length > 0 || team200.length > 0) {
-        const lobbyTeam1 = team100.map(m => {
-          const name = m.summonerName || m.gameName || '';
-          return { summonerId: m.summonerId, gameName: name, alias: findAlias(name) };
-        });
-        const lobbyTeam2 = team200.map(m => {
-          const name = m.summonerName || m.gameName || '';
-          return { summonerId: m.summonerId, gameName: name, alias: findAlias(name) };
-        });
-        console.log(`🏠 로비 | T1: [${lobbyTeam1.map(m => m.alias ?? m.gameName).join(', ')}] T2: [${lobbyTeam2.map(m => m.alias ?? m.gameName).join(', ')}]`);
+        const resolveMember = async (m) => {
+          let name = extractName(m);
+          let alias = name ? findAlias(name) : null;
+          if (!alias && m.summonerId) {
+            const resolved = summonerCache.get(m.summonerId) || await resolveSummoner(m.summonerId);
+            if (resolved) { name = resolved.gameName; alias = resolved.alias; }
+          }
+          return { summonerId: m.summonerId, gameName: name || '', alias };
+        };
+        const lobbyTeam1 = await Promise.all(team100.map(resolveMember));
+        const lobbyTeam2 = await Promise.all(team200.map(resolveMember));
+        console.log(`🏠 로비 | T1: [${lobbyTeam1.map(m => m.alias ?? m.gameName ?? '?').join(', ')}] T2: [${lobbyTeam2.map(m => m.alias ?? m.gameName ?? '?').join(', ')}]`);
         broadcast({ type: 'lobbyUpdate', team1: lobbyTeam1, team2: lobbyTeam2 });
       }
     }
   } catch {}
+}
+
+function extractName(member) {
+  return member.gameName || member.summonerName || member.displayName || member.internalName || member.name || '';
 }
 
 function findAlias(gameName) {
@@ -198,28 +205,40 @@ async function connectToLCU() {
         const team200 = data.gameConfig?.customTeam200 || [];
         const allMembers = [...(data.members || []), ...team100, ...team200];
 
+        // Debug: log raw member data on first encounter
         for (const m of allMembers) {
-          if (m.summonerId && !summonerCache.has(m.summonerId)) {
-            const name = m.summonerName || m.gameName || '';
-            if (name) {
+          const name = extractName(m);
+          if (m.summonerId && name) {
+            if (!summonerCache.has(m.summonerId)) {
               const alias = findAlias(name);
               summonerCache.set(m.summonerId, { gameName: name, alias });
               console.log(`   👤 (로비) ${name} → ${alias ?? '(매핑 없음)'}`);
             }
+          } else if (m.summonerId) {
+            // Try to resolve via API
+            await resolveSummoner(m.summonerId);
           }
         }
 
         // Broadcast lobby teams to web app
         if (team100.length > 0 || team200.length > 0) {
-          const lobbyTeam1 = team100.map(m => {
-            const name = m.summonerName || m.gameName || '';
-            return { summonerId: m.summonerId, gameName: name, alias: findAlias(name) };
-          });
-          const lobbyTeam2 = team200.map(m => {
-            const name = m.summonerName || m.gameName || '';
-            return { summonerId: m.summonerId, gameName: name, alias: findAlias(name) };
-          });
-          console.log(`🏠 로비 | T1: [${lobbyTeam1.map(m => m.alias ?? m.gameName).join(', ')}] T2: [${lobbyTeam2.map(m => m.alias ?? m.gameName).join(', ')}]`);
+          const resolveMember = async (m) => {
+            let name = extractName(m);
+            let alias = name ? findAlias(name) : null;
+            // If no name from lobby data, try summonerId lookup
+            if (!alias && m.summonerId) {
+              const resolved = summonerCache.get(m.summonerId) || await resolveSummoner(m.summonerId);
+              if (resolved) {
+                name = resolved.gameName;
+                alias = resolved.alias;
+              }
+            }
+            return { summonerId: m.summonerId, gameName: name || '', alias };
+          };
+
+          const lobbyTeam1 = await Promise.all(team100.map(resolveMember));
+          const lobbyTeam2 = await Promise.all(team200.map(resolveMember));
+          console.log(`🏠 로비 | T1: [${lobbyTeam1.map(m => m.alias ?? m.gameName ?? '?').join(', ')}] T2: [${lobbyTeam2.map(m => m.alias ?? m.gameName ?? '?').join(', ')}]`);
           broadcast({ type: 'lobbyUpdate', team1: lobbyTeam1, team2: lobbyTeam2 });
         }
       }

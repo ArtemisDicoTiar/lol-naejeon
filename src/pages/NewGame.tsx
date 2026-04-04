@@ -24,17 +24,14 @@ export function NewGame() {
 
   const [step, setStep] = useState<Step>((keepTeams && lastGameTeams) || fromLcu ? 'banpick' : 'setup');
   const [format, setFormat] = useState<'3v3' | '3v4'>(lastGameTeams?.format ?? '3v4');
-  const [sittingOut, setSittingOut] = useState<number | null>(null); // 3v3에서 빠지는 플레이어
+  const [sittingOut, setSittingOut] = useState<Set<number>>(new Set());
   const [teamAssignments, setTeamAssignments] = useState<Record<number, 1 | 2>>({});
   const [proficiencies, setProficiencies] = useState<Record<number, Map<string, ProficiencyLevel>>>({});
 
   const allPlayerIds = players.map((p) => p.id!);
-  const selectedPlayerIds = format === '3v4'
-    ? allPlayerIds
-    : allPlayerIds.filter((id) => id !== sittingOut);
-  const totalPlayers = format === '3v3' ? 6 : 7;
-  const team1Size = 3;
-  const team2Size = format === '3v3' ? 3 : 4;
+  const selectedPlayerIds = allPlayerIds.filter((id) => !sittingOut.has(id));
+  const team1Size = selectedPlayerIds.filter(id => teamAssignments[id] === 1).length;
+  const team2Size = selectedPlayerIds.filter(id => teamAssignments[id] === 2).length;
 
   // Pre-fill from last game if keepTeams
   useEffect(() => {
@@ -44,12 +41,10 @@ export function NewGame() {
       lastGameTeams.team2.forEach((id) => { assignments[id] = 2; });
       setTeamAssignments(assignments);
       setFormat(lastGameTeams.format);
-      // If 3v3, figure out who sat out
-      if (lastGameTeams.format === '3v3') {
-        const played = new Set([...lastGameTeams.team1, ...lastGameTeams.team2]);
-        const sat = allPlayerIds.find((id) => !played.has(id));
-        if (sat) setSittingOut(sat);
-      }
+      // Figure out who sat out
+      const played = new Set([...lastGameTeams.team1, ...lastGameTeams.team2]);
+      const satOut = allPlayerIds.filter((id) => !played.has(id));
+      if (satOut.length > 0) setSittingOut(new Set(satOut));
     }
   }, [keepTeams, lastGameTeams]);
 
@@ -83,15 +78,15 @@ export function NewGame() {
 
     if (JSON.stringify(newAssignments) === JSON.stringify(teamAssignments)) return;
 
+    // Auto-detect format and sitting out
     const totalLcu = t1Aliases.length + t2Aliases.length;
     const detectedFormat: '3v3' | '3v4' = totalLcu >= 7 ? '3v4' : '3v3';
     setFormat(detectedFormat);
     setTeamAssignments(newAssignments);
 
-    if (detectedFormat === '3v3' && allPlayerIds.length > 0) {
-      const sitting = allPlayerIds.find(id => !matched.has(id));
-      if (sitting) setSittingOut(sitting);
-    }
+    // Anyone not in either team is sitting out
+    const satOut = allPlayerIds.filter(id => !matched.has(id));
+    setSittingOut(new Set(satOut));
 
     const t1Count = Object.values(newAssignments).filter(t => t === 1).length;
     const t2Count = Object.values(newAssignments).filter(t => t === 2).length;
@@ -128,17 +123,19 @@ export function NewGame() {
     })();
   }, [selectedPlayerIds]);
 
-  const handleFormatChange = (f: '3v3' | '3v4') => {
-    setFormat(f);
-    setSittingOut(null);
-    setTeamAssignments({});
+  const toggleSittingOut = (id: number) => {
+    setSittingOut(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      // Remove from team assignments if sitting out
+      if (next.has(id)) {
+        setTeamAssignments(prev => { const n = { ...prev }; delete n[id]; return n; });
+      }
+      return next;
+    });
   };
 
   const assignTeam = (playerId: number, team: 1 | 2) => {
-    const current1 = Object.entries(teamAssignments).filter(([, t]) => t === 1).length;
-    const current2 = Object.entries(teamAssignments).filter(([, t]) => t === 2).length;
-    if (team === 1 && current1 >= team1Size && teamAssignments[playerId] !== 1) return;
-    if (team === 2 && current2 >= team2Size && teamAssignments[playerId] !== 2) return;
     setTeamAssignments((prev) => ({ ...prev, [playerId]: team }));
   };
 
@@ -148,14 +145,14 @@ export function NewGame() {
       const j = Math.floor(Math.random() * (i + 1));
       [ids[i], ids[j]] = [ids[j], ids[i]];
     }
+    const half = Math.ceil(ids.length / 2);
     const assignments: Record<number, 1 | 2> = {};
-    ids.forEach((id, idx) => { assignments[id] = idx < team1Size ? 1 : 2; });
+    ids.forEach((id, idx) => { assignments[id] = idx < half ? 1 : 2; });
     setTeamAssignments(assignments);
   };
 
-  const allTeamsAssigned =
-    Object.values(teamAssignments).filter((t) => t === 1).length === team1Size &&
-    Object.values(teamAssignments).filter((t) => t === 2).length === team2Size;
+  const allTeamsAssigned = selectedPlayerIds.length >= 2 &&
+    selectedPlayerIds.every(id => teamAssignments[id] === 1 || teamAssignments[id] === 2);
 
   const getPlayerName = (id: number) => players.find((p) => p.id === id)?.name ?? '';
 
@@ -172,7 +169,10 @@ export function NewGame() {
       ...result.bans[1].map((cid) => ({ championId: cid, team: 1 as const })),
       ...result.bans[2].map((cid) => ({ championId: cid, team: 2 as const })),
     ];
-    await addGame(format, picks, bans);
+    const t1c = picks.filter(p => p.team === 1).length;
+    const t2c = picks.filter(p => p.team === 2).length;
+    const gameFormat = (t1c + t2c >= 7) ? '3v4' : '3v3';
+    await addGame(gameFormat, picks, bans);
     navigate('/session');
   };
 
@@ -218,48 +218,30 @@ export function NewGame() {
         <h1 className="text-2xl font-bold text-lol-gold">새 게임 설정</h1>
       </div>
 
-      {/* Format */}
-      <Card title="형식 선택">
-        <div className="flex gap-4">
-          {(['3v3', '3v4'] as const).map((f) => (
-            <button key={f}
-              onClick={() => handleFormatChange(f)}
-              className={`cursor-pointer flex-1 p-4 rounded border-2 text-center text-lg font-bold transition-colors ${
-                format === f ? 'border-lol-gold bg-lol-gold/20 text-lol-gold' : 'border-lol-border bg-lol-blue text-lol-gold-light/60 hover:border-lol-gold/50'
-              }`}>
-              {f}
-              <div className="text-xs font-normal mt-1 opacity-60">
-                {f === '3v4' ? '7명 전원 참여' : '1명 제외'}
-              </div>
-            </button>
-          ))}
+      {/* Players: select who participates */}
+      <Card title={`참가자 선택 (${selectedPlayerIds.length}명 참여)`}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {players.map((p) => {
+            const isSitting = sittingOut.has(p.id!);
+            return (
+              <button key={p.id}
+                onClick={() => toggleSittingOut(p.id!)}
+                className={`cursor-pointer p-2.5 rounded border text-center text-sm font-medium transition-colors ${
+                  isSitting
+                    ? 'border-red-800/50 bg-red-950/20 text-red-400/60 line-through'
+                    : 'border-lol-gold/50 bg-lol-gold/10 text-lol-gold'
+                }`}>
+                {p.name}
+              </button>
+            );
+          })}
         </div>
+        <p className="text-xs text-lol-gold-light/40 mt-2">클릭하여 제외/참여 토글</p>
       </Card>
 
-      {/* 3v3: pick who sits out */}
-      {format === '3v3' && (
-        <Card title="빠지는 플레이어 선택">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {players.map((p) => (
-              <button key={p.id}
-                onClick={() => { setSittingOut(sittingOut === p.id! ? null : p.id!); setTeamAssignments({}); }}
-                className={`cursor-pointer p-3 rounded border text-left transition-colors ${
-                  sittingOut === p.id!
-                    ? 'border-red-600 bg-red-950/30 text-red-300'
-                    : 'border-lol-border bg-lol-blue text-lol-gold-light/70 hover:border-lol-gold/50'
-                }`}>
-                <div className="font-medium">
-                  {p.name} {sittingOut === p.id! && '(제외)'}
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
-      )}
-
       {/* Teams */}
-      {selectedPlayerIds.length === totalPlayers && (
-        <Card title="팀 편성">
+      {selectedPlayerIds.length >= 2 && (
+        <Card title={`팀 편성 (${team1Size} vs ${team2Size})`}>
           <div className="flex justify-end mb-3">
             <Button variant="secondary" size="sm" onClick={autoBalance}>랜덤 배정</Button>
           </div>
@@ -281,16 +263,16 @@ export function NewGame() {
 
           <div className="grid grid-cols-2 gap-6">
             {([1, 2] as const).map((teamNum) => {
-              const teamSize = teamNum === 1 ? team1Size : team2Size;
               const teamPlayerIds = selectedPlayerIds.filter((id) => teamAssignments[id] === teamNum);
-              const isFull = teamPlayerIds.length >= teamSize;
               return (
                 <div key={teamNum} className="space-y-2">
-                  <h3 className={`font-medium text-center ${isFull ? 'text-prof-high' : 'text-lol-gold'}`}>
-                    Team {teamNum} ({teamPlayerIds.length}/{teamSize}) {isFull && '\u2713'}
+                  <h3 className={`font-medium text-center ${teamPlayerIds.length > 0 ? (teamNum === 1 ? 'text-blue-400' : 'text-red-400') : 'text-lol-gold-light/50'}`}>
+                    Team {teamNum} ({teamPlayerIds.length}명)
                   </h3>
-                  <div className={`space-y-1 min-h-[80px] p-2 rounded border-2 transition-colors ${
-                    isFull ? (teamNum === 1 ? 'border-blue-700/50 bg-blue-950/20' : 'border-red-700/50 bg-red-950/20') : 'border-lol-border border-dashed bg-lol-blue'
+                  <div className={`space-y-1 min-h-[60px] p-2 rounded border-2 transition-colors ${
+                    teamPlayerIds.length > 0
+                      ? (teamNum === 1 ? 'border-blue-700/50 bg-blue-950/20' : 'border-red-700/50 bg-red-950/20')
+                      : 'border-lol-border border-dashed bg-lol-blue'
                   }`}>
                     {teamPlayerIds.map((id) => (
                       <div key={id} className="p-2 bg-lol-gray rounded text-sm text-lol-gold-light flex justify-between items-center">
