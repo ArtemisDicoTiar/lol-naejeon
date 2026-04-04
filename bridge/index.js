@@ -255,11 +255,17 @@ async function parseChampSelectState(data) {
     }
   }
 
+  // Check for completed trades — if trades happened, member.championId is already swapped
+  const hasCompletedTrades = (data.trades || []).some(t => t.state === 'COMPLETED');
+
   // Parse blue team (Team 1) picks
   for (const member of blueMembers) {
     const summoner = await resolveSummoner(member.summonerId);
-    // Use action champion (includes hover) over member.championId
-    const champId = cellPickChamp.get(member.cellId) || member.championId || 0;
+    // After trades complete, member.championId reflects the swapped state
+    // Before trades, use action champion (includes hover)
+    const champId = hasCompletedTrades
+      ? (member.championId || 0)
+      : (cellPickChamp.get(member.cellId) || member.championId || 0);
     const locked = cellPickCompleted.get(member.cellId) || false;
     team1Picks.push({
       cellId: member.cellId,
@@ -274,7 +280,9 @@ async function parseChampSelectState(data) {
   // Parse red team (Team 2) picks
   for (const member of redMembers) {
     const summoner = await resolveSummoner(member.summonerId);
-    const champId = cellPickChamp.get(member.cellId) || member.championId || 0;
+    const champId = hasCompletedTrades
+      ? (member.championId || 0)
+      : (cellPickChamp.get(member.cellId) || member.championId || 0);
     const locked = cellPickCompleted.get(member.cellId) || false;
     team2Picks.push({
       cellId: member.cellId,

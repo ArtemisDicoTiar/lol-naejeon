@@ -151,10 +151,28 @@ export function BanPickScreen({
     const picks2 = applyPicks(state.team2Picks, team2PlayerIds);
 
     if (Object.keys(picks1).length > 0 || Object.keys(picks2).length > 0) {
-      setPicks(prev => ({ ...prev, ...picks1, ...picks2 }));
+      setPicks(prev => {
+        const newPicks = { ...prev, ...picks1, ...picks2 };
+
+        // Auto lock-in: if LCU says a player's pick is locked, lock them in the app
+        const newLocked = new Set(lockedPicks);
+        for (const lcuPick of [...state.team1Picks, ...state.team2Picks]) {
+          if (lcuPick.locked && lcuPick.champId > 0 && lcuPick.alias) {
+            const pid = playerNameToId.get(lcuPick.alias);
+            if (pid && newPicks[pid]) {
+              newLocked.add(pid);
+            }
+          }
+        }
+        if (newLocked.size !== lockedPicks.size) {
+          setLockedPicks(newLocked);
+        }
+
+        return newPicks;
+      });
       setPhase('pick');
     }
-  }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds, players, onReorderTeams]);
+  }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds, players, onReorderTeams, lockedPicks]);
 
   // Estimated proficiencies: auto-estimate for champions without manual proficiency
   const { mergedProficiencies, estimatedMap } = useMemo(() => {
