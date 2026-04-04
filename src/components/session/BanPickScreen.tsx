@@ -85,17 +85,32 @@ export function BanPickScreen({
 
     if (lcuBans1.length > 0) {
       setTeam1Bans(prev => {
-        const newBans = [...prev];
-        lcuBans1.forEach((champId, i) => { if (i < newBans.length) newBans[i] = champId; });
+        // Expand slots if LCU has more bans than current slots
+        const size = Math.max(prev.length, lcuBans1.length);
+        const newBans = Array(size).fill('');
+        prev.forEach((b, i) => { if (i < size) newBans[i] = b; });
+        lcuBans1.forEach((champId, i) => { newBans[i] = champId; });
         return newBans;
       });
     }
     if (lcuBans2.length > 0) {
       setTeam2Bans(prev => {
-        const newBans = [...prev];
-        lcuBans2.forEach((champId, i) => { if (i < newBans.length) newBans[i] = champId; });
+        const size = Math.max(prev.length, lcuBans2.length);
+        const newBans = Array(size).fill('');
+        prev.forEach((b, i) => { if (i < size) newBans[i] = b; });
+        lcuBans2.forEach((champId, i) => { newBans[i] = champId; });
         return newBans;
       });
+    }
+
+    // Auto-transition to pick phase if bans are filled
+    if (lcuBans1.length > 0 || lcuBans2.length > 0) {
+      const allBansFilled = team1Bans.every(b => b) && team2Bans.every(b => b);
+      if (allBansFilled && phase === 'ban') {
+        setPhase('pick');
+        const firstInDraft = draftOrder.find((id) => !picks[id]);
+        setActiveSlot(firstInDraft ? { type: 'pick', playerId: firstInDraft } : null);
+      }
     }
 
     // Rebuild team assignments from LCU data (handles team swaps + order)
