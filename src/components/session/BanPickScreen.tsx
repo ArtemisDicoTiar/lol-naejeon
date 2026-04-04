@@ -175,23 +175,37 @@ export function BanPickScreen({
       setPhase('pick');
     }
 
-    // Auto lock-in: separate from setPicks to avoid stale state
-    const allLcuPicks = [...state.team1Picks, ...state.team2Picks];
-    const newLocked = new Set(lockedPicks);
-    let changed = false;
-    for (const lcuPick of allLcuPicks) {
-      if (lcuPick.locked && lcuPick.champId > 0 && lcuPick.alias) {
-        const pid = playerNameToId.get(lcuPick.alias);
-        if (pid && !newLocked.has(pid)) {
-          newLocked.add(pid);
-          changed = true;
+    // Auto lock-in: match by alias first, then by position fallback
+    const lockFromLcu = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
+      const result: number[] = [];
+      lcuPicks.forEach((p, i) => {
+        if (!p.locked || p.champId <= 0) return;
+        // Try alias match
+        if (p.alias && playerNameToId.has(p.alias)) {
+          result.push(playerNameToId.get(p.alias)!);
+        } else if (i < fallbackIds.length) {
+          // Fallback: position order
+          result.push(fallbackIds[i]);
         }
-      }
+      });
+      return result;
+    };
+
+    const locked1 = lockFromLcu(state.team1Picks, team1PlayerIds);
+    const locked2 = lockFromLcu(state.team2Picks, team2PlayerIds);
+    const allToLock = [...locked1, ...locked2];
+
+    if (allToLock.length > 0) {
+      setLockedPicks(prev => {
+        const next = new Set(prev);
+        let changed = false;
+        for (const pid of allToLock) {
+          if (!next.has(pid)) { next.add(pid); changed = true; }
+        }
+        return changed ? next : prev;
+      });
     }
-    if (changed) {
-      setLockedPicks(newLocked);
-    }
-  }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds, players, onReorderTeams, lockedPicks]);
+  }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds, players, onReorderTeams]);
 
   // Estimated proficiencies: auto-estimate for champions without manual proficiency
   const { mergedProficiencies, estimatedMap } = useMemo(() => {
