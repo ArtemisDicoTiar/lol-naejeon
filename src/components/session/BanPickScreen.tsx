@@ -48,6 +48,7 @@ export function BanPickScreen({
   const [phase, setPhase] = useState<'ban' | 'pick'>('ban');
   const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
   const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
+  const [lcuPaused, setLcuPaused] = useState(false); // pause LCU sync after manual reset
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
   const [matchData, setMatchData] = useState<SynergyCounterData | null>(null);
   const lcu = useLcuContext();
@@ -74,8 +75,16 @@ export function BanPickScreen({
       .catch(() => {});
   }, []);
 
+  // Resume LCU sync when a new champ select starts (different state from what caused pause)
+  useEffect(() => {
+    if (lcuPaused && lcu.champSelectActive) {
+      setLcuPaused(false);
+    }
+  }, [lcu.champSelectActive, lcuPaused]);
+
   // Apply LCU state to ban/pick slots
   useEffect(() => {
+    if (lcuPaused) return; // paused after manual reset
     if (!lcu.lastState || champKeyMap.size === 0) return;
     const state = lcu.lastState;
 
@@ -383,6 +392,8 @@ export function BanPickScreen({
     setPhase('ban');
     setActiveSlot({ type: 'ban', team: 1, index: 0 });
     setSearch('');
+    // Pause LCU sync so it doesn't re-apply old state
+    setLcuPaused(true);
   };
 
   // Auto-reset when LCU champion select ends (went back to lobby)
