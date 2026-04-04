@@ -58,26 +58,55 @@ async function resolveSummoner(summonerId) {
   if (!summonerId || summonerId === 0) return null;
   if (summonerCache.has(summonerId)) return summonerCache.get(summonerId);
 
-  try {
-    const resp = await createHttp1Request({
-      method: 'GET',
-      url: `/lol-summoner/v2/summoners?ids=[${summonerId}]`,
-    }, credentials);
+  // Try multiple endpoints
+  const endpoints = [
+    `/lol-summoner/v2/summoners?ids=[${summonerId}]`,
+    `/lol-summoner/v1/summoners/${summonerId}`,
+  ];
 
+  for (const url of endpoints) {
+    try {
+      const resp = await createHttp1Request({ method: 'GET', url }, credentials);
+      if (resp.status === 200) {
+        const data = resp.json();
+        const summoner = Array.isArray(data) ? data[0] : data;
+        if (summoner) {
+          const name = summoner.gameName || summoner.displayName || summoner.internalName || '';
+          if (name) {
+            const alias = findAlias(name);
+            const result = { gameName: name, alias };
+            summonerCache.set(summonerId, result);
+            console.log(`   👤 ${name} → ${alias ?? '(매핑 없음)'}`);
+            return result;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  console.log(`   ⚠️ summonerId ${summonerId} 조회 실패`);
+  return null;
+}
+
+// Pre-cache lobby members when entering custom game
+async function cacheLobbyMembers() {
+  try {
+    const resp = await createHttp1Request({ method: 'GET', url: '/lol-lobby/v2/lobby' }, credentials);
     if (resp.status === 200) {
-      const summoners = resp.json();
-      if (summoners.length > 0) {
-        const name = summoners[0].gameName || summoners[0].displayName || '';
-        const alias = findAlias(name);
-        const result = { gameName: name, alias };
-        summonerCache.set(summonerId, result);
-        console.log(`   👤 ${name} → ${alias ?? '(매핑 없음)'}`);
-        return result;
+      const lobby = resp.json();
+      const members = [...(lobby.members || []), ...(lobby.gameConfig?.customTeam100 || []), ...(lobby.gameConfig?.customTeam200 || [])];
+      for (const m of members) {
+        if (m.summonerId && !summonerCache.has(m.summonerId)) {
+          const name = m.summonerName || m.gameName || '';
+          if (name) {
+            const alias = findAlias(name);
+            summonerCache.set(m.summonerId, { gameName: name, alias });
+            console.log(`   👤 (로비) ${name} → ${alias ?? '(매핑 없음)'}`);
+          }
+        }
       }
     }
   } catch {}
-
-  return null;
 }
 
 function findAlias(gameName) {
@@ -131,6 +160,11 @@ async function connectToLCU() {
           return;
         }
 
+        // Cache lobby members on first champ select event
+        if (!lastState) {
+          await cacheLobbyMembers();
+        }
+
         const state = await parseChampSelectState(data);
         if (stateChanged(lastState, state)) {
           lastState = state;
@@ -140,10 +174,29 @@ async function connectToLCU() {
           broadcast({ type: 'champSelectUpdate', ...state });
         }
       }
+
+      // Lobby update — cache new members
+      if (uri === '/lol-lobby/v2/lobby' && eventType !== 'Delete') {
+        const members = [...(data.members || []), ...(data.gameConfig?.customTeam100 || []), ...(data.gameConfig?.customTeam200 || [])];
+        for (const m of members) {
+          if (m.summonerId && !summonerCache.has(m.summonerId)) {
+            const name = m.summonerName || m.gameName || '';
+            if (name) {
+              const alias = findAlias(name);
+              summonerCache.set(m.summonerId, { gameName: name, alias });
+              console.log(`   👤 (로비) ${name} → ${alias ?? '(매핑 없음)'}`);
+            }
+          }
+        }
+      }
     } catch {}
   });
 
   ws.send(JSON.stringify([5, 'OnJsonApiEvent_lol-champ-select_v1_session']));
+  ws.send(JSON.stringify([5, 'OnJsonApiEvent_lol-lobby_v2_lobby']));
+
+  // Pre-cache lobby members if already in a lobby
+  await cacheLobbyMembers();
 
   // Poll in case already in champ select
   try {
