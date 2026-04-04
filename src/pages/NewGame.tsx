@@ -53,21 +53,14 @@ export function NewGame() {
     }
   }, [keepTeams, lastGameTeams]);
 
-  // Auto-detect teams from LCU when champ select starts
   const playerNameToId = useMemo(() => {
     return new Map(players.map(p => [p.name, p.id!]));
   }, [players]);
 
-  useEffect(() => {
-    if (!lcu.connected || !lcu.champSelectActive || !lcu.lastState) return;
-
-    const state = lcu.lastState;
-    const t1Aliases = state.team1Picks.map(p => p.alias).filter(Boolean) as string[];
-    const t2Aliases = state.team2Picks.map(p => p.alias).filter(Boolean) as string[];
-
+  // Helper: apply team assignments from alias arrays
+  const applyTeamsFromAliases = useCallback((t1Aliases: string[], t2Aliases: string[]) => {
     if (t1Aliases.length === 0 && t2Aliases.length === 0) return;
 
-    // Build team assignments from LCU aliases
     const newAssignments: Record<number, 1 | 2> = {};
     const matched = new Set<number>();
 
@@ -82,35 +75,47 @@ export function NewGame() {
 
     if (matched.size === 0) return;
 
-    // Keep existing assignments for unmatched players
+    // Keep existing for unmatched
     for (const [pidStr, team] of Object.entries(teamAssignments)) {
       const pid = parseInt(pidStr);
       if (!matched.has(pid)) newAssignments[pid] = team;
     }
 
-    // Only update if something actually changed
     if (JSON.stringify(newAssignments) === JSON.stringify(teamAssignments)) return;
 
-    // Determine format from LCU participant count
     const totalLcu = t1Aliases.length + t2Aliases.length;
     const detectedFormat: '3v3' | '3v4' = totalLcu >= 7 ? '3v4' : '3v3';
-
     setFormat(detectedFormat);
     setTeamAssignments(newAssignments);
 
-    // If 3v3, figure out who's sitting out
     if (detectedFormat === '3v3' && allPlayerIds.length > 0) {
       const sitting = allPlayerIds.find(id => !matched.has(id));
       if (sitting) setSittingOut(sitting);
     }
 
-    // Auto-advance to banpick if we have at least 1 player on each team
     const t1Count = Object.values(newAssignments).filter(t => t === 1).length;
     const t2Count = Object.values(newAssignments).filter(t => t === 2).length;
     if (t1Count >= 1 && t2Count >= 1 && step !== 'banpick') {
       setStep('banpick');
     }
-  }, [lcu.connected, lcu.champSelectActive, lcu.lastState, playerNameToId, allPlayerIds]);
+  }, [playerNameToId, teamAssignments, allPlayerIds, step]);
+
+  // Auto-detect teams from LOBBY (before champ select even starts)
+  useEffect(() => {
+    if (!lcu.connected || !lcu.lobbyState) return;
+    const t1Aliases = lcu.lobbyState.team1.map(m => m.alias).filter(Boolean) as string[];
+    const t2Aliases = lcu.lobbyState.team2.map(m => m.alias).filter(Boolean) as string[];
+    applyTeamsFromAliases(t1Aliases, t2Aliases);
+  }, [lcu.connected, lcu.lobbyState, applyTeamsFromAliases]);
+
+  // Auto-detect teams from champ select (cellId-based, more accurate)
+  useEffect(() => {
+    if (!lcu.connected || !lcu.champSelectActive || !lcu.lastState) return;
+    const state = lcu.lastState;
+    const t1Aliases = state.team1Picks.map(p => p.alias).filter(Boolean) as string[];
+    const t2Aliases = state.team2Picks.map(p => p.alias).filter(Boolean) as string[];
+    applyTeamsFromAliases(t1Aliases, t2Aliases);
+  }, [lcu.connected, lcu.champSelectActive, lcu.lastState, applyTeamsFromAliases]);
 
   // Load proficiencies
   useEffect(() => {

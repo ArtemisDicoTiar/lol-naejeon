@@ -88,14 +88,17 @@ async function resolveSummoner(summonerId) {
   return null;
 }
 
-// Pre-cache lobby members when entering custom game
+// Pre-cache lobby members and broadcast team info
 async function cacheLobbyMembers() {
   try {
     const resp = await createHttp1Request({ method: 'GET', url: '/lol-lobby/v2/lobby' }, credentials);
     if (resp.status === 200) {
       const lobby = resp.json();
-      const members = [...(lobby.members || []), ...(lobby.gameConfig?.customTeam100 || []), ...(lobby.gameConfig?.customTeam200 || [])];
-      for (const m of members) {
+      const team100 = lobby.gameConfig?.customTeam100 || [];
+      const team200 = lobby.gameConfig?.customTeam200 || [];
+      const allMembers = [...(lobby.members || []), ...team100, ...team200];
+
+      for (const m of allMembers) {
         if (m.summonerId && !summonerCache.has(m.summonerId)) {
           const name = m.summonerName || m.gameName || '';
           if (name) {
@@ -104,6 +107,20 @@ async function cacheLobbyMembers() {
             console.log(`   👤 (로비) ${name} → ${alias ?? '(매핑 없음)'}`);
           }
         }
+      }
+
+      // Broadcast lobby teams
+      if (team100.length > 0 || team200.length > 0) {
+        const lobbyTeam1 = team100.map(m => {
+          const name = m.summonerName || m.gameName || '';
+          return { summonerId: m.summonerId, gameName: name, alias: findAlias(name) };
+        });
+        const lobbyTeam2 = team200.map(m => {
+          const name = m.summonerName || m.gameName || '';
+          return { summonerId: m.summonerId, gameName: name, alias: findAlias(name) };
+        });
+        console.log(`🏠 로비 | T1: [${lobbyTeam1.map(m => m.alias ?? m.gameName).join(', ')}] T2: [${lobbyTeam2.map(m => m.alias ?? m.gameName).join(', ')}]`);
+        broadcast({ type: 'lobbyUpdate', team1: lobbyTeam1, team2: lobbyTeam2 });
       }
     }
   } catch {}
@@ -175,10 +192,13 @@ async function connectToLCU() {
         }
       }
 
-      // Lobby update — cache new members
+      // Lobby update — cache members AND broadcast team info
       if (uri === '/lol-lobby/v2/lobby' && eventType !== 'Delete') {
-        const members = [...(data.members || []), ...(data.gameConfig?.customTeam100 || []), ...(data.gameConfig?.customTeam200 || [])];
-        for (const m of members) {
+        const team100 = data.gameConfig?.customTeam100 || [];
+        const team200 = data.gameConfig?.customTeam200 || [];
+        const allMembers = [...(data.members || []), ...team100, ...team200];
+
+        for (const m of allMembers) {
           if (m.summonerId && !summonerCache.has(m.summonerId)) {
             const name = m.summonerName || m.gameName || '';
             if (name) {
@@ -187,6 +207,20 @@ async function connectToLCU() {
               console.log(`   👤 (로비) ${name} → ${alias ?? '(매핑 없음)'}`);
             }
           }
+        }
+
+        // Broadcast lobby teams to web app
+        if (team100.length > 0 || team200.length > 0) {
+          const lobbyTeam1 = team100.map(m => {
+            const name = m.summonerName || m.gameName || '';
+            return { summonerId: m.summonerId, gameName: name, alias: findAlias(name) };
+          });
+          const lobbyTeam2 = team200.map(m => {
+            const name = m.summonerName || m.gameName || '';
+            return { summonerId: m.summonerId, gameName: name, alias: findAlias(name) };
+          });
+          console.log(`🏠 로비 | T1: [${lobbyTeam1.map(m => m.alias ?? m.gameName).join(', ')}] T2: [${lobbyTeam2.map(m => m.alias ?? m.gameName).join(', ')}]`);
+          broadcast({ type: 'lobbyUpdate', team1: lobbyTeam1, team2: lobbyTeam2 });
         }
       }
     } catch {}

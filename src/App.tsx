@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Nav } from '@/components/layout/Nav';
 import { IdentitySelector } from '@/components/layout/IdentitySelector';
 import { useIdentity } from '@/hooks/useIdentity';
-import { useLcuBridge, type LcuChampSelectState } from '@/hooks/useLcuBridge';
+import { useLcuBridge, type LcuChampSelectState, type LcuLobbyState } from '@/hooks/useLcuBridge';
 import { Dashboard } from '@/pages/Dashboard';
 import { Players } from '@/pages/Players';
 import { PlayerDetail } from '@/pages/PlayerDetail';
@@ -33,12 +33,13 @@ interface LcuContextType {
   connect: () => void;
   disconnect: () => void;
   lastState: LcuChampSelectState | null;
+  lobbyState: LcuLobbyState | null;
   champSelectActive: boolean;
 }
 
 export const LcuContext = createContext<LcuContextType>({
   connected: false, connect: () => {}, disconnect: () => {},
-  lastState: null, champSelectActive: false,
+  lastState: null, lobbyState: null, champSelectActive: false,
 });
 
 export function useLcuContext() {

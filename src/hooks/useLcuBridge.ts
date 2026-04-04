@@ -10,9 +10,15 @@ export interface LcuChampSelectState {
   team2Picks: { cellId: number; champId: number; locked?: boolean; summonerId: number; gameName?: string; alias?: string | null }[];
 }
 
+export interface LcuLobbyState {
+  team1: { summonerId: number; gameName: string; alias: string | null }[];
+  team2: { summonerId: number; gameName: string; alias: string | null }[];
+}
+
 export function useLcuBridge() {
   const [connected, setConnected] = useState(false);
   const [lastState, setLastState] = useState<LcuChampSelectState | null>(null);
+  const [lobbyState, setLobbyState] = useState<LcuLobbyState | null>(null);
   const [champSelectActive, setChampSelectActive] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<number | null>(null);
@@ -39,6 +45,8 @@ export function useLcuBridge() {
             setChampSelectActive(true);
           } else if (data.type === 'champSelectEnd') {
             setChampSelectActive(false);
+          } else if (data.type === 'lobbyUpdate') {
+            setLobbyState({ team1: data.team1, team2: data.team2 });
           }
         } catch {}
       };
@@ -67,10 +75,10 @@ export function useLcuBridge() {
     wsRef.current = null;
     setConnected(false);
     setLastState(null);
+    setLobbyState(null);
     setChampSelectActive(false);
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       wsRef.current?.close();
@@ -78,5 +86,5 @@ export function useLcuBridge() {
     };
   }, []);
 
-  return { connected, connect, disconnect, lastState, champSelectActive };
+  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive };
 }
