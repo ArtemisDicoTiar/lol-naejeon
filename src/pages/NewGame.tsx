@@ -60,7 +60,6 @@ export function NewGame() {
 
   useEffect(() => {
     if (!lcu.connected || !lcu.champSelectActive || !lcu.lastState) return;
-    if (step === 'banpick') return; // already in banpick, handled by BanPickScreen
 
     const state = lcu.lastState;
     const t1Aliases = state.team1Picks.map(p => p.alias).filter(Boolean) as string[];
@@ -83,28 +82,35 @@ export function NewGame() {
 
     if (matched.size === 0) return;
 
-    // Determine format
-    const t1Size = t1Aliases.length;
-    const t2Size = t2Aliases.length;
-    const detectedFormat: '3v3' | '3v4' = (t1Size + t2Size >= 7) ? '3v4' : '3v3';
+    // Keep existing assignments for unmatched players
+    for (const [pidStr, team] of Object.entries(teamAssignments)) {
+      const pid = parseInt(pidStr);
+      if (!matched.has(pid)) newAssignments[pid] = team;
+    }
+
+    // Only update if something actually changed
+    if (JSON.stringify(newAssignments) === JSON.stringify(teamAssignments)) return;
+
+    // Determine format from LCU participant count
+    const totalLcu = t1Aliases.length + t2Aliases.length;
+    const detectedFormat: '3v3' | '3v4' = totalLcu >= 7 ? '3v4' : '3v3';
 
     setFormat(detectedFormat);
     setTeamAssignments(newAssignments);
 
     // If 3v3, figure out who's sitting out
-    if (detectedFormat === '3v3') {
+    if (detectedFormat === '3v3' && allPlayerIds.length > 0) {
       const sitting = allPlayerIds.find(id => !matched.has(id));
       if (sitting) setSittingOut(sitting);
     }
 
-    // Auto-advance to banpick if all players assigned
+    // Auto-advance to banpick if we have at least 1 player on each team
     const t1Count = Object.values(newAssignments).filter(t => t === 1).length;
     const t2Count = Object.values(newAssignments).filter(t => t === 2).length;
-    const expectedTotal = detectedFormat === '3v3' ? 6 : 7;
-    if (t1Count + t2Count >= expectedTotal) {
+    if (t1Count >= 1 && t2Count >= 1 && step !== 'banpick') {
       setStep('banpick');
     }
-  }, [lcu.connected, lcu.champSelectActive, lcu.lastState, playerNameToId, step, allPlayerIds]);
+  }, [lcu.connected, lcu.champSelectActive, lcu.lastState, playerNameToId, allPlayerIds]);
 
   // Load proficiencies
   useEffect(() => {
