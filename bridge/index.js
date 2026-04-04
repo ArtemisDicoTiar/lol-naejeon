@@ -277,37 +277,46 @@ async function parseChampSelectState(data) {
     console.log(`   📋 actions: ${actionSummary}`);
   }
 
-  // Determine blue/red by cellId: blue = 0~4, red = 5~9
-  const allMembers = [
-    ...(data.myTeam || []).map(m => ({ ...m, _src: 'my' })),
-    ...(data.theirTeam || []).map(m => ({ ...m, _src: 'their' })),
-  ];
+  // Determine team membership by myTeam/theirTeam arrays
+  const myCellIds = new Set((data.myTeam || []).map(m => m.cellId));
+  const theirCellIds = new Set((data.theirTeam || []).map(m => m.cellId));
 
-  const blueMembers = allMembers.filter(m => m.cellId < 5);
-  const redMembers = allMembers.filter(m => m.cellId >= 5);
+  // Figure out which side is blue (Team 1) based on cellId
+  // The team with the lower average cellId is blue
+  const myMinCell = Math.min(...(data.myTeam || []).map(m => m.cellId));
+  const theirMinCell = (data.theirTeam || []).length > 0 ? Math.min(...(data.theirTeam || []).map(m => m.cellId)) : 999;
+  const myTeamIsBlue = myMinCell < theirMinCell;
 
-  // Blue = Team 1 (first pick), Red = Team 2
-  const blueCellIds = new Set(blueMembers.map(m => m.cellId));
+  console.log(`   🔵 myTeam(min cell ${myMinCell}) = ${myTeamIsBlue ? 'Blue/T1' : 'Red/T2'}`);
+
+  // Blue = Team 1, Red = Team 2
+  const blueCellIds = myTeamIsBlue ? myCellIds : theirCellIds;
+  const redCellIds = myTeamIsBlue ? theirCellIds : myCellIds;
+  const blueMembers = myTeamIsBlue ? (data.myTeam || []) : (data.theirTeam || []);
+  const redMembers = myTeamIsBlue ? (data.theirTeam || []) : (data.myTeam || []);
 
   const team1Bans = [];
   const team2Bans = [];
   const team1Picks = [];
   const team2Picks = [];
 
-  // Parse bans — assign to blue/red based on actorCellId
-  // Include both completed bans and in-progress bans (with championId selected)
+  // Parse bans — assign based on which team the actor belongs to
   if (data.actions) {
     for (const actionGroup of data.actions) {
       for (const action of actionGroup) {
         if (action.type === 'ban' && action.championId > 0) {
-          const isBlue = blueCellIds.has(action.actorCellId);
-          if (isBlue) team1Bans.push(action.championId);
-          else team2Bans.push(action.championId);
+          if (blueCellIds.has(action.actorCellId)) team1Bans.push(action.championId);
+          else if (redCellIds.has(action.actorCellId)) team2Bans.push(action.championId);
+          else {
+            // Fallback: use cellId < 5 heuristic
+            if (action.actorCellId < 5) team1Bans.push(action.championId);
+            else team2Bans.push(action.championId);
+          }
         }
       }
     }
     if (team1Bans.length > 0 || team2Bans.length > 0) {
-      console.log(`   🚫 밴 감지 | T1: [${team1Bans}] T2: [${team2Bans}]`);
+      console.log(`   🚫 밴 감지 | T1(Blue): [${team1Bans}] T2(Red): [${team2Bans}]`);
     }
   }
 
@@ -328,7 +337,7 @@ async function parseChampSelectState(data) {
   // Check for completed trades — if trades happened, member.championId is already swapped
   const hasCompletedTrades = (data.trades || []).some(t => t.state === 'COMPLETED');
 
-  // Parse blue team (Team 1) picks
+  // Parse Team 1 (Blue) picks
   for (const member of blueMembers) {
     const summoner = await resolveSummoner(member.summonerId);
     // After trades complete, member.championId reflects the swapped state
@@ -347,7 +356,7 @@ async function parseChampSelectState(data) {
     });
   }
 
-  // Parse red team (Team 2) picks
+  // Parse Team 2 (Red) picks
   for (const member of redMembers) {
     const summoner = await resolveSummoner(member.summonerId);
     const champId = hasCompletedTrades
