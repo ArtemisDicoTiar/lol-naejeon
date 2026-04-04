@@ -98,36 +98,41 @@ export function BanPickScreen({
       });
     }
 
-    // Reorder teams to match LCU cellId order (client's visual order)
+    // Rebuild team assignments from LCU data (handles team swaps + order)
     const playerNameToId = new Map<string, number>();
     for (const id of [...team1PlayerIds, ...team2PlayerIds]) {
       const name = players.find(p => p.id === id)?.name ?? '';
       if (name) playerNameToId.set(name, id);
     }
 
-    const reorderByLcu = (lcuPicks: typeof state.team1Picks, currentIds: number[]) => {
-      // Sort by cellId, then map alias → player id
+    const buildTeamFromLcu = (lcuPicks: typeof state.team1Picks) => {
       const sorted = [...lcuPicks].sort((a, b) => a.cellId - b.cellId);
-      const reordered: number[] = [];
+      const ids: number[] = [];
       for (const p of sorted) {
         if (p.alias && playerNameToId.has(p.alias)) {
-          reordered.push(playerNameToId.get(p.alias)!);
+          ids.push(playerNameToId.get(p.alias)!);
         }
       }
-      // Fill remaining (unmatched) with original order
-      for (const id of currentIds) {
-        if (!reordered.includes(id)) reordered.push(id);
-      }
-      return reordered;
+      return ids;
     };
 
     if (state.team1Picks.some(p => p.alias) || state.team2Picks.some(p => p.alias)) {
-      const newT1 = reorderByLcu(state.team1Picks, team1PlayerIds);
-      const newT2 = reorderByLcu(state.team2Picks, team2PlayerIds);
-      const t1Changed = JSON.stringify(newT1) !== JSON.stringify(team1PlayerIds);
-      const t2Changed = JSON.stringify(newT2) !== JSON.stringify(team2PlayerIds);
+      const lcuT1 = buildTeamFromLcu(state.team1Picks);
+      const lcuT2 = buildTeamFromLcu(state.team2Picks);
+
+      // Fill unmatched players into their original teams
+      const matched = new Set([...lcuT1, ...lcuT2]);
+      for (const id of team1PlayerIds) {
+        if (!matched.has(id)) lcuT1.push(id);
+      }
+      for (const id of team2PlayerIds) {
+        if (!matched.has(id)) lcuT2.push(id);
+      }
+
+      const t1Changed = JSON.stringify(lcuT1) !== JSON.stringify(team1PlayerIds);
+      const t2Changed = JSON.stringify(lcuT2) !== JSON.stringify(team2PlayerIds);
       if ((t1Changed || t2Changed) && onReorderTeams) {
-        onReorderTeams(newT1, newT2);
+        onReorderTeams(lcuT1, lcuT2);
       }
     }
 
