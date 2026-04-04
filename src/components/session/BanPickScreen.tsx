@@ -360,6 +360,28 @@ export function BanPickScreen({
     }
   };
 
+  const resetRound = () => {
+    setTeam1Bans(Array(team1PlayerIds.length).fill(''));
+    setTeam2Bans(Array(team2PlayerIds.length).fill(''));
+    setPicks({});
+    setLockedPicks(new Set());
+    setSwapFirst(null);
+    setPhase('ban');
+    setActiveSlot({ type: 'ban', team: 1, index: 0 });
+    setSearch('');
+  };
+
+  // Auto-reset when LCU champion select ends (went back to lobby)
+  useEffect(() => {
+    if (lcu.connected && !lcu.champSelectActive) {
+      // Champ select ended — only reset if we had picks (a round was in progress)
+      const hadPicks = Object.keys(picks).length > 0 || team1Bans.some(b => b) || team2Bans.some(b => b);
+      if (hadPicks) {
+        resetRound();
+      }
+    }
+  }, [lcu.champSelectActive]);
+
   const handleSkipBan = () => {
     if (!activeSlot || activeSlot.type !== 'ban') return;
     const bans = [...getTeamBans(activeSlot.team)];
@@ -777,7 +799,13 @@ export function BanPickScreen({
     <div className="space-y-3">
       {/* Phase indicator + LCU bridge */}
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="text-lol-gold hover:text-lol-gold-light cursor-pointer">&larr; 돌아가기</button>
+        <div className="flex items-center gap-2">
+          <button onClick={onBack} className="text-lol-gold hover:text-lol-gold-light cursor-pointer">&larr;</button>
+          <button onClick={() => { if (confirm('이번 라운드의 밴/픽을 초기화하시겠습니까?')) resetRound(); }}
+            className="cursor-pointer px-2 py-1 rounded text-[10px] border border-lol-border text-lol-gold-light/40 hover:text-lol-gold-light hover:border-lol-gold/50 transition-colors">
+            리셋
+          </button>
+        </div>
         <div className="flex gap-2">
           <button onClick={() => { setPhase('ban'); const idx = team1Bans.findIndex((b) => !b); if (idx >= 0) setActiveSlot({ type: 'ban', team: 1, index: idx }); }}
             className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'ban' ? 'bg-red-900/50 text-red-300 border border-red-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
