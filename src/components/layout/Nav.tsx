@@ -41,36 +41,35 @@ export function Nav({ identity, lcu }: { identity: ReturnType<typeof useIdentity
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-2">
             {/* LCU Bridge status */}
-            <button
-              onClick={() => {
-                if (lcu.connected) {
-                  lcu.disconnect();
-                } else {
-                  // Try connecting first
+            {!lcu.connected && (
+              <a
+                href="lol-bridge://start"
+                onClick={(e) => {
+                  // Try WebSocket first; if already connected, prevent default
                   lcu.connect();
-                  // If bridge isn't running, open it via custom URL scheme
-                  setTimeout(() => {
-                    if (!lcu.connected) {
-                      window.open('lol-bridge://start', '_self');
-                      // Retry connection after bridge starts
-                      setTimeout(() => lcu.connect(), 2000);
-                    }
-                  }, 500);
-                }
-              }}
-              className={`cursor-pointer px-2 py-1 rounded text-[10px] border transition-colors ${
-                lcu.connected
-                  ? lcu.champSelectActive
+                  // Allow the link to open the custom URL scheme
+                  // Browser will show "Open this app?" dialog
+                  setTimeout(() => lcu.connect(), 2500);
+                }}
+                className="cursor-pointer px-2 py-1 rounded text-[10px] border transition-colors bg-lol-gray text-lol-gold-light/40 border-lol-border hover:text-lol-gold-light"
+                title="클릭하면 브릿지 자동 실행"
+              >
+                🔌 클라
+              </a>
+            )}
+            {lcu.connected && (
+              <button
+                onClick={() => lcu.disconnect()}
+                className={`cursor-pointer px-2 py-1 rounded text-[10px] border transition-colors ${
+                  lcu.champSelectActive
                     ? 'bg-prof-high/20 text-prof-high border-prof-high/40'
                     : 'bg-blue-900/30 text-blue-300 border-blue-700/50'
-                  : 'bg-lol-gray text-lol-gold-light/40 border-lol-border hover:text-lol-gold-light'
-              }`}
-              title={lcu.connected ? '클라이언트 연결됨' : '클릭하면 브릿지 자동 실행'}
-            >
-              {lcu.connected
-                ? lcu.champSelectActive ? '🟢 챔셀' : '🔵 연결됨'
-                : '🔌 클라'}
-            </button>
+                }`}
+                title="클라이언트 연결됨 (클릭하여 해제)"
+              >
+                {lcu.champSelectActive ? '🟢 챔셀' : '🔵 연결됨'}
+              </button>
+            )}
             <span className={`text-xs ${identity.isMaster ? 'text-lol-gold' : 'text-lol-gold-light/60'}`}>
               {identity.isMaster && '[M] '}{identity.playerName}
             </span>

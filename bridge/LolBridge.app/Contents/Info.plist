@@ -7,7 +7,7 @@
   <key>CFBundleName</key>
   <string>LoL Bridge</string>
   <key>CFBundleExecutable</key>
-  <string>launch.sh</string>
+  <string>LolBridge</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>

@@ -1,0 +1,6 @@
+#!/bin/bash
+lsof -ti:8234 | xargs kill -9 2>/dev/null
+osascript -e 'tell application "Terminal"
+  activate
+  do script "cd /Users/jongyoonkim/Documents/lol/bridge && node index.js"
+end tell'
