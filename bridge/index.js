@@ -211,18 +211,30 @@ async function connectToLCU() {
 }
 
 async function parseChampSelectState(data) {
+  // Determine blue/red by cellId: blue = 0~4, red = 5~9
+  // Combine all members from both arrays, then split by cellId
+  const allMembers = [
+    ...(data.myTeam || []).map(m => ({ ...m, _src: 'my' })),
+    ...(data.theirTeam || []).map(m => ({ ...m, _src: 'their' })),
+  ];
+
+  const blueMembers = allMembers.filter(m => m.cellId < 5);
+  const redMembers = allMembers.filter(m => m.cellId >= 5);
+
+  // Blue = Team 1 (first pick), Red = Team 2
+  const blueCellIds = new Set(blueMembers.map(m => m.cellId));
+
   const team1Bans = [];
   const team2Bans = [];
   const team1Picks = [];
   const team2Picks = [];
 
-  // Parse bans
+  // Parse bans — assign to blue/red based on actorCellId
   if (data.actions) {
     for (const actionGroup of data.actions) {
       for (const action of actionGroup) {
         if (action.type === 'ban' && action.completed && action.championId > 0) {
-          const isTeam1 = (data.myTeam || []).some(p => p.cellId === action.actorCellId);
-          if (isTeam1) team1Bans.push(action.championId);
+          if (blueCellIds.has(action.actorCellId)) team1Bans.push(action.championId);
           else team2Bans.push(action.championId);
         }
       }
@@ -243,8 +255,8 @@ async function parseChampSelectState(data) {
     }
   }
 
-  // Parse picks with summoner name resolution
-  for (const member of (data.myTeam || [])) {
+  // Parse blue team (Team 1) picks
+  for (const member of blueMembers) {
     const summoner = await resolveSummoner(member.summonerId);
     // Use action champion (includes hover) over member.championId
     const champId = cellPickChamp.get(member.cellId) || member.championId || 0;
@@ -259,7 +271,8 @@ async function parseChampSelectState(data) {
     });
   }
 
-  for (const member of (data.theirTeam || [])) {
+  // Parse red team (Team 2) picks
+  for (const member of redMembers) {
     const summoner = await resolveSummoner(member.summonerId);
     const champId = cellPickChamp.get(member.cellId) || member.championId || 0;
     const locked = cellPickCompleted.get(member.cellId) || false;
