@@ -47,7 +47,7 @@ export function BanPickScreen({
   const [activeSlot, setActiveSlot] = useState<ActiveSlot>({ type: 'pick', playerId: team1PlayerIds[0] });
   const [search, setSearch] = useState('');
   const [phase, setPhase] = useState<'planning' | 'ban' | 'pick'>('planning');
-  const [planningTimer, setPlanningTimer] = useState(20);
+  const [planningTimer, setPlanningTimer] = useState(25);
   const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
   const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
   const [lcuPaused, setLcuPaused] = useState(false); // pause LCU sync after manual reset
@@ -457,7 +457,7 @@ export function BanPickScreen({
     setPicks({});
     setLockedPicks(new Set());
     setLockedBans(new Set());
-    setPlanningTimer(20);
+    setPlanningTimer(25);
     setSwapFirst(null);
     setPhase('planning');
     setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] });
@@ -925,7 +925,7 @@ export function BanPickScreen({
           <span className={`text-sm font-mono mr-1 ${displayTimer <= 5 ? 'text-red-400 animate-pulse' : 'text-lol-gold'}`}>
             {displayTimer}s
           </span>
-          <button onClick={() => { setPhase('planning'); setPlanningTimer(20); setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] }); }}
+          <button onClick={() => { setPhase('planning'); setPlanningTimer(25); setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] }); }}
             className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'planning' ? 'bg-blue-900/50 text-blue-300 border border-blue-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
             조율
           </button>
