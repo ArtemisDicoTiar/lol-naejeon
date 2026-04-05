@@ -222,8 +222,9 @@ export function BanPickScreen({
       }
     }
 
-    // PICK/FINALIZATION phase: apply picks
-    if (lcuPhase !== 'BAN_PICK' || (lcuBans1.length + lcuBans2.length > 0 && team1Bans.every(b => b) && team2Bans.every(b => b))) {
+    // Apply picks: during any phase except pure BAN_PICK with no completed bans
+    const isBanPhaseOnly = lcuPhase === 'BAN_PICK' && [...lcuBans1, ...lcuBans2].every(b => !b.completed);
+    if (!isBanPhaseOnly) {
       const applyPicks = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
         const result: Record<number, string> = {};
         lcuPicks.forEach((p, i) => {
