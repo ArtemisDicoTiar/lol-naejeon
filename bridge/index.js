@@ -452,8 +452,10 @@ async function parseChampSelectState(data) {
 
   const timer = data.timer || {};
   const phase = timer.phase || 'UNKNOWN';
+  const timeLeft = Math.ceil((timer.adjustedTimeLeftInPhase ?? 0) / 1000);
+  const totalTime = Math.ceil((timer.totalTimeInPhase ?? 0) / 1000);
 
-  return { phase, team1Bans, team2Bans, team1Picks, team2Picks };
+  return { phase, timeLeft, totalTime, team1Bans, team2Bans, team1Picks, team2Picks };
 }
 
 function stateChanged(prev, next) {

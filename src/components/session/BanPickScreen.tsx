@@ -58,9 +58,14 @@ export function BanPickScreen({
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
   useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
 
-  // Planning phase timer: countdown then auto-transition to ban
+  // Use LCU timer if connected, otherwise local countdown
+  const lcuTimeLeft = lcu.connected && lcu.lastState ? lcu.lastState.timeLeft : null;
+  const displayTimer = lcuTimeLeft !== null ? lcuTimeLeft : planningTimer;
+
+  // Planning phase: local timer countdown (fallback when LCU not connected)
   useEffect(() => {
     if (phase !== 'planning') return;
+    if (lcu.connected) return; // LCU handles phase transition
     if (planningTimer <= 0) {
       setPhase('ban');
       setActiveSlot({ type: 'ban', team: 1, index: 0 });
@@ -68,7 +73,7 @@ export function BanPickScreen({
     }
     const id = setTimeout(() => setPlanningTimer(t => t - 1), 1000);
     return () => clearTimeout(id);
-  }, [phase, planningTimer]);
+  }, [phase, planningTimer, lcu.connected]);
 
   // --- LCU Bridge: auto-apply champion select data ---
   // Build numeric champion key → string ID mapping from Data Dragon
@@ -917,9 +922,9 @@ export function BanPickScreen({
           </button>
         </div>
         <div className="flex gap-2 items-center">
-          {phase === 'planning' && (
-            <span className="text-sm font-mono text-lol-gold mr-1">{planningTimer}s</span>
-          )}
+          <span className={`text-sm font-mono mr-1 ${displayTimer <= 5 ? 'text-red-400 animate-pulse' : 'text-lol-gold'}`}>
+            {displayTimer}s
+          </span>
           <button onClick={() => { setPhase('planning'); setPlanningTimer(20); setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] }); }}
             className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'planning' ? 'bg-blue-900/50 text-blue-300 border border-blue-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
             조율
