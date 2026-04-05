@@ -50,8 +50,12 @@ export function useLcuBridge() {
           } else if (data.type === 'lobbyUpdate') {
             setLobbyState({ team1: data.team1, team2: data.team2 });
           } else if (data.type === 'timerUpdate') {
-            // Update timer in lastState without full state replacement
-            setLastState(prev => prev ? { ...prev, phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime } : prev);
+            setChampSelectActive(true);
+            setLastState(prev => {
+              if (prev) return { ...prev, phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime };
+              // Create minimal state if none exists yet
+              return { phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime, team1Bans: [], team2Bans: [], team1Picks: [], team2Picks: [] };
+            });
           }
         } catch {}
       };

@@ -668,8 +668,8 @@ export function BanPickScreen({
                      : isSkipped ? <span className="text-[10px] text-gray-500">없음</span>
                      : <span className="text-gray-600 text-lg">+</span>}
                   </div>
-                  {/* Ban lock-in button */}
-                  {champ && !locked && isActive && (
+                  {/* Ban lock-in button — show whenever a champion is selected but not locked */}
+                  {champ && !locked && (
                     <button onClick={(e) => { e.stopPropagation(); lockBan(team, idx); }}
                       className="cursor-pointer text-[8px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-300 border border-red-800/40 hover:bg-red-900/50">
                       확정
