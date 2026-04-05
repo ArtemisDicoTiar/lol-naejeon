@@ -556,8 +556,8 @@ function startTimerPolling() {
         const timeLeftMs = timer.adjustedTimeLeftInPhase ?? timer.timeLeftInPhase ?? 0;
         const timeLeft = Math.max(0, Math.ceil(timeLeftMs / 1000));
         const totalTime = Math.ceil((timer.totalTimeInPhase ?? 0) / 1000);
-        // Log every 5 seconds
-        if (Date.now() - lastTimerLog > 5000) {
+        // Log every second
+        if (Date.now() - lastTimerLog > 900) {
           console.log(`   ⏱️ ${phase} ${timeLeft}s / ${totalTime}s`);
           lastTimerLog = Date.now();
         }
