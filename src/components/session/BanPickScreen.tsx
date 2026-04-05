@@ -44,9 +44,10 @@ export function BanPickScreen({
   const [team1Bans, setTeam1Bans] = useState<string[]>(Array(team1Size).fill(''));
   const [team2Bans, setTeam2Bans] = useState<string[]>(Array(team2Size).fill(''));
   const [picks, setPicks] = useState<Record<number, string>>({});
-  const [activeSlot, setActiveSlot] = useState<ActiveSlot>({ type: 'ban', team: 1, index: 0 });
+  const [activeSlot, setActiveSlot] = useState<ActiveSlot>({ type: 'pick', playerId: team1PlayerIds[0] });
   const [search, setSearch] = useState('');
-  const [phase, setPhase] = useState<'ban' | 'pick'>('ban');
+  const [phase, setPhase] = useState<'planning' | 'ban' | 'pick'>('planning');
+  const [planningTimer, setPlanningTimer] = useState(20);
   const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
   const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
   const [lcuPaused, setLcuPaused] = useState(false); // pause LCU sync after manual reset
@@ -56,6 +57,18 @@ export function BanPickScreen({
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
   useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
+
+  // Planning phase timer: countdown then auto-transition to ban
+  useEffect(() => {
+    if (phase !== 'planning') return;
+    if (planningTimer <= 0) {
+      setPhase('ban');
+      setActiveSlot({ type: 'ban', team: 1, index: 0 });
+      return;
+    }
+    const id = setTimeout(() => setPlanningTimer(t => t - 1), 1000);
+    return () => clearTimeout(id);
+  }, [phase, planningTimer]);
 
   // --- LCU Bridge: auto-apply champion select data ---
   // Build numeric champion key → string ID mapping from Data Dragon
@@ -147,12 +160,18 @@ export function BanPickScreen({
       const hovers2 = applyHovers(state.team2Picks, team2PlayerIds);
       if (Object.keys(hovers1).length > 0 || Object.keys(hovers2).length > 0) {
         setPicks(prev => ({ ...prev, ...hovers1, ...hovers2 }));
-        // Stay in ban phase, don't lock, don't advance
+        // Stay in planning phase, don't lock, don't advance
       }
       return;
     }
 
-    // BAN phase: apply bans only
+    // BAN phase: auto-transition from planning if LCU enters ban phase
+    if (phase === 'planning' && (lcuPhase === 'BAN_PICK' || lcuPhase === 'BANNING')) {
+      setPhase('ban');
+      setActiveSlot({ type: 'ban', team: 1, index: 0 });
+    }
+
+    // Apply bans
     const lcuBans1 = state.team1Bans.map(id => champKeyMap.get(id) ?? '').filter(Boolean);
     const lcuBans2 = state.team2Bans.map(id => champKeyMap.get(id) ?? '').filter(Boolean);
 
@@ -433,9 +452,10 @@ export function BanPickScreen({
     setPicks({});
     setLockedPicks(new Set());
     setLockedBans(new Set());
+    setPlanningTimer(20);
     setSwapFirst(null);
-    setPhase('ban');
-    setActiveSlot({ type: 'ban', team: 1, index: 0 });
+    setPhase('planning');
+    setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] });
     setSearch('');
     // Pause LCU sync so it doesn't re-apply old state
     setLcuPaused(true);
@@ -652,7 +672,7 @@ export function BanPickScreen({
         </div>
 
         {/* Ban Recommendations — per opponent player */}
-        {phase === 'ban' && Object.keys(banRecs).length > 0 && (
+        {(phase === 'ban' || phase === 'planning') && Object.keys(banRecs).length > 0 && (
           <div>
             <div className="text-xs text-lol-gold-light/50 mb-1.5">추천 밴 (상대 플레이어별)</div>
             <div className="space-y-1.5">
@@ -896,7 +916,14 @@ export function BanPickScreen({
             리셋
           </button>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {phase === 'planning' && (
+            <span className="text-sm font-mono text-lol-gold mr-1">{planningTimer}s</span>
+          )}
+          <button onClick={() => { setPhase('planning'); setPlanningTimer(20); setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] }); }}
+            className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'planning' ? 'bg-blue-900/50 text-blue-300 border border-blue-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
+            조율
+          </button>
           <button onClick={() => { setPhase('ban'); const idx = team1Bans.findIndex((b) => !b); if (idx >= 0) setActiveSlot({ type: 'ban', team: 1, index: idx }); }}
             className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'ban' ? 'bg-red-900/50 text-red-300 border border-red-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
             밴
