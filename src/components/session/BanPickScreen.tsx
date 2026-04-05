@@ -127,8 +127,30 @@ export function BanPickScreen({
       if ((t1Changed || t2Changed) && onReorderTeams) onReorderTeams(lcuT1, lcuT2);
     }
 
-    // PLANNING phase: only reorder teams, don't apply bans/picks
-    if (lcuPhase === 'PLANNING') return;
+    // PLANNING phase: apply picks as tentative (hover) but don't lock-in or change phase
+    if (lcuPhase === 'PLANNING') {
+      const applyHovers = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
+        const result: Record<number, string> = {};
+        lcuPicks.forEach((p, i) => {
+          if (p.champId <= 0) return;
+          const champStrId = champKeyMap.get(p.champId);
+          if (!champStrId) return;
+          if (p.alias && playerNameToId.has(p.alias)) {
+            result[playerNameToId.get(p.alias)!] = champStrId;
+          } else if (i < fallbackIds.length) {
+            result[fallbackIds[i]] = champStrId;
+          }
+        });
+        return result;
+      };
+      const hovers1 = applyHovers(state.team1Picks, team1PlayerIds);
+      const hovers2 = applyHovers(state.team2Picks, team2PlayerIds);
+      if (Object.keys(hovers1).length > 0 || Object.keys(hovers2).length > 0) {
+        setPicks(prev => ({ ...prev, ...hovers1, ...hovers2 }));
+        // Stay in ban phase, don't lock, don't advance
+      }
+      return;
+    }
 
     // BAN phase: apply bans only
     const lcuBans1 = state.team1Bans.map(id => champKeyMap.get(id) ?? '').filter(Boolean);
@@ -339,14 +361,15 @@ export function BanPickScreen({
     if (teamPlayerObjs.length === 0) return [];
     const opponentCurrentPicks = team === 1 ? team2Picks : team1Picks;
 
-    // Separate own team's picks (locked) from opponent/other picks (banned)
-    const ownTeamPicks: Record<number, string> = {};
+    // Separate own team's picks into locked (confirmed) and tentative (hover)
+    const confirmedPicks: Record<number, string> = {};
     const otherPicks: string[] = [];
     const opponentIds = new Set(team === 1 ? team2PlayerIds : team1PlayerIds);
     for (const [pidStr, champId] of Object.entries(picks)) {
       const pid = Number(pidStr);
-      if (teamPlayerIds.includes(pid)) {
-        ownTeamPicks[pid] = champId;
+      if (teamPlayerIds.includes(pid) && lockedPicks.has(pid)) {
+        // Only locked picks are fixed in recommendations
+        confirmedPicks[pid] = champId;
       } else if (opponentIds.has(pid)) {
         otherPicks.push(champId);
       }
@@ -358,7 +381,7 @@ export function BanPickScreen({
       allChampions: champions, proficiencies: mergedProficiencies, format,
       opponentPicks: opponentCurrentPicks.length > 0 ? opponentCurrentPicks : undefined,
       matchData,
-      lockedPicks: Object.keys(ownTeamPicks).length > 0 ? ownTeamPicks : undefined,
+      lockedPicks: Object.keys(confirmedPicks).length > 0 ? confirmedPicks : undefined,
     }).slice(0, 10);
     if (wrStats) {
       for (const rec of recs) {
