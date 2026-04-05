@@ -59,8 +59,8 @@ export function BanPickScreen({
   useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
 
   // Use LCU timer if connected, otherwise local countdown
-  const lcuTimeLeft = lcu.connected && lcu.lastState ? lcu.lastState.timeLeft : null;
-  const displayTimer = lcuTimeLeft !== null ? lcuTimeLeft : planningTimer;
+  const lcuTimeLeft = lcu.connected && lcu.lastState?.timeLeft != null ? lcu.lastState.timeLeft : null;
+  const displayTimer = lcuTimeLeft !== null ? lcuTimeLeft : (phase === 'planning' ? planningTimer : null);
 
   // Planning phase: local timer countdown (fallback when LCU not connected)
   useEffect(() => {
@@ -934,9 +934,11 @@ export function BanPickScreen({
           </button>
         </div>
         <div className="flex gap-2 items-center">
-          <span className={`text-sm font-mono mr-1 ${displayTimer <= 5 ? 'text-red-400 animate-pulse' : 'text-lol-gold'}`}>
-            {displayTimer}s
-          </span>
+          {displayTimer !== null && (
+            <span className={`text-sm font-mono mr-1 ${displayTimer <= 5 ? 'text-red-400 animate-pulse' : 'text-lol-gold'}`}>
+              {displayTimer}s
+            </span>
+          )}
           <button onClick={() => { setPhase('planning'); setPlanningTimer(25); setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] }); }}
             className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'planning' ? 'bg-blue-900/50 text-blue-300 border border-blue-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
             조율

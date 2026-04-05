@@ -543,6 +543,7 @@ let timerInterval = null;
 
 function startTimerPolling() {
   stopTimerPolling();
+  let lastTimerLog = 0;
   timerInterval = setInterval(async () => {
     if (!credentials) return;
     try {
@@ -551,8 +552,15 @@ function startTimerPolling() {
         const data = resp.json();
         const timer = data.timer || {};
         const phase = timer.phase || 'UNKNOWN';
-        const timeLeft = Math.ceil((timer.adjustedTimeLeftInPhase ?? 0) / 1000);
+        // adjustedTimeLeftInPhase is in milliseconds
+        const timeLeftMs = timer.adjustedTimeLeftInPhase ?? timer.timeLeftInPhase ?? 0;
+        const timeLeft = Math.max(0, Math.ceil(timeLeftMs / 1000));
         const totalTime = Math.ceil((timer.totalTimeInPhase ?? 0) / 1000);
+        // Log every 5 seconds
+        if (Date.now() - lastTimerLog > 5000) {
+          console.log(`   ⏱️ ${phase} ${timeLeft}s / ${totalTime}s`);
+          lastTimerLog = Date.now();
+        }
         broadcast({ type: 'timerUpdate', phase, timeLeft, totalTime });
       }
     } catch {}
