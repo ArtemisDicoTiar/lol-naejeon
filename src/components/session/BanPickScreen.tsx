@@ -437,8 +437,9 @@ export function BanPickScreen({
     const bans = getTeamBans(team);
     const champId = bans[index];
     setLockedBans(prev => new Set(prev).add(`${team}-${index}`));
-    // Send ban lock-in to LoL client
-    if (lcu.connected && champId && champId !== SKIP_BAN) {
+    // Send ban lock-in to LoL client (only when LCU is in ban phase)
+    const lcuPhaseNow = lcu.lastState?.phase?.toUpperCase() ?? '';
+    if (lcu.connected && champId && champId !== SKIP_BAN && (lcuPhaseNow === 'BAN_PICK' || lcuPhaseNow === 'BANNING')) {
       const numId = champIdToNumeric.get(champId);
       if (numId) lcu.lockInBan(numId);
     }
@@ -453,8 +454,9 @@ export function BanPickScreen({
       const bans = [...getTeamBans(activeSlot.team)];
       bans[activeSlot.index] = champId;
       setTeamBans(activeSlot.team, bans);
-      // Send ban hover to LoL client (only for my team's ban)
-      if (lcu.connected) {
+      // Send ban hover to LoL client (only when LCU is in ban phase)
+      const lcuPhaseNow = lcu.lastState?.phase?.toUpperCase() ?? '';
+      if (lcu.connected && (lcuPhaseNow === 'BAN_PICK' || lcuPhaseNow === 'BANNING')) {
         const numId = champIdToNumeric.get(champId);
         if (numId) lcu.hoverBan(numId);
       }

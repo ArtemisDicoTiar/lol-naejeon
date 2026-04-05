@@ -465,7 +465,7 @@ async function parseChampSelectState(data) {
       }
     }
     if (team1Bans.length > 0 || team2Bans.length > 0) {
-      console.log(`   🚫 밴 감지 | T1(Blue): [${team1Bans}] T2(Red): [${team2Bans}]`);
+      console.log(`   🚫 밴 감지 | T1(Blue): [${team1Bans.map(b => `${b.championId}${b.completed ? '✓' : ''}`)}] T2(Red): [${team2Bans.map(b => `${b.championId}${b.completed ? '✓' : ''}`)}]`);
     }
   }
 
