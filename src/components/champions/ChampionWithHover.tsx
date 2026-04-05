@@ -44,29 +44,36 @@ export function ChampionWithHover({
     setPos({ x, y });
   }, []);
 
-  // Safety: close card on click anywhere, scroll, or if element unmounts
+  // Core fix: track global mouse position and close if mouse leaves element
+  // This catches all cases where onMouseLeave doesn't fire (DOM reorder, unmount, etc.)
   useEffect(() => {
     if (!hovered) return;
-    const close = () => setHovered(false);
-    window.addEventListener('click', close, true);
-    window.addEventListener('scroll', close, true);
+    const handler = (e: MouseEvent) => {
+      if (!ref.current) { setHovered(false); return; }
+      const rect = ref.current.getBoundingClientRect();
+      // Check if mouse is still over the trigger element (with small tolerance)
+      const isOver = e.clientX >= rect.left - 2 && e.clientX <= rect.right + 2 &&
+                     e.clientY >= rect.top - 2 && e.clientY <= rect.bottom + 2;
+      if (!isOver) setHovered(false);
+    };
+    // Also close on mousedown (more reliable than click for fast interactions)
+    const closeOnDown = () => setHovered(false);
+    document.addEventListener('mousemove', handler);
+    document.addEventListener('mousedown', closeOnDown, true);
+    document.addEventListener('scroll', closeOnDown, true);
+    window.addEventListener('blur', closeOnDown);
     return () => {
-      window.removeEventListener('click', close, true);
-      window.removeEventListener('scroll', close, true);
+      document.removeEventListener('mousemove', handler);
+      document.removeEventListener('mousedown', closeOnDown, true);
+      document.removeEventListener('scroll', closeOnDown, true);
+      window.removeEventListener('blur', closeOnDown);
     };
   }, [hovered]);
 
-  // Safety: if the element is no longer under the mouse, close
+  // Close on unmount
   useEffect(() => {
-    if (!hovered || !ref.current) return;
-    const check = () => {
-      if (!ref.current) { setHovered(false); return; }
-      const rect = ref.current.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) setHovered(false);
-    };
-    const id = setInterval(check, 500);
-    return () => clearInterval(id);
-  }, [hovered]);
+    return () => setHovered(false);
+  }, []);
 
   if (disabled) return <>{children}</>;
 
