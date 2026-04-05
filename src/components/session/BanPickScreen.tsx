@@ -393,7 +393,7 @@ export function BanPickScreen({
         const numId = champIdToNumeric.get(champId);
         if (numId) lcu.hoverChampion(numId);
       }
-      advancePickSlot(activeSlot.playerId);
+      // Stay on same player until lock-in (don't auto-advance)
     }
   };
 
