@@ -543,7 +543,13 @@ let timerInterval = null;
 
 function startTimerPolling() {
   stopTimerPolling();
+  // LCU gives a static adjustedTimeLeftInPhase that doesn't tick down.
+  // We capture it once per phase and count down locally.
+  let currentPhase = '';
+  let phaseEndTime = 0; // Date.now() + timeLeft
+  let totalTime = 0;
   let lastTimerLog = 0;
+
   timerInterval = setInterval(async () => {
     if (!credentials) return;
     try {
@@ -552,11 +558,19 @@ function startTimerPolling() {
         const data = resp.json();
         const timer = data.timer || {};
         const phase = timer.phase || 'UNKNOWN';
-        // adjustedTimeLeftInPhase is in milliseconds
-        const timeLeftMs = timer.adjustedTimeLeftInPhase ?? timer.timeLeftInPhase ?? 0;
-        const timeLeft = Math.max(0, Math.ceil(timeLeftMs / 1000));
-        const totalTime = Math.ceil((timer.totalTimeInPhase ?? 0) / 1000);
-        // Log every second
+        const rawTimeLeft = timer.adjustedTimeLeftInPhase ?? timer.timeLeftInPhase ?? 0;
+        const rawTotal = timer.totalTimeInPhase ?? 0;
+
+        // Detect phase change → recalculate end time
+        if (phase !== currentPhase || Math.abs(rawTimeLeft - (phaseEndTime - Date.now())) > 3000) {
+          currentPhase = phase;
+          phaseEndTime = Date.now() + rawTimeLeft;
+          totalTime = Math.ceil(rawTotal / 1000);
+        }
+
+        // Count down locally from captured end time
+        const timeLeft = Math.max(0, Math.ceil((phaseEndTime - Date.now()) / 1000));
+
         if (Date.now() - lastTimerLog > 900) {
           console.log(`   ⏱️ ${phase} ${timeLeft}s / ${totalTime}s`);
           lastTimerLog = Date.now();
