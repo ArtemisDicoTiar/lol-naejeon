@@ -5,7 +5,7 @@ import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampion
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
 import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
 import { estimatePlayerProficiencies, type EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
-import { championTraits } from '@/data/champion-tags';
+import { championTraits, type MechanicTag } from '@/data/champion-tags';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
@@ -861,6 +861,35 @@ export function BanPickScreen({
                       )}
                     </div>
                   </div>
+                  {/* Champion mechanic tags */}
+                  {pickedChamp && (() => {
+                    const traits = championTraits[pickedChamp.id];
+                    if (!traits) return null;
+                    const tagLabels: Partial<Record<MechanicTag, string>> = {
+                      knockup: '넉업', pull: '끌기', aoe_cc: 'AoE CC', single_target_cc: '단일CC',
+                      shield: '쉴드', heal: '힐', speed_buff: '이속', attack_steroid: '공버프',
+                      zone_control: '장악', poke_long: '롱포크', poke_mid: '미드포크', burst: '버스트',
+                      dps_sustained: '지속딜', execute: '처형', revive: '부활', invulnerable: '무적',
+                      anti_heal: '치감', tank_shred: '탱파', diving: '다이브', dash_reset: '리셋',
+                      stealth: '은신', terrain_create: '지형',
+                    };
+                    const tagColors: Partial<Record<MechanicTag, string>> = {
+                      heal: 'bg-green-900/60 text-green-300', shield: 'bg-cyan-900/60 text-cyan-300',
+                      anti_heal: 'bg-red-900/60 text-red-300', knockup: 'bg-yellow-900/60 text-yellow-300',
+                      aoe_cc: 'bg-yellow-900/60 text-yellow-300', pull: 'bg-yellow-900/60 text-yellow-300',
+                      burst: 'bg-orange-900/60 text-orange-300', tank_shred: 'bg-red-900/60 text-red-300',
+                      revive: 'bg-emerald-900/60 text-emerald-300', invulnerable: 'bg-emerald-900/60 text-emerald-300',
+                    };
+                    return (
+                      <div className="flex flex-wrap gap-0.5 mt-0.5">
+                        {traits.mechanics.slice(0, 4).map(tag => (
+                          <span key={tag} className={`text-[8px] px-1 py-0 rounded ${tagColors[tag] ?? 'bg-lol-blue text-lol-gold-light/50'}`}>
+                            {tagLabels[tag] ?? tag}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {/* Lock-in + Swap buttons */}
                   <div className="flex gap-1 shrink-0">
                     {pickedChamp && !isLocked && (
