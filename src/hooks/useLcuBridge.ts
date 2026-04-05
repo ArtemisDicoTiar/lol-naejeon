@@ -6,8 +6,8 @@ export interface LcuChampSelectState {
   phase: string;
   timeLeft: number;  // seconds remaining in current phase
   totalTime: number; // total seconds for current phase
-  team1Bans: number[];
-  team2Bans: number[];
+  team1Bans: { championId: number; completed: boolean }[];
+  team2Bans: { championId: number; completed: boolean }[];
   team1Picks: { cellId: number; champId: number; locked?: boolean; summonerId: number; gameName?: string; alias?: string | null }[];
   team2Picks: { cellId: number; champId: number; locked?: boolean; summonerId: number; gameName?: string; alias?: string | null }[];
 }

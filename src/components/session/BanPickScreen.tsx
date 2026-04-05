@@ -177,15 +177,15 @@ export function BanPickScreen({
     }
 
     // Apply bans
-    const lcuBans1 = state.team1Bans.map(id => champKeyMap.get(id) ?? '').filter(Boolean);
-    const lcuBans2 = state.team2Bans.map(id => champKeyMap.get(id) ?? '').filter(Boolean);
+    const lcuBans1 = state.team1Bans.map(b => ({ champId: champKeyMap.get(b.championId) ?? '', completed: b.completed })).filter(b => b.champId);
+    const lcuBans2 = state.team2Bans.map(b => ({ champId: champKeyMap.get(b.championId) ?? '', completed: b.completed })).filter(b => b.champId);
 
     if (lcuBans1.length > 0) {
       setTeam1Bans(prev => {
         const size = Math.max(prev.length, lcuBans1.length);
         const newBans = Array(size).fill('');
         prev.forEach((b, i) => { if (i < size) newBans[i] = b; });
-        lcuBans1.forEach((champId, i) => { newBans[i] = champId; });
+        lcuBans1.forEach((b, i) => { newBans[i] = b.champId; });
         return newBans;
       });
     }
@@ -194,15 +194,22 @@ export function BanPickScreen({
         const size = Math.max(prev.length, lcuBans2.length);
         const newBans = Array(size).fill('');
         prev.forEach((b, i) => { if (i < size) newBans[i] = b; });
-        lcuBans2.forEach((champId, i) => { newBans[i] = champId; });
+        lcuBans2.forEach((b, i) => { newBans[i] = b.champId; });
         return newBans;
       });
     }
 
-    // Auto-transition to pick phase if bans are filled
+    // Auto lock-in completed bans
+    const newLockedBans = new Set(lockedBans);
+    let banLockChanged = false;
+    lcuBans1.forEach((b, i) => { if (b.completed && !newLockedBans.has(`1-${i}`)) { newLockedBans.add(`1-${i}`); banLockChanged = true; } });
+    lcuBans2.forEach((b, i) => { if (b.completed && !newLockedBans.has(`2-${i}`)) { newLockedBans.add(`2-${i}`); banLockChanged = true; } });
+    if (banLockChanged) setLockedBans(newLockedBans);
+
+    // Auto-transition to pick phase if all bans are locked
     if (lcuBans1.length > 0 || lcuBans2.length > 0) {
-      const allBansFilled = team1Bans.every(b => b) && team2Bans.every(b => b);
-      if (allBansFilled && phase === 'ban') {
+      const allBansLocked = [...lcuBans1, ...lcuBans2].every(b => b.completed);
+      if (allBansLocked && (phase === 'ban' || phase === 'planning')) {
         setPhase('pick');
         const firstInDraft = draftOrder.find((id) => !picks[id]);
         setActiveSlot(firstInDraft ? { type: 'pick', playerId: firstInDraft } : null);

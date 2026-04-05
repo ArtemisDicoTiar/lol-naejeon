@@ -454,12 +454,12 @@ async function parseChampSelectState(data) {
     for (const actionGroup of data.actions) {
       for (const action of actionGroup) {
         if (action.type === 'ban' && action.championId > 0) {
-          if (blueCellIds.has(action.actorCellId)) team1Bans.push(action.championId);
-          else if (redCellIds.has(action.actorCellId)) team2Bans.push(action.championId);
+          const banEntry = { championId: action.championId, completed: !!action.completed };
+          if (blueCellIds.has(action.actorCellId)) team1Bans.push(banEntry);
+          else if (redCellIds.has(action.actorCellId)) team2Bans.push(banEntry);
           else {
-            // Fallback: use cellId < 5 heuristic
-            if (action.actorCellId < 5) team1Bans.push(action.championId);
-            else team2Bans.push(action.championId);
+            if (action.actorCellId < 5) team1Bans.push(banEntry);
+            else team2Bans.push(banEntry);
           }
         }
       }
