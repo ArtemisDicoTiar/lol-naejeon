@@ -112,7 +112,11 @@ export function BanPickScreen({
   // Apply LCU state to ban/pick slots
   useEffect(() => {
     if (lcuPaused) return;
-    if (!lcu.lastState || champKeyMap.size === 0) return;
+    if (!lcu.lastState) return;
+    if (champKeyMap.size === 0) {
+      console.log('[LCU] champKeyMap not loaded yet, skipping');
+      return;
+    }
     const state = lcu.lastState;
     const lcuPhase = state.phase?.toUpperCase() ?? '';
 
@@ -177,8 +181,10 @@ export function BanPickScreen({
     }
 
     // Apply bans
+    console.log('[LCU] raw bans T1:', JSON.stringify(state.team1Bans), 'T2:', JSON.stringify(state.team2Bans));
     const lcuBans1 = state.team1Bans.map(b => ({ champId: champKeyMap.get(b.championId) ?? '', completed: b.completed })).filter(b => b.champId);
     const lcuBans2 = state.team2Bans.map(b => ({ champId: champKeyMap.get(b.championId) ?? '', completed: b.completed })).filter(b => b.champId);
+    console.log('[LCU] resolved bans T1:', JSON.stringify(lcuBans1), 'T2:', JSON.stringify(lcuBans2));
 
     if (lcuBans1.length > 0) {
       setTeam1Bans(prev => {
