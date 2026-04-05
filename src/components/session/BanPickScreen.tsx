@@ -919,9 +919,16 @@ export function BanPickScreen({
                     revive: 'bg-emerald-900/60 text-emerald-300', invulnerable: 'bg-emerald-900/60 text-emerald-300',
                   };
                   return (
-                    <div className="flex flex-wrap gap-0.5 mt-1">
+                    <div className="flex flex-wrap items-center gap-1 mt-1">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        pickedChamp.aramTier === 'S' ? 'bg-tier-s/20 text-tier-s' :
+                        pickedChamp.aramTier === 'A' ? 'bg-tier-a/20 text-tier-a' :
+                        pickedChamp.aramTier === 'B' ? 'bg-tier-b/20 text-tier-b' :
+                        pickedChamp.aramTier === 'C' ? 'bg-tier-c/20 text-tier-c' :
+                        'bg-tier-d/20 text-tier-d'
+                      }`}>{pickedChamp.aramTier}</span>
                       {traits.mechanics.slice(0, 5).map(tag => (
-                        <span key={tag} className={`text-[8px] px-1 py-0 rounded ${tagColors[tag] ?? 'bg-lol-blue text-lol-gold-light/50'}`}>
+                        <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded ${tagColors[tag] ?? 'bg-lol-blue text-lol-gold-light/50'}`}>
                           {tagLabels[tag] ?? tag}
                         </span>
                       ))}
