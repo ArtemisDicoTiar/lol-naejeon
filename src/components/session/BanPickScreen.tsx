@@ -427,7 +427,14 @@ export function BanPickScreen({
   const isBanLocked = (team: 1 | 2, index: number) => lockedBans.has(`${team}-${index}`);
 
   const lockBan = (team: 1 | 2, index: number) => {
+    const bans = getTeamBans(team);
+    const champId = bans[index];
     setLockedBans(prev => new Set(prev).add(`${team}-${index}`));
+    // Send ban lock-in to LoL client
+    if (lcu.connected && champId && champId !== SKIP_BAN) {
+      const numId = champIdToNumeric.get(champId);
+      if (numId) lcu.lockInBan(numId);
+    }
     advanceBanSlot(team, index);
   };
 
@@ -439,6 +446,11 @@ export function BanPickScreen({
       const bans = [...getTeamBans(activeSlot.team)];
       bans[activeSlot.index] = champId;
       setTeamBans(activeSlot.team, bans);
+      // Send ban hover to LoL client (only for my team's ban)
+      if (lcu.connected) {
+        const numId = champIdToNumeric.get(champId);
+        if (numId) lcu.hoverBan(numId);
+      }
       // Don't advance — stay on same slot until lock-in
     } else {
       setPicks((prev) => ({ ...prev, [activeSlot.playerId]: champId }));

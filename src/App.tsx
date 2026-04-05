@@ -37,12 +37,15 @@ interface LcuContextType {
   champSelectActive: boolean;
   hoverChampion: (championNumericId: number) => void;
   lockInChampion: (championNumericId: number) => void;
+  hoverBan: (championNumericId: number) => void;
+  lockInBan: (championNumericId: number) => void;
 }
 
 export const LcuContext = createContext<LcuContextType>({
   connected: false, connect: () => {}, disconnect: () => {},
   lastState: null, lobbyState: null, champSelectActive: false,
   hoverChampion: () => {}, lockInChampion: () => {},
+  hoverBan: () => {}, lockInBan: () => {},
 });
 
 export function useLcuContext() {

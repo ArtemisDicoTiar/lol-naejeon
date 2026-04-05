@@ -49,6 +49,10 @@ wss.on('connection', (ws) => {
         await lcuHoverChampion(msg.championNumericId);
       } else if (msg.type === 'lockInChampion') {
         await lcuLockInChampion(msg.championNumericId);
+      } else if (msg.type === 'hoverBan') {
+        await lcuHoverBan(msg.championNumericId);
+      } else if (msg.type === 'lockInBan') {
+        await lcuLockInBan(msg.championNumericId);
       }
     } catch {}
   });
@@ -62,7 +66,7 @@ function broadcast(data) {
 }
 
 // --- LCU Write: hover/lock-in champion for current user ---
-async function findMyPickAction() {
+async function findMyAction(actionType = 'pick') {
   if (!credentials) return null;
   try {
     const resp = await createHttp1Request({ method: 'GET', url: '/lol-champ-select/v1/session' }, credentials);
@@ -71,18 +75,18 @@ async function findMyPickAction() {
     const myCell = (data.myTeam || []).find(m => m.summonerId > 0)?.cellId;
     if (myCell === undefined) return null;
 
-    // Find my current pick action (not completed)
+    // Find my current action of the given type (not completed, is in progress)
     for (const group of (data.actions || [])) {
       for (const action of group) {
-        if (action.type === 'pick' && action.actorCellId === myCell && !action.completed) {
+        if (action.type === actionType && action.actorCellId === myCell && !action.completed && action.isInProgress) {
           return action.id;
         }
       }
     }
-    // If all completed, find last pick action
-    for (const group of [...(data.actions || [])].reverse()) {
+    // Fallback: find any uncompleted action of the type
+    for (const group of (data.actions || [])) {
       for (const action of group) {
-        if (action.type === 'pick' && action.actorCellId === myCell) {
+        if (action.type === actionType && action.actorCellId === myCell && !action.completed) {
           return action.id;
         }
       }
@@ -92,8 +96,10 @@ async function findMyPickAction() {
 }
 
 async function lcuHoverChampion(championId) {
-  const actionId = await findMyPickAction();
-  if (actionId === null) { console.log('⚠️ 픽 액션을 찾을 수 없음'); return; }
+  // Try pick action first, then ban
+  let actionId = await findMyAction('pick');
+  if (actionId === null) actionId = await findMyAction('ban');
+  if (actionId === null) { console.log('⚠️ 액션을 찾을 수 없음'); return; }
   try {
     await createHttp1Request({
       method: 'PATCH',
@@ -106,11 +112,45 @@ async function lcuHoverChampion(championId) {
   }
 }
 
+async function lcuHoverBan(championId) {
+  const actionId = await findMyAction('ban');
+  if (actionId === null) { console.log('⚠️ 밴 액션을 찾을 수 없음'); return; }
+  try {
+    await createHttp1Request({
+      method: 'PATCH',
+      url: `/lol-champ-select/v1/session/actions/${actionId}`,
+      body: { championId },
+    }, credentials);
+    console.log(`🚫 밴 호버 → champId ${championId}`);
+  } catch (e) {
+    console.log(`⚠️ 밴 호버 실패: ${e}`);
+  }
+}
+
+async function lcuLockInBan(championId) {
+  const actionId = await findMyAction('ban');
+  if (actionId === null) { console.log('⚠️ 밴 액션을 찾을 수 없음'); return; }
+  try {
+    await createHttp1Request({
+      method: 'PATCH',
+      url: `/lol-champ-select/v1/session/actions/${actionId}`,
+      body: { championId },
+    }, credentials);
+    await createHttp1Request({
+      method: 'POST',
+      url: `/lol-champ-select/v1/session/actions/${actionId}/complete`,
+      body: {},
+    }, credentials);
+    console.log(`🔒 밴 락인 → champId ${championId}`);
+  } catch (e) {
+    console.log(`⚠️ 밴 락인 실패: ${e}`);
+  }
+}
+
 async function lcuLockInChampion(championId) {
-  const actionId = await findMyPickAction();
+  const actionId = await findMyAction('pick');
   if (actionId === null) { console.log('⚠️ 픽 액션을 찾을 수 없음'); return; }
   try {
-    // First hover, then lock in
     await createHttp1Request({
       method: 'PATCH',
       url: `/lol-champ-select/v1/session/actions/${actionId}`,

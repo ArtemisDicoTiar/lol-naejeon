@@ -102,5 +102,13 @@ export function useLcuBridge() {
     sendToClient({ type: 'lockInChampion', championNumericId });
   }, [sendToClient]);
 
-  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive, hoverChampion, lockInChampion };
+  const hoverBan = useCallback((championNumericId: number) => {
+    sendToClient({ type: 'hoverBan', championNumericId });
+  }, [sendToClient]);
+
+  const lockInBan = useCallback((championNumericId: number) => {
+    sendToClient({ type: 'lockInBan', championNumericId });
+  }, [sendToClient]);
+
+  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive, hoverChampion, lockInChampion, hoverBan, lockInBan };
 }
