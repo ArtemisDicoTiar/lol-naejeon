@@ -93,17 +93,49 @@ export function BanPickScreen({
 
   // Apply LCU state to ban/pick slots
   useEffect(() => {
-    if (lcuPaused) return; // paused after manual reset
+    if (lcuPaused) return;
     if (!lcu.lastState || champKeyMap.size === 0) return;
     const state = lcu.lastState;
+    const lcuPhase = state.phase?.toUpperCase() ?? '';
 
-    // Apply bans (LCU uses numeric champion IDs)
+    // Rebuild team assignments from LCU data (always, regardless of phase)
+    const playerNameToId = new Map<string, number>();
+    for (const id of [...team1PlayerIds, ...team2PlayerIds]) {
+      const name = players.find(p => p.id === id)?.name ?? '';
+      if (name) playerNameToId.set(name, id);
+    }
+
+    const buildTeamFromLcu = (lcuPicks: typeof state.team1Picks) => {
+      const sorted = [...lcuPicks].sort((a, b) => a.cellId - b.cellId);
+      const ids: number[] = [];
+      for (const p of sorted) {
+        if (p.alias && playerNameToId.has(p.alias)) {
+          ids.push(playerNameToId.get(p.alias)!);
+        }
+      }
+      return ids;
+    };
+
+    if (state.team1Picks.some(p => p.alias) || state.team2Picks.some(p => p.alias)) {
+      const lcuT1 = buildTeamFromLcu(state.team1Picks);
+      const lcuT2 = buildTeamFromLcu(state.team2Picks);
+      const matched = new Set([...lcuT1, ...lcuT2]);
+      for (const id of team1PlayerIds) { if (!matched.has(id)) lcuT1.push(id); }
+      for (const id of team2PlayerIds) { if (!matched.has(id)) lcuT2.push(id); }
+      const t1Changed = JSON.stringify(lcuT1) !== JSON.stringify(team1PlayerIds);
+      const t2Changed = JSON.stringify(lcuT2) !== JSON.stringify(team2PlayerIds);
+      if ((t1Changed || t2Changed) && onReorderTeams) onReorderTeams(lcuT1, lcuT2);
+    }
+
+    // PLANNING phase: only reorder teams, don't apply bans/picks
+    if (lcuPhase === 'PLANNING') return;
+
+    // BAN phase: apply bans only
     const lcuBans1 = state.team1Bans.map(id => champKeyMap.get(id) ?? '').filter(Boolean);
     const lcuBans2 = state.team2Bans.map(id => champKeyMap.get(id) ?? '').filter(Boolean);
 
     if (lcuBans1.length > 0) {
       setTeam1Bans(prev => {
-        // Expand slots if LCU has more bans than current slots
         const size = Math.max(prev.length, lcuBans1.length);
         const newBans = Array(size).fill('');
         prev.forEach((b, i) => { if (i < size) newBans[i] = b; });
@@ -131,66 +163,31 @@ export function BanPickScreen({
       }
     }
 
-    // Rebuild team assignments from LCU data (handles team swaps + order)
-    const playerNameToId = new Map<string, number>();
-    for (const id of [...team1PlayerIds, ...team2PlayerIds]) {
-      const name = players.find(p => p.id === id)?.name ?? '';
-      if (name) playerNameToId.set(name, id);
-    }
+    // PICK/FINALIZATION phase: apply picks
+    if (lcuPhase !== 'BAN_PICK' || (lcuBans1.length + lcuBans2.length > 0 && team1Bans.every(b => b) && team2Bans.every(b => b))) {
+      const applyPicks = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
+        const result: Record<number, string> = {};
+        lcuPicks.forEach((p, i) => {
+          // Only apply picks that have a locked champion or are in pick actions (not hover during ban)
+          if (p.champId <= 0) return;
+          const champStrId = champKeyMap.get(p.champId);
+          if (!champStrId) return;
+          if (p.alias && playerNameToId.has(p.alias)) {
+            result[playerNameToId.get(p.alias)!] = champStrId;
+          } else if (i < fallbackIds.length) {
+            result[fallbackIds[i]] = champStrId;
+          }
+        });
+        return result;
+      };
 
-    const buildTeamFromLcu = (lcuPicks: typeof state.team1Picks) => {
-      const sorted = [...lcuPicks].sort((a, b) => a.cellId - b.cellId);
-      const ids: number[] = [];
-      for (const p of sorted) {
-        if (p.alias && playerNameToId.has(p.alias)) {
-          ids.push(playerNameToId.get(p.alias)!);
-        }
+      const picks1 = applyPicks(state.team1Picks, team1PlayerIds);
+      const picks2 = applyPicks(state.team2Picks, team2PlayerIds);
+
+      if (Object.keys(picks1).length > 0 || Object.keys(picks2).length > 0) {
+        setPicks(prev => ({ ...prev, ...picks1, ...picks2 }));
+        setPhase('pick');
       }
-      return ids;
-    };
-
-    if (state.team1Picks.some(p => p.alias) || state.team2Picks.some(p => p.alias)) {
-      const lcuT1 = buildTeamFromLcu(state.team1Picks);
-      const lcuT2 = buildTeamFromLcu(state.team2Picks);
-
-      // Fill unmatched players into their original teams
-      const matched = new Set([...lcuT1, ...lcuT2]);
-      for (const id of team1PlayerIds) {
-        if (!matched.has(id)) lcuT1.push(id);
-      }
-      for (const id of team2PlayerIds) {
-        if (!matched.has(id)) lcuT2.push(id);
-      }
-
-      const t1Changed = JSON.stringify(lcuT1) !== JSON.stringify(team1PlayerIds);
-      const t2Changed = JSON.stringify(lcuT2) !== JSON.stringify(team2PlayerIds);
-      if ((t1Changed || t2Changed) && onReorderTeams) {
-        onReorderTeams(lcuT1, lcuT2);
-      }
-    }
-
-    // Apply picks: match by alias
-    const applyPicks = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
-      const result: Record<number, string> = {};
-      lcuPicks.forEach((p, i) => {
-        if (p.champId <= 0) return;
-        const champStrId = champKeyMap.get(p.champId);
-        if (!champStrId) return;
-        if (p.alias && playerNameToId.has(p.alias)) {
-          result[playerNameToId.get(p.alias)!] = champStrId;
-        } else if (i < fallbackIds.length) {
-          result[fallbackIds[i]] = champStrId;
-        }
-      });
-      return result;
-    };
-
-    const picks1 = applyPicks(state.team1Picks, team1PlayerIds);
-    const picks2 = applyPicks(state.team2Picks, team2PlayerIds);
-
-    if (Object.keys(picks1).length > 0 || Object.keys(picks2).length > 0) {
-      setPicks(prev => ({ ...prev, ...picks1, ...picks2 }));
-      setPhase('pick');
     }
 
     // Auto lock-in: match by alias first, then by position fallback
