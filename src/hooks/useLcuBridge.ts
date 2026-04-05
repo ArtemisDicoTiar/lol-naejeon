@@ -86,5 +86,19 @@ export function useLcuBridge() {
     };
   }, []);
 
-  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive };
+  const sendToClient = useCallback((msg: Record<string, unknown>) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(msg));
+    }
+  }, []);
+
+  const hoverChampion = useCallback((championNumericId: number) => {
+    sendToClient({ type: 'hoverChampion', championNumericId });
+  }, [sendToClient]);
+
+  const lockInChampion = useCallback((championNumericId: number) => {
+    sendToClient({ type: 'lockInChampion', championNumericId });
+  }, [sendToClient]);
+
+  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive, hoverChampion, lockInChampion };
 }

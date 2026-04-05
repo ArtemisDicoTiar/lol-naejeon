@@ -41,12 +41,89 @@ wss.on('connection', (ws) => {
     clients.delete(ws);
     console.log(`🌐 웹앱 연결 해제 (현재 ${clients.size}개)`);
   });
+  // Handle messages from web app
+  ws.on('message', async (msgBuffer) => {
+    try {
+      const msg = JSON.parse(msgBuffer.toString());
+      if (msg.type === 'hoverChampion') {
+        await lcuHoverChampion(msg.championNumericId);
+      } else if (msg.type === 'lockInChampion') {
+        await lcuLockInChampion(msg.championNumericId);
+      }
+    } catch {}
+  });
 });
 
 function broadcast(data) {
   const msg = JSON.stringify(data);
   for (const client of clients) {
     try { client.send(msg); } catch {}
+  }
+}
+
+// --- LCU Write: hover/lock-in champion for current user ---
+async function findMyPickAction() {
+  if (!credentials) return null;
+  try {
+    const resp = await createHttp1Request({ method: 'GET', url: '/lol-champ-select/v1/session' }, credentials);
+    if (resp.status !== 200) return null;
+    const data = resp.json();
+    const myCell = (data.myTeam || []).find(m => m.summonerId > 0)?.cellId;
+    if (myCell === undefined) return null;
+
+    // Find my current pick action (not completed)
+    for (const group of (data.actions || [])) {
+      for (const action of group) {
+        if (action.type === 'pick' && action.actorCellId === myCell && !action.completed) {
+          return action.id;
+        }
+      }
+    }
+    // If all completed, find last pick action
+    for (const group of [...(data.actions || [])].reverse()) {
+      for (const action of group) {
+        if (action.type === 'pick' && action.actorCellId === myCell) {
+          return action.id;
+        }
+      }
+    }
+  } catch {}
+  return null;
+}
+
+async function lcuHoverChampion(championId) {
+  const actionId = await findMyPickAction();
+  if (actionId === null) { console.log('⚠️ 픽 액션을 찾을 수 없음'); return; }
+  try {
+    await createHttp1Request({
+      method: 'PATCH',
+      url: `/lol-champ-select/v1/session/actions/${actionId}`,
+      body: { championId },
+    }, credentials);
+    console.log(`🎯 호버 → champId ${championId}`);
+  } catch (e) {
+    console.log(`⚠️ 호버 실패: ${e}`);
+  }
+}
+
+async function lcuLockInChampion(championId) {
+  const actionId = await findMyPickAction();
+  if (actionId === null) { console.log('⚠️ 픽 액션을 찾을 수 없음'); return; }
+  try {
+    // First hover, then lock in
+    await createHttp1Request({
+      method: 'PATCH',
+      url: `/lol-champ-select/v1/session/actions/${actionId}`,
+      body: { championId },
+    }, credentials);
+    await createHttp1Request({
+      method: 'POST',
+      url: `/lol-champ-select/v1/session/actions/${actionId}/complete`,
+      body: {},
+    }, credentials);
+    console.log(`🔒 락인 → champId ${championId}`);
+  } catch (e) {
+    console.log(`⚠️ 락인 실패: ${e}`);
   }
 }
 

@@ -10,7 +10,7 @@ import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { useLcuContext } from '@/App';
+import { useLcuContext, useIdentityContext } from '@/App';
 
 interface BanPickScreenProps {
   format: '3v3' | '3v4';
@@ -36,6 +36,7 @@ export function BanPickScreen({
   format, team1PlayerIds, team2PlayerIds, players, champions,
   fierlessBans, proficiencies, onConfirm, onBack, onReorderTeams,
 }: BanPickScreenProps) {
+  const { userId } = useIdentityContext();
   const team1Size = team1PlayerIds.length;
   const team2Size = team2PlayerIds.length;
 
@@ -73,7 +74,15 @@ export function BanPickScreen({
         setChampKeyMap(map);
       })
       .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reverse map: string champion ID → numeric ID (for sending to LCU)
+  const champIdToNumeric = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [num, str] of champKeyMap) map.set(str, num);
+    return map;
+  }, [champKeyMap]);
 
   // Resume LCU sync when a new champ select starts (different state from what caused pause)
   useEffect(() => {
@@ -379,6 +388,11 @@ export function BanPickScreen({
       advanceBanSlot(activeSlot.team, activeSlot.index);
     } else {
       setPicks((prev) => ({ ...prev, [activeSlot.playerId]: champId }));
+      // If this is my pick, send to LoL client
+      if (lcu.connected && activeSlot.playerId === userId) {
+        const numId = champIdToNumeric.get(champId);
+        if (numId) lcu.hoverChampion(numId);
+      }
       advancePickSlot(activeSlot.playerId);
     }
   };
@@ -472,6 +486,11 @@ export function BanPickScreen({
   const lockPick = (playerId: number) => {
     if (!picks[playerId]) return;
     setLockedPicks((prev) => new Set(prev).add(playerId));
+    // If this is my pick, lock in on LoL client too
+    if (lcu.connected && playerId === userId) {
+      const numId = champIdToNumeric.get(picks[playerId]);
+      if (numId) lcu.lockInChampion(numId);
+    }
     advancePickSlot(playerId);
   };
 
