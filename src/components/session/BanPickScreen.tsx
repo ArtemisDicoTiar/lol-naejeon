@@ -645,6 +645,22 @@ export function BanPickScreen({
     const teamColor = team === 1 ? 'blue' : 'red';
     const bgClass = team === 1 ? 'bg-blue-950/20 border-blue-900/40' : 'bg-red-950/20 border-red-900/40';
 
+    // Compute counter roles based on opponent picks
+    const oppPicks = team === 1 ? team2Picks : team1Picks;
+    const oppRoles = oppPicks.map((cid) => champions.find((c) => c.id === cid)?.aramRole).filter(Boolean);
+    const _pokeCount = oppRoles.filter((r) => r === 'poke').length;
+    const _engageCount = oppRoles.filter((r) => r === 'engage' || r === 'tank').length;
+    const _sustainCount = oppRoles.filter((r) => r === 'sustain' || r === 'utility').length;
+    let counterRoles: string[] = [];
+    if (_pokeCount >= 2) counterRoles = ['engage', 'tank'];
+    else if (_engageCount >= 2) counterRoles = ['sustain', 'utility'];
+    else if (_sustainCount >= 2) counterRoles = ['poke'];
+    const counterChampIds = new Set(
+      oppPicks.length > 0
+        ? availableChampions.filter(c => counterRoles.includes(c.aramRole)).map(c => c.id)
+        : []
+    );
+
     return (
       <div className={`w-[360px] shrink-0 rounded-lg border ${bgClass} p-3 space-y-3 overflow-y-auto max-h-[calc(100vh-180px)]`}>
         {/* Team Header */}
@@ -773,33 +789,53 @@ export function BanPickScreen({
           </div>
         )}
 
-        {/* Counter Picks — show when opponent has picks */}
+        {/* Counter Picks — show actual counter champions */}
         {phase === 'pick' && (() => {
           const oppPicks = team === 1 ? team2Picks : team1Picks;
           if (oppPicks.length === 0) return null;
-          // Determine opponent comp archetype for counter suggestion
+
           const oppRoles = oppPicks.map((cid) => champions.find((c) => c.id === cid)?.aramRole).filter(Boolean);
           const pokeCount = oppRoles.filter((r) => r === 'poke').length;
           const engageCount = oppRoles.filter((r) => r === 'engage' || r === 'tank').length;
           const sustainCount = oppRoles.filter((r) => r === 'sustain' || r === 'utility').length;
-          let counterType = '밸런스';
+
+          let counterRole: string[] = [];
           let counterTip = '';
-          if (pokeCount >= 2) { counterType = '인게이지'; counterTip = '상대 포크 다수 → 인게이지로 카운터'; }
-          else if (engageCount >= 2) { counterType = '서스테인'; counterTip = '상대 인게이지 다수 → 서스테인으로 카운터'; }
-          else if (sustainCount >= 2) { counterType = '포크'; counterTip = '상대 서스테인 다수 → 포크로 카운터'; }
-          else { counterTip = '상대 밸런스 조합 → 유연한 대응 추천'; }
+          if (pokeCount >= 2) { counterRole = ['engage', 'tank']; counterTip = '상대 포크 다수 → 인게이지로 카운터'; }
+          else if (engageCount >= 2) { counterRole = ['sustain', 'utility']; counterTip = '상대 인게이지 다수 → 서스테인으로 카운터'; }
+          else if (sustainCount >= 2) { counterRole = ['poke']; counterTip = '상대 서스테인 다수 → 포크로 카운터'; }
+          else { counterRole = ['engage', 'poke', 'dps']; counterTip = '상대 밸런스 조합 → 유연한 대응 추천'; }
+
+          // Find counter champions from available pool
+          const counterChamps = availableChampions
+            .filter(c => counterRole.includes(c.aramRole) && !pickedIds.has(c.id))
+            .sort((a, b) => {
+              const tierOrder: Record<string, number> = { S: 0, A: 1, B: 2, C: 3, D: 4 };
+              return (tierOrder[a.aramTier] ?? 3) - (tierOrder[b.aramTier] ?? 3);
+            })
+            .slice(0, 5);
+
           return (
             <div className="p-2 bg-lol-dark/40 rounded border border-lol-border/50">
-              <div className="text-[10px] text-lol-gold-light/50 mb-1">상대 카운터</div>
-              <div className="flex flex-wrap gap-1 mb-1.5">
-                {oppPicks.map((cid) => {
-                  const c = champions.find((ch) => ch.id === cid);
-                  return c ? <ChampionIcon key={cid} champion={c} size="sm" /> : null;
-                })}
+              <div className="text-[10px] text-lol-gold-light/50 mb-1">카운터 추천</div>
+              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                {counterChamps.map((c) => (
+                  <div key={c.id} onClick={() => {
+                    if (activeSlot?.type === 'pick') {
+                      setPicks(prev => ({ ...prev, [activeSlot.playerId]: c.id }));
+                      if (lcu.connected && activeSlot.playerId === userId) {
+                        const numId = champIdToNumeric.get(c.id);
+                        if (numId) lcu.hoverChampion(numId);
+                      }
+                    }
+                  }} className="cursor-pointer relative">
+                    <ChampionIcon champion={c} size="sm" />
+                    <span className="absolute -top-1 -right-1 text-[7px] bg-lol-gold text-lol-dark rounded-full w-3 h-3 flex items-center justify-center font-bold">C</span>
+                  </div>
+                ))}
               </div>
               <div className="text-[10px]">
-                <span className="text-lol-gold font-medium">{counterType}</span>
-                <span className="text-lol-gold-light/40 ml-1">{counterTip}</span>
+                <span className="text-lol-gold-light/40">{counterTip}</span>
               </div>
             </div>
           );
@@ -961,6 +997,9 @@ export function BanPickScreen({
                             <ChampionIcon champion={c} size="base"
                               selected={picks[pid] === c.id}
                               disabled={isUnavailable} />
+                            {counterChampIds.has(c.id) && !isUnavailable && (
+                              <span className="absolute -top-1 -right-1 text-[7px] bg-lol-gold text-lol-dark rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold leading-none">C</span>
+                            )}
                             {cs && (cs.wins + cs.losses > 0) && (
                               <div className={`absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[8px] font-mono font-bold px-0.5 rounded bg-lol-dark/80 ${
                                 cs.winrate >= 60 ? 'text-prof-high' : cs.winrate >= 40 ? 'text-lol-gold-light/70' : 'text-prof-low'
