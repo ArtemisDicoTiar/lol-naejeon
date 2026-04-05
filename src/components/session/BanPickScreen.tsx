@@ -397,6 +397,16 @@ export function BanPickScreen({
     return getPlayerTopChampions(playerId, profMap, availableChampions.filter((c) => !pickedIds.has(c.id) || picks[playerId] === c.id), 7);
   };
 
+  // Track which ban slots are locked
+  const [lockedBans, setLockedBans] = useState<Set<string>>(new Set()); // "team-index" keys
+
+  const isBanLocked = (team: 1 | 2, index: number) => lockedBans.has(`${team}-${index}`);
+
+  const lockBan = (team: 1 | 2, index: number) => {
+    setLockedBans(prev => new Set(prev).add(`${team}-${index}`));
+    advanceBanSlot(team, index);
+  };
+
   // Handle champion click from grid
   const handleChampionSelect = (champId: string) => {
     if (!activeSlot) return;
@@ -405,7 +415,7 @@ export function BanPickScreen({
       const bans = [...getTeamBans(activeSlot.team)];
       bans[activeSlot.index] = champId;
       setTeamBans(activeSlot.team, bans);
-      advanceBanSlot(activeSlot.team, activeSlot.index);
+      // Don't advance — stay on same slot until lock-in
     } else {
       setPicks((prev) => ({ ...prev, [activeSlot.playerId]: champId }));
       // If this is my pick, send to LoL client
@@ -422,6 +432,7 @@ export function BanPickScreen({
     setTeam2Bans(Array(team2PlayerIds.length).fill(''));
     setPicks({});
     setLockedPicks(new Set());
+    setLockedBans(new Set());
     setSwapFirst(null);
     setPhase('ban');
     setActiveSlot({ type: 'ban', team: 1, index: 0 });
@@ -446,6 +457,7 @@ export function BanPickScreen({
     const bans = [...getTeamBans(activeSlot.team)];
     bans[activeSlot.index] = SKIP_BAN;
     setTeamBans(activeSlot.team, bans);
+    setLockedBans(prev => new Set(prev).add(`${activeSlot.team}-${activeSlot.index}`));
     advanceBanSlot(activeSlot.team, activeSlot.index);
   };
 
@@ -593,35 +605,49 @@ export function BanPickScreen({
               const isActive = activeSlot?.type === 'ban' && activeSlot.team === team && activeSlot.index === idx;
               const champ = banId && banId !== SKIP_BAN ? champions.find((c) => c.id === banId) : null;
               const isSkipped = banId === SKIP_BAN;
+              const locked = isBanLocked(team, idx);
               return (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    if (isSkipped || champ) {
-                      const newBans = [...bans]; newBans[idx] = '';
-                      setTeamBans(team, newBans);
-                    }
-                    setActiveSlot({ type: 'ban', team, index: idx });
-                    setPhase('ban');
-                  }}
-                  className={`cursor-pointer w-10 h-10 rounded border-2 flex items-center justify-center transition-all ${
-                    isActive ? 'border-lol-gold shadow-[0_0_8px_rgba(200,155,60,0.5)]'
-                    : champ ? 'border-red-800/60'
-                    : isSkipped ? 'border-gray-700 bg-gray-800/30'
-                    : 'border-dashed border-gray-600 bg-lol-dark/30'
-                  }`}
-                >
-                  {champ ? <img src={champ.imageUrl} className="w-full h-full rounded opacity-50 grayscale" />
-                   : isSkipped ? <span className="text-[10px] text-gray-500">없음</span>
-                   : <span className="text-gray-600 text-lg">+</span>}
+                <div key={idx} className="flex flex-col items-center gap-0.5">
+                  <div
+                    onClick={() => {
+                      if (locked) return;
+                      if (isSkipped || champ) {
+                        const newBans = [...bans]; newBans[idx] = '';
+                        setTeamBans(team, newBans);
+                        setLockedBans(prev => { const n = new Set(prev); n.delete(`${team}-${idx}`); return n; });
+                      }
+                      setActiveSlot({ type: 'ban', team, index: idx });
+                      setPhase('ban');
+                    }}
+                    className={`cursor-pointer w-10 h-10 rounded border-2 flex items-center justify-center transition-all ${
+                      locked ? 'border-red-600/80 opacity-70'
+                      : isActive ? 'border-lol-gold shadow-[0_0_8px_rgba(200,155,60,0.5)]'
+                      : champ ? 'border-red-800/60'
+                      : isSkipped ? 'border-gray-700 bg-gray-800/30'
+                      : 'border-dashed border-gray-600 bg-lol-dark/30'
+                    }`}
+                  >
+                    {champ ? <img src={champ.imageUrl} className={`w-full h-full rounded ${locked ? 'opacity-50 grayscale' : ''}`} />
+                     : isSkipped ? <span className="text-[10px] text-gray-500">없음</span>
+                     : <span className="text-gray-600 text-lg">+</span>}
+                  </div>
+                  {/* Ban lock-in button */}
+                  {champ && !locked && isActive && (
+                    <button onClick={(e) => { e.stopPropagation(); lockBan(team, idx); }}
+                      className="cursor-pointer text-[8px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-300 border border-red-800/40 hover:bg-red-900/50">
+                      확정
+                    </button>
+                  )}
                 </div>
               );
             })}
           </div>
           {phase === 'ban' && activeSlot?.type === 'ban' && activeSlot.team === team && (
-            <button onClick={handleSkipBan} className="cursor-pointer text-[10px] text-gray-500 hover:text-gray-400 mt-1">
-              밴 없음
-            </button>
+            <div className="flex gap-2 mt-1">
+              <button onClick={handleSkipBan} className="cursor-pointer text-[10px] text-gray-500 hover:text-gray-400">
+                밴 없음
+              </button>
+            </div>
           )}
         </div>
 
