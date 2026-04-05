@@ -543,46 +543,49 @@ let timerInterval = null;
 
 function startTimerPolling() {
   stopTimerPolling();
-  // LCU gives a static adjustedTimeLeftInPhase that doesn't tick down.
-  // We capture it once per phase and count down locally.
+  // LCU gives a static adjustedTimeLeftInPhase that resets each poll.
+  // Capture once per phase, then count down locally without re-polling the timer.
   let currentPhase = '';
-  let phaseEndTime = 0; // Date.now() + timeLeft
+  let phaseEndTime = 0;
   let totalTime = 0;
-  let lastTimerLog = 0;
 
-  timerInterval = setInterval(async () => {
-    if (!credentials) return;
+  // One-time fetch to capture initial phase & timer
+  const capturePhase = async () => {
     try {
       const resp = await createHttp1Request({ method: 'GET', url: '/lol-champ-select/v1/session' }, credentials);
       if (resp.status === 200) {
         const data = resp.json();
         const timer = data.timer || {};
         const phase = timer.phase || 'UNKNOWN';
-        const rawTimeLeft = timer.adjustedTimeLeftInPhase ?? timer.timeLeftInPhase ?? 0;
-        const rawTotal = timer.totalTimeInPhase ?? 0;
-
-        // Detect phase change → recalculate end time
-        if (phase !== currentPhase || Math.abs(rawTimeLeft - (phaseEndTime - Date.now())) > 3000) {
+        if (phase !== currentPhase) {
           currentPhase = phase;
+          const rawTimeLeft = timer.adjustedTimeLeftInPhase ?? timer.timeLeftInPhase ?? 0;
           phaseEndTime = Date.now() + rawTimeLeft;
-          totalTime = Math.ceil(rawTotal / 1000);
+          totalTime = Math.ceil((timer.totalTimeInPhase ?? 0) / 1000);
+          console.log(`   ⏱️ 페이즈 변경: ${phase} (${Math.ceil(rawTimeLeft/1000)}s)`);
         }
-
-        // Count down locally from captured end time
-        const timeLeft = Math.max(0, Math.ceil((phaseEndTime - Date.now()) / 1000));
-
-        if (Date.now() - lastTimerLog > 900) {
-          console.log(`   ⏱️ ${phase} ${timeLeft}s / ${totalTime}s`);
-          lastTimerLog = Date.now();
-        }
-        broadcast({ type: 'timerUpdate', phase, timeLeft, totalTime });
       }
     } catch {}
+  };
+
+  await capturePhase();
+
+  // Check for phase changes every 2 seconds (not timer value, just phase name)
+  phaseCheckInterval = setInterval(capturePhase, 2000);
+
+  // Tick down locally every second
+  timerInterval = setInterval(() => {
+    const timeLeft = Math.max(0, Math.ceil((phaseEndTime - Date.now()) / 1000));
+    console.log(`   ⏱️ ${currentPhase} ${timeLeft}s / ${totalTime}s`);
+    broadcast({ type: 'timerUpdate', phase: currentPhase, timeLeft, totalTime });
   }, 1000);
 }
 
+let phaseCheckInterval = null;
+
 function stopTimerPolling() {
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  if (phaseCheckInterval) { clearInterval(phaseCheckInterval); phaseCheckInterval = null; }
 }
 
 process.on('SIGINT', () => {
