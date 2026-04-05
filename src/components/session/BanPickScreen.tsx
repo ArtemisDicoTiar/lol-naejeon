@@ -910,7 +910,16 @@ export function BanPickScreen({
                           highlightPlayerIds={team1PlayerIds.includes(pid) ? team2PlayerIds : team1PlayerIds}
                           disabled={isUnavailable}>
                           <div
-                            onClick={(e) => { e.stopPropagation(); if (!isLocked) setPicks((prev) => ({ ...prev, [pid]: c.id })); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isLocked) {
+                                setPicks((prev) => ({ ...prev, [pid]: c.id }));
+                                if (lcu.connected && pid === userId) {
+                                  const numId = champIdToNumeric.get(c.id);
+                                  if (numId) lcu.hoverChampion(numId);
+                                }
+                              }
+                            }}
                             className="cursor-pointer relative">
                             <ChampionIcon champion={c} size="base"
                               selected={picks[pid] === c.id}
