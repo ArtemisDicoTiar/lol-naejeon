@@ -541,7 +541,7 @@ function stateChanged(prev, next) {
 // --- Timer polling: send timer updates every second during champ select ---
 let timerInterval = null;
 
-function startTimerPolling() {
+async function startTimerPolling() {
   stopTimerPolling();
   // LCU gives a static adjustedTimeLeftInPhase that resets each poll.
   // Capture once per phase, then count down locally without re-polling the timer.
