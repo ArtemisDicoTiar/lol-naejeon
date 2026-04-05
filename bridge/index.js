@@ -328,12 +328,14 @@ async function connectToLCU() {
           console.log('⚡ 챔피언 셀렉트 종료');
           broadcast({ type: 'champSelectEnd' });
           lastState = null;
+          stopTimerPolling();
           return;
         }
 
         // Cache lobby members on first champ select event
         if (!lastState) {
           await cacheLobbyMembers();
+          startTimerPolling();
         }
 
         const state = await parseChampSelectState(data);
@@ -530,10 +532,39 @@ async function parseChampSelectState(data) {
 
 function stateChanged(prev, next) {
   if (!prev) return true;
-  return JSON.stringify(prev) !== JSON.stringify(next);
+  // Compare without timeLeft (timer is polled separately)
+  const { timeLeft: _a, ...prevRest } = prev;
+  const { timeLeft: _b, ...nextRest } = next;
+  return JSON.stringify(prevRest) !== JSON.stringify(nextRest);
+}
+
+// --- Timer polling: send timer updates every second during champ select ---
+let timerInterval = null;
+
+function startTimerPolling() {
+  stopTimerPolling();
+  timerInterval = setInterval(async () => {
+    if (!credentials) return;
+    try {
+      const resp = await createHttp1Request({ method: 'GET', url: '/lol-champ-select/v1/session' }, credentials);
+      if (resp.status === 200) {
+        const data = resp.json();
+        const timer = data.timer || {};
+        const phase = timer.phase || 'UNKNOWN';
+        const timeLeft = Math.ceil((timer.adjustedTimeLeftInPhase ?? 0) / 1000);
+        const totalTime = Math.ceil((timer.totalTimeInPhase ?? 0) / 1000);
+        broadcast({ type: 'timerUpdate', phase, timeLeft, totalTime });
+      }
+    } catch {}
+  }, 1000);
+}
+
+function stopTimerPolling() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 }
 
 process.on('SIGINT', () => {
+  stopTimerPolling();
   console.log('\n👋 브릿지 종료');
   wss.close();
   process.exit(0);
