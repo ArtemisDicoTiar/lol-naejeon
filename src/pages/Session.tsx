@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@/hooks/useSession';
 import { useChampions } from '@/hooks/useChampions';
@@ -7,6 +7,10 @@ import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { db, type GamePick, type GameBan, type Player } from '@/lib/db';
 import { useIdentityContext, useLcuContext } from '@/App';
+import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
+import type { Champion } from '@/lib/db';
+import { championTraits, type MechanicTag } from '@/data/champion-tags';
+import { getTagLabel, getTagColor } from '@/data/tag-display';
 
 export function Session() {
   const navigate = useNavigate();
@@ -17,8 +21,10 @@ export function Session() {
   const [gamePicks, setGamePicks] = useState<Record<number, GamePick[]>>({});
   const [gameBansMap, setGameBansMap] = useState<Record<number, GameBan[]>>({});
   const [players, setPlayers] = useState<Player[]>([]);
+  const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
 
   useEffect(() => { db.players.toArray().then(setPlayers); }, []);
+  useEffect(() => { computeWinrateStats().then(setWrStats); }, [games]);
 
   // Auto-navigate to new game when LCU detects champion select
   useEffect(() => {
@@ -125,11 +131,12 @@ export function Session() {
           <p className="text-lol-gold-light/50 text-center py-4">진행된 게임이 없습니다.</p>
         ) : (
           <div className="space-y-4">
-            {games.map((game) => {
+            {games.map((game, idx) => {
               const picks = gamePicks[game.id!] ?? [];
               const bans = gameBansMap[game.id!] ?? [];
               const team1 = picks.filter((p) => p.team === 1);
               const team2 = picks.filter((p) => p.team === 2);
+              const isLatest = idx === games.length - 1;
               return (
                 <div key={game.id} className="p-4 bg-lol-blue rounded border border-lol-border">
                   {bans.length > 0 && (
@@ -168,6 +175,15 @@ export function Session() {
                       }}>삭제</Button>
                     </div>
                   </div>
+                  {isLatest && wrStats && picks.length > 0 && (
+                    <ActiveGameStats
+                      team1={team1}
+                      team2={team2}
+                      wrStats={wrStats}
+                      getChampion={getChampion}
+                      getPlayer={getPlayer}
+                    />
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     {[{ team: team1, num: 1 }, { team: team2, num: 2 }].map(({ team, num }) => (
                       <div key={num} className={`p-2 rounded ${game.winningTeam === num ? 'bg-prof-high/10 border border-prof-high/30' : 'bg-lol-dark/50'}`}>
@@ -196,6 +212,98 @@ export function Session() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+interface ActiveGameStatsProps {
+  team1: GamePick[];
+  team2: GamePick[];
+  wrStats: WinrateStats;
+  getChampion: (id: string) => Champion | undefined;
+  getPlayer: (id: number) => Player | undefined;
+}
+
+function ActiveGameStats({ team1, team2, wrStats, getChampion, getPlayer }: ActiveGameStatsProps) {
+  const stats = useMemo(() => {
+    const buildTeamData = (team: GamePick[]) => {
+      const assignments = team.map((p) => {
+        const champ = getChampion(p.championId);
+        const player = getPlayer(p.playerId);
+        return {
+          playerId: p.playerId,
+          playerName: player?.name ?? '?',
+          championId: p.championId,
+          championName: champ?.nameKo ?? p.championId,
+          proficiency: '중' as const,
+        };
+      });
+      const tagCounts: Record<string, number> = {};
+      for (const a of assignments) {
+        const t = championTraits[a.championId];
+        if (!t) continue;
+        for (const m of t.mechanics) tagCounts[m] = (tagCounts[m] ?? 0) + 1;
+      }
+      const champStats = assignments.map((a) => {
+        const cs = wrStats.champOverallStats[a.championId];
+        const pcs = wrStats.playerChampStats.find(
+          (s) => s.playerId === a.playerId && s.championId === a.championId,
+        );
+        return { ...a, champOverall: cs, playerChamp: pcs };
+      });
+      return { assignments, tagCounts, champStats };
+    };
+
+    const t1 = buildTeamData(team1);
+    const t2 = buildTeamData(team2);
+    const t1WR = estimateCompWinrate(t1.assignments, wrStats, 0.5);
+    const t2WR = estimateCompWinrate(t2.assignments, wrStats, 0.5);
+    return { t1, t2, t1WR, t2WR };
+  }, [team1, team2, wrStats, getChampion, getPlayer]);
+
+  const renderTeam = (label: string, color: string, data: typeof stats.t1, wr: number) => {
+    const tags = Object.entries(data.tagCounts).sort((a, b) => b[1] - a[1]);
+    return (
+      <div className={`p-3 rounded border ${color}`}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium text-lol-gold-light">{label}</span>
+          <span className="text-sm font-bold text-lol-gold">예상 승률 {wr.toFixed(1)}%</span>
+        </div>
+        {data.champStats.length > 0 && (
+          <div className="space-y-0.5 mb-2">
+            {data.champStats.map((c) => (
+              <div key={c.playerId} className="flex items-center justify-between text-xs">
+                <span className="text-lol-gold-light/80 truncate">{c.playerName} · {c.championName}</span>
+                <span className="text-lol-gold-light/60 ml-2 whitespace-nowrap">
+                  {c.playerChamp && c.playerChamp.wins + c.playerChamp.losses > 0
+                    ? `본인 ${c.playerChamp.winrate.toFixed(0)}% (${c.playerChamp.wins}/${c.playerChamp.losses})`
+                    : '본인 -'}
+                  {' / '}
+                  {c.champOverall && c.champOverall.wins + c.champOverall.losses > 0
+                    ? `전체 ${c.champOverall.winrate.toFixed(0)}%`
+                    : '전체 -'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {tags.map(([tag, n]) => (
+              <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded ${getTagColor(tag as MechanicTag)}`}>
+                {getTagLabel(tag as MechanicTag)}{n > 1 ? `×${n}` : ''}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-3 mb-3 pb-3 border-b border-lol-border/50">
+      {renderTeam('Team 1', 'bg-blue-950/20 border-blue-900/30', stats.t1, stats.t1WR)}
+      {renderTeam('Team 2', 'bg-red-950/20 border-red-900/30', stats.t2, stats.t2WR)}
     </div>
   );
 }

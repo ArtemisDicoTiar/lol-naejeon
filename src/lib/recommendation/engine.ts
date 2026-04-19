@@ -354,15 +354,21 @@ export function generatePerPlayerBanRecs(
   for (const pid of opponentPlayerIds) {
     const profMap = proficiencies[pid] ?? new Map();
     const recs: BanRecommendation[] = [];
+    const fallbackRecs: BanRecommendation[] = []; // meta-based for when no proficiency data
 
     for (const champ of allChampions) {
       if (bannedSet.has(champ.id)) continue;
       const level = profMap.get(champ.id);
       const profScore = PROF_THREAT[level ?? ''] ?? 0;
-      if (profScore === 0) continue;
 
       const tierW = TIER_WEIGHT[champ.aramTier] ?? 1;
       const wrBonus = Math.max(-0.5, Math.min(0.5, (champ.aramWinrate - 50) * 0.1));
+
+      // Always compute meta-based fallback score (used if no proficiency data)
+      const metaScore = (tierW + wrBonus) / 3.0;
+      fallbackRecs.push({ championId: champ.id, championName: champ.nameKo, score: metaScore, reason: 'ARAM 메타 위협' });
+
+      if (profScore === 0) continue;
 
       // Factor 1: Proficiency threat (normalized to ~0-1)
       const profThreat = (profScore * tierW + wrBonus) / 8.0; // max ~7.5+0.5=8
@@ -390,8 +396,14 @@ export function generatePerPlayerBanRecs(
       recs.push({ championId: champ.id, championName: champ.nameKo, score, reason });
     }
 
-    recs.sort((a, b) => b.score - a.score);
-    result[pid] = recs.slice(0, 7);
+    // If no proficiency-based recs, fall back to meta-based
+    if (recs.length === 0) {
+      fallbackRecs.sort((a, b) => b.score - a.score);
+      result[pid] = fallbackRecs.slice(0, 7);
+    } else {
+      recs.sort((a, b) => b.score - a.score);
+      result[pid] = recs.slice(0, 7);
+    }
   }
 
   return result;

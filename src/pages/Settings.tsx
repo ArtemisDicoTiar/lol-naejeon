@@ -118,6 +118,50 @@ export function Settings() {
       )}
 
       {isMaster && (
+        <Card title="CSV 주간 덤프">
+          <p className="text-sm text-lol-gold-light/60 mb-3">
+            세션 기록을 CSV로 변환해 GitHub 리포에 push합니다. 매주 일요일 자정 자동 실행되며, 아래 버튼으로 수동 트리거할 수 있습니다.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={async () => {
+              setMessage('CSV 덤프 중...');
+              try {
+                const res = await fetch('/api/dump-csv');
+                const data = await res.json();
+                if (data.success) {
+                  setMessage(`CSV 덤프 완료: ${data.rows}행${data.url ? `\n${data.url}` : ''}`);
+                } else {
+                  setMessage(`덤프 실패: ${data.error}`);
+                }
+              } catch (e) {
+                setMessage(`덤프 실패: ${(e as Error).message}`);
+              }
+            }}>
+              지금 덤프하기
+            </Button>
+            <Button variant="ghost" onClick={async () => {
+              try {
+                const res = await fetch('/api/dump-csv?dryRun=true');
+                const csv = await res.text();
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `lol_dataset_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+                setMessage('CSV 미리보기 다운로드 완료');
+              } catch (e) {
+                setMessage(`미리보기 실패: ${(e as Error).message}`);
+              }
+            }}>
+              CSV 미리보기 다운로드
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {isMaster && (
         <Card title="OP.GG 카운터 데이터">
           <p className="text-sm text-lol-gold-light/60 mb-3">
             OP.GG에서 챔피언 카운터 데이터를 가져와 추천 알고리즘에 반영합니다.

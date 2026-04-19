@@ -212,14 +212,13 @@ export function BanPickScreen({
     lcuBans2.forEach((b, i) => { if (b.completed && !newLockedBans.has(`2-${i}`)) { newLockedBans.add(`2-${i}`); banLockChanged = true; } });
     if (banLockChanged) setLockedBans(newLockedBans);
 
-    // Auto-transition to pick phase if all bans are locked
-    if (lcuBans1.length > 0 || lcuBans2.length > 0) {
-      const allBansLocked = [...lcuBans1, ...lcuBans2].every(b => b.completed);
-      if (allBansLocked && (phase === 'ban' || phase === 'planning')) {
-        setPhase('pick');
-        const firstInDraft = draftOrder.find((id) => !picks[id]);
-        setActiveSlot(firstInDraft ? { type: 'pick', playerId: firstInDraft } : null);
-      }
+    // Auto-transition to pick phase ONLY when LCU explicitly says we're past ban (not just because we filled all bans)
+    // This prevents ban recs from disappearing the moment the last ban is locked
+    const lcuPastBan = lcuPhase && lcuPhase !== 'BAN_PICK' && lcuPhase !== 'PLANNING' && lcuPhase !== 'BANNING';
+    if (lcuPastBan && (phase === 'ban' || phase === 'planning')) {
+      setPhase('pick');
+      const firstInDraft = draftOrder.find((id) => !picks[id]);
+      setActiveSlot(firstInDraft ? { type: 'pick', playerId: firstInDraft } : null);
     }
 
     // Apply picks: during any phase except pure BAN_PICK with no completed bans
@@ -345,12 +344,12 @@ export function BanPickScreen({
     const m: Record<number, Map<string, any>> = {};
     for (const pid of team1PlayerIds) { if (mergedProficiencies[pid]) m[pid] = mergedProficiencies[pid]; }
     return m;
-  }, [team1PlayerIds, proficiencies]);
+  }, [team1PlayerIds, mergedProficiencies]);
   const team2OurProfs = useMemo(() => {
     const m: Record<number, Map<string, any>> = {};
     for (const pid of team2PlayerIds) { if (mergedProficiencies[pid]) m[pid] = mergedProficiencies[pid]; }
     return m;
-  }, [team2PlayerIds, proficiencies]);
+  }, [team2PlayerIds, mergedProficiencies]);
 
   const team1BanRecs = useMemo(() => generatePerPlayerBanRecs({
     opponentPlayerIds: team2PlayerIds,
@@ -597,6 +596,13 @@ export function BanPickScreen({
     };
     onConfirm({ bans: banResult, picks });
   };
+
+  // Auto-confirm and navigate when game starts (LCU detected)
+  useEffect(() => {
+    if (lcu.gameStartedAt && allPicked && !lcuPaused) {
+      handleConfirm();
+    }
+  }, [lcu.gameStartedAt]);
 
   // Grid champions filtered
   const gridChampions = useMemo(() => {

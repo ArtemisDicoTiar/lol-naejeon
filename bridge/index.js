@@ -65,6 +65,9 @@ function broadcast(data) {
   }
 }
 
+// --- Lobby snapshot for fallback alias resolution ---
+let lobbySnapshot = { team100: [], team200: [] };
+
 // --- LCU Write: hover/lock-in champion for current user ---
 let mySummonerId = null;
 
@@ -243,6 +246,7 @@ async function cacheLobbyMembers() {
       const lobby = resp.json();
       const team100 = lobby.gameConfig?.customTeam100 || [];
       const team200 = lobby.gameConfig?.customTeam200 || [];
+      lobbySnapshot = { team100: [...team100], team200: [...team200] };
       const allMembers = [...(lobby.members || []), ...team100, ...team200];
 
       for (const m of allMembers) {
@@ -353,6 +357,8 @@ async function connectToLCU() {
         const team100 = data.gameConfig?.customTeam100 || [];
         const team200 = data.gameConfig?.customTeam200 || [];
         const allMembers = [...(data.members || []), ...team100, ...team200];
+        // Save snapshot for fallback alias resolution in champ select
+        lobbySnapshot = { team100: [...team100], team200: [...team200] };
 
         // Debug: log raw member data on first encounter
         for (const m of allMembers) {
@@ -391,11 +397,25 @@ async function connectToLCU() {
           broadcast({ type: 'lobbyUpdate', team1: lobbyTeam1, team2: lobbyTeam2 });
         }
       }
+
+      // Gameflow phase changes: detect game start/end
+      if (uri === '/lol-gameflow/v1/gameflow-phase') {
+        const phase = data;  // payload is just the phase string
+        console.log(`🎮 게임 페이즈: ${phase}`);
+        if (phase === 'InProgress' || phase === 'GameStart') {
+          // Cache lobby once more before game starts
+          await cacheLobbyMembers();
+          broadcast({ type: 'gameStart' });
+        } else if (phase === 'WaitingForStats' || phase === 'EndOfGame' || phase === 'PreEndOfGame') {
+          broadcast({ type: 'gameEnd' });
+        }
+      }
     } catch {}
   });
 
   ws.send(JSON.stringify([5, 'OnJsonApiEvent_lol-champ-select_v1_session']));
   ws.send(JSON.stringify([5, 'OnJsonApiEvent_lol-lobby_v2_lobby']));
+  ws.send(JSON.stringify([5, 'OnJsonApiEvent_lol-gameflow_v1_gameflow-phase']));
 
   // Pre-cache lobby members if already in a lobby
   await cacheLobbyMembers();
@@ -486,11 +506,37 @@ async function parseChampSelectState(data) {
   // Check for completed trades — if trades happened, member.championId is already swapped
   const hasCompletedTrades = (data.trades || []).some(t => t.state === 'COMPLETED');
 
+  // Helper: resolve a member's name/alias with lobby snapshot fallback
+  const resolveWithFallback = async (member, lobbyTeam, posIdx) => {
+    let summoner = await resolveSummoner(member.summonerId);
+    if (summoner?.alias) return summoner;
+
+    // Fallback 1: try to match by summonerId in lobby snapshot
+    const lobbyMatch = lobbyTeam.find(lm => lm.summonerId && lm.summonerId === member.summonerId);
+    if (lobbyMatch) {
+      const name = extractName(lobbyMatch);
+      if (name) {
+        const alias = findAlias(name);
+        return { gameName: name, alias };
+      }
+    }
+    // Fallback 2: position-based match (champ select team order matches lobby team order)
+    if (posIdx >= 0 && posIdx < lobbyTeam.length) {
+      const posMatch = lobbyTeam[posIdx];
+      const name = extractName(posMatch);
+      if (name) {
+        const alias = findAlias(name);
+        return { gameName: name, alias };
+      }
+    }
+    return summoner;
+  };
+
   // Parse Team 1 (Blue) picks
-  for (const member of blueMembers) {
-    const summoner = await resolveSummoner(member.summonerId);
-    // After trades complete, member.championId reflects the swapped state
-    // Before trades, use action champion (includes hover)
+  const blueLobby = myTeamIsBlue ? lobbySnapshot.team100 : lobbySnapshot.team200;
+  for (let i = 0; i < blueMembers.length; i++) {
+    const member = blueMembers[i];
+    const summoner = await resolveWithFallback(member, blueLobby, i);
     const champId = hasCompletedTrades
       ? (member.championId || 0)
       : (cellPickChamp.get(member.cellId) || member.championId || 0);
@@ -506,8 +552,10 @@ async function parseChampSelectState(data) {
   }
 
   // Parse Team 2 (Red) picks
-  for (const member of redMembers) {
-    const summoner = await resolveSummoner(member.summonerId);
+  const redLobby = myTeamIsBlue ? lobbySnapshot.team200 : lobbySnapshot.team100;
+  for (let i = 0; i < redMembers.length; i++) {
+    const member = redMembers[i];
+    const summoner = await resolveWithFallback(member, redLobby, i);
     const champId = hasCompletedTrades
       ? (member.championId || 0)
       : (cellPickChamp.get(member.cellId) || member.championId || 0);

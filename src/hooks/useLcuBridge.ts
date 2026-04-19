@@ -22,6 +22,8 @@ export function useLcuBridge() {
   const [lastState, setLastState] = useState<LcuChampSelectState | null>(null);
   const [lobbyState, setLobbyState] = useState<LcuLobbyState | null>(null);
   const [champSelectActive, setChampSelectActive] = useState(false);
+  const [gameStartedAt, setGameStartedAt] = useState<number | null>(null);
+  const [gameEndedAt, setGameEndedAt] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<number | null>(null);
 
@@ -53,9 +55,13 @@ export function useLcuBridge() {
             setChampSelectActive(true);
             setLastState(prev => {
               if (prev) return { ...prev, phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime };
-              // Create minimal state if none exists yet
               return { phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime, team1Bans: [], team2Bans: [], team1Picks: [], team2Picks: [] };
             });
+          } else if (data.type === 'gameStart') {
+            setGameStartedAt(Date.now());
+            setChampSelectActive(false);
+          } else if (data.type === 'gameEnd') {
+            setGameEndedAt(Date.now());
           }
         } catch {}
       };
@@ -117,5 +123,5 @@ export function useLcuBridge() {
     sendToClient({ type: 'lockInBan', championNumericId });
   }, [sendToClient]);
 
-  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive, hoverChampion, lockInChampion, hoverBan, lockInBan };
+  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive, gameStartedAt, gameEndedAt, hoverChampion, lockInChampion, hoverBan, lockInBan };
 }

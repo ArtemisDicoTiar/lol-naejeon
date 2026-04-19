@@ -35,6 +35,8 @@ interface LcuContextType {
   lastState: LcuChampSelectState | null;
   lobbyState: LcuLobbyState | null;
   champSelectActive: boolean;
+  gameStartedAt: number | null;
+  gameEndedAt: number | null;
   hoverChampion: (championNumericId: number) => void;
   lockInChampion: (championNumericId: number) => void;
   hoverBan: (championNumericId: number) => void;
@@ -44,6 +46,7 @@ interface LcuContextType {
 export const LcuContext = createContext<LcuContextType>({
   connected: false, connect: () => {}, disconnect: () => {},
   lastState: null, lobbyState: null, champSelectActive: false,
+  gameStartedAt: null, gameEndedAt: null,
   hoverChampion: () => {}, lockInChampion: () => {},
   hoverBan: () => {}, lockInBan: () => {},
 });
