@@ -1,7 +1,7 @@
 import { list } from '@vercel/blob';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { computeStatsFromData, estimateCompWinrate } from '../../src/lib/recommendation/winrate-pure';
-import { championTraits } from '../../src/data/champion-tags';
+import { computeStatsFromData, estimateCompWinrate } from '../../src/lib/recommendation/winrate-pure.js';
+import { championTraits } from '../../src/data/champion-tags.js';
 
 const BLOB_NAME = 'lol-naejeon-data.json';
 

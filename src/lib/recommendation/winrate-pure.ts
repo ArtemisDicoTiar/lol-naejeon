@@ -3,7 +3,7 @@ import type {
   PlayerChampionStats,
   ChampionFullStats,
   PlayerOverallStats,
-} from './winrate';
+} from './winrate.js';
 
 interface MinimalAssignment {
   playerId: number;
