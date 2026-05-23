@@ -4,3 +4,4 @@ dist
 .vercel
 .env*.local
 /data/
+src/version.generated.ts

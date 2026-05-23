@@ -3,7 +3,7 @@ import { IdentitySelector } from './IdentitySelector';
 import type { useIdentity } from '@/hooks/useIdentity';
 import type { useLcuBridge } from '@/hooks/useLcuBridge';
 
-const links = [
+export const links = [
   { to: '/', label: '대시보드' },
   { to: '/session', label: '내전 세션' },
   { to: '/players', label: '선수 관리' },
@@ -12,24 +12,6 @@ const links = [
   { to: '/history', label: '기록' },
   { to: '/settings', label: '설정' },
 ];
-
-function buildVersionString(): string {
-  try {
-    const d = new Date(__BUILD_TIME__);
-    // Shift to KST (UTC+9)
-    const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-    const y  = kst.getUTCFullYear();
-    const mo = String(kst.getUTCMonth() + 1).padStart(2, '0');
-    const dy = String(kst.getUTCDate()).padStart(2, '0');
-    const h  = String(kst.getUTCHours()).padStart(2, '0');
-    const mn = String(kst.getUTCMinutes()).padStart(2, '0');
-    return `v0.0.${__GIT_COUNT__} (${__GIT_HASH__}) KST ${y}/${mo}/${dy} ${h}:${mn}`;
-  } catch {
-    return '';
-  }
-}
-
-const VERSION = buildVersionString();
 
 export function Nav({ identity, lcu }: { identity: ReturnType<typeof useIdentity>; lcu: ReturnType<typeof useLcuBridge> }) {
   return (
@@ -100,13 +82,6 @@ export function Nav({ identity, lcu }: { identity: ReturnType<typeof useIdentity
           </div>
         </div>
       </div>
-      {VERSION && (
-        <div className="border-t border-lol-border/30 px-4 py-0.5 text-right">
-          <span className="text-[10px] font-mono text-lol-gold-light/25 select-none">
-            {VERSION}
-          </span>
-        </div>
-      )}
     </nav>
   );
 }

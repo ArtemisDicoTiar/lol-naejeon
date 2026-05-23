@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Nav } from '@/components/layout/Nav';
+import { Footer } from '@/components/layout/Footer';
 import { IdentitySelector } from '@/components/layout/IdentitySelector';
 import { useIdentity } from '@/hooks/useIdentity';
 import { useLcuBridge, type LcuChampSelectState, type LcuLobbyState, type LcuLivePlayer } from '@/hooks/useLcuBridge';
@@ -75,9 +76,9 @@ function AppContent() {
   return (
     <IdentityContext.Provider value={{ userId: identity.userId, isMaster: identity.isMaster, playerName: identity.playerName }}>
       <LcuContext.Provider value={lcu}>
-        <div className="min-h-screen bg-lol-dark">
+        <div className="min-h-screen bg-lol-dark flex flex-col">
           <Nav identity={identity} lcu={lcu} />
-          <main className={`mx-auto px-4 py-6 ${isNewGame ? 'max-w-[1920px]' : 'max-w-6xl'}`}>
+          <main className={`flex-1 mx-auto w-full px-4 py-6 ${isNewGame ? 'max-w-[1920px]' : 'max-w-6xl'}`}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/players" element={<Players />} />
@@ -90,6 +91,7 @@ function AppContent() {
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
+          <Footer />
         </div>
       </LcuContext.Provider>
     </IdentityContext.Provider>
