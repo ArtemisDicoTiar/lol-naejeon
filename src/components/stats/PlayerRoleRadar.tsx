@@ -1,27 +1,24 @@
 import { useState } from 'react';
-import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, ResponsiveContainer } from 'recharts';
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, ResponsiveContainer, Tooltip } from 'recharts';
 import type { FullStats } from '@/lib/stats';
 import { Card } from '@/components/ui/Card';
 
 const COLORS = ['#c89b3c', '#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f97316', '#06b6d4'];
 
-export function PlayerRadar({ stats }: { stats: FullStats }) {
+export function PlayerRoleRadar({ stats }: { stats: FullStats }) {
   const [selectedIds, setSelectedIds] = useState<number[]>(
     stats.players.slice(0, 2).map((p) => p.id!)
   );
 
   const togglePlayer = (id: number) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
-    );
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]);
   };
 
-  // Merge radar data for selected players
-  const axes = stats.radarData[stats.players[0]?.id!]?.map((d) => d.axis) ?? [];
+  const axes = stats.roleRadarData[stats.players[0]?.id!]?.map((d) => d.axis) ?? [];
   const chartData = axes.map((axis) => {
     const entry: Record<string, string | number> = { axis };
     for (const pid of selectedIds) {
-      const rd = stats.radarData[pid];
+      const rd = stats.roleRadarData[pid];
       const point = rd?.find((d) => d.axis === axis);
       const name = stats.players.find((p) => p.id === pid)?.name ?? '';
       entry[name] = Math.round(point?.value ?? 0);
@@ -30,8 +27,8 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
   });
 
   return (
-    <Card title="플레이어 능력치 (레이더 차트)">
-      {/* Player selector */}
+    <Card title="플레이어 역할별 승률 레이더">
+      <p className="text-xs text-lol-gold-light/40 mb-3">각 역할(포크/인게이지/...)로 플레이한 챔프의 승률입니다. 픽 수가 0이면 0%로 표시됩니다.</p>
       <div className="flex flex-wrap gap-2 mb-4">
         {stats.players.map((p, i) => (
           <button key={p.id} onClick={() => togglePlayer(p.id!)}
@@ -63,29 +60,43 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
                   fillOpacity={0.15} strokeWidth={2} />
               );
             })}
+            <Tooltip contentStyle={{ backgroundColor: '#1e2328', border: '1px solid #463714', color: '#f0e6d2', fontSize: 12 }} />
             <Legend wrapperStyle={{ color: '#f0e6d2', fontSize: 12 }} />
           </RadarChart>
         </ResponsiveContainer>
       )}
 
-      {/* Formula descriptions */}
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] text-lol-gold-light/40">
-        <div className="p-1.5 bg-lol-blue/30 rounded">
-          <span className="text-lol-gold-light/60 font-medium">승률</span> = 전체 승수 / 전체 게임수 × 100
+      {/* Pick counts table */}
+      {selectedIds.length > 0 && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-lol-gold-light/50 border-b border-lol-border">
+                <th className="text-left py-1.5 px-2">플레이어</th>
+                {axes.map((a) => (
+                  <th key={a} className="text-right py-1.5 px-2">{a}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {selectedIds.map((pid) => {
+                const name = stats.players.find((p) => p.id === pid)?.name ?? '';
+                const rd = stats.roleRadarData[pid] ?? [];
+                return (
+                  <tr key={pid} className="border-b border-lol-border/20">
+                    <td className="py-1.5 px-2 text-lol-gold-light">{name}</td>
+                    {rd.map((d) => (
+                      <td key={d.axis} className="py-1.5 px-2 text-right font-mono text-lol-gold-light/70">
+                        {d.picks > 0 ? `${Math.round(d.value)}% (${d.picks})` : '-'}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-        <div className="p-1.5 bg-lol-blue/30 rounded">
-          <span className="text-lol-gold-light/60 font-medium">포크</span> = 포크챔프 픽비율 × 해당 승률 × 200
-        </div>
-        <div className="p-1.5 bg-lol-blue/30 rounded">
-          <span className="text-lol-gold-light/60 font-medium">인게이지</span> = 인게이지/탱크 픽비율 × 해당 승률 × 200
-        </div>
-        <div className="p-1.5 bg-lol-blue/30 rounded">
-          <span className="text-lol-gold-light/60 font-medium">서스테인</span> = 서스테인/유틸 픽비율 × 해당 승률 × 200
-        </div>
-        <div className="p-1.5 bg-lol-blue/30 rounded">
-          <span className="text-lol-gold-light/60 font-medium">캐리력</span> = S/상/중 챔프 승수 / S/상/중 챔프 게임수 × 100
-        </div>
-      </div>
+      )}
     </Card>
   );
 }

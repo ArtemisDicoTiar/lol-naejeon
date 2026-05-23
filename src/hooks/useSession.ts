@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { db, getActiveSession, getFierlessBans, deleteGame as dbDeleteGame, deleteSession as dbDeleteSession, updateSessionName as dbUpdateSessionName, type Session, type Game, type GamePick, type GameBan } from '@/lib/db';
 import { syncToVercel } from '@/lib/auto-sync';
 
@@ -76,12 +76,28 @@ export function useSession() {
     return null;
   };
 
+  // Dedup window: same pick signature within 30s is treated as a duplicate
+  // call (LCU bridge / StrictMode can fire addGame twice for one draft).
+  const recentAddRef = useRef<{ sig: string; at: number; id: number } | null>(null);
+
   const addGame = async (
     format: '3v3' | '3v4',
     picks: Omit<GamePick, 'id' | 'gameId'>[],
     bans?: Omit<GameBan, 'id' | 'gameId'>[]
   ) => {
     if (!session) return;
+    const sig = [
+      session.id,
+      format,
+      ...picks
+        .map((p) => `${p.team}:${p.playerId}:${p.championId}`)
+        .sort(),
+    ].join('|');
+    const now = Date.now();
+    const recent = recentAddRef.current;
+    if (recent && recent.sig === sig && now - recent.at < 30_000) {
+      return recent.id;
+    }
     const gameNumber = games.length + 1;
     const gameId = await db.games.add({
       sessionId: session.id!,
@@ -99,6 +115,7 @@ export function useSession() {
         bans.map((b) => ({ ...b, gameId: gameId as number }))
       );
     }
+    recentAddRef.current = { sig, at: now, id: gameId as number };
     await refresh();
     return gameId;
   };

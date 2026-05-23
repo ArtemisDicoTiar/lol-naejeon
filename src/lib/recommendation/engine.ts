@@ -323,10 +323,18 @@ function calcCounterBanValue(
 export function generatePerPlayerBanRecs(
   input: BanRecommendationInput
 ): Record<number, BanRecommendation[]> {
-  const { opponentPlayerIds, proficiencies, allChampions, alreadyBanned } = input;
+  const { opponentPlayerIds, proficiencies, allChampions, alreadyBanned, champFrequency } = input;
   const bannedSet = new Set(alreadyBanned);
   const traitsMap = buildTraitsMap();
   const result: Record<number, BanRecommendation[]> = {};
+
+  // presence ∈ [0, 1]; weighted so bans count slightly more than picks since
+  // a high ban rate already signals community consensus on threat.
+  const presenceFor = (champId: string): number => {
+    const f = champFrequency?.[champId];
+    if (!f) return 0;
+    return Math.min(1, (f.pickRate + f.banRate * 1.5) / 50);
+  };
 
   // Build opponent champion pools for synergy denial calc
   const opponentPools = new Map<number, string[]>();
@@ -363,10 +371,11 @@ export function generatePerPlayerBanRecs(
 
       const tierW = TIER_WEIGHT[champ.aramTier] ?? 1;
       const wrBonus = Math.max(-0.5, Math.min(0.5, (champ.aramWinrate - 50) * 0.1));
+      const presence = presenceFor(champ.id);
 
       // Always compute meta-based fallback score (used if no proficiency data)
-      const metaScore = (tierW + wrBonus) / 3.0;
-      fallbackRecs.push({ championId: champ.id, championName: champ.nameKo, score: metaScore, reason: 'ARAM 메타 위협' });
+      const metaScore = (tierW + wrBonus) / 3.0 + presence * 0.3;
+      fallbackRecs.push({ championId: champ.id, championName: champ.nameKo, score: metaScore, reason: presence > 0.4 ? '내전 존재감' : 'ARAM 메타 위협' });
 
       if (profScore === 0) continue;
 
@@ -381,17 +390,19 @@ export function generatePerPlayerBanRecs(
         ? calcCounterBanValue(champ.id, ourTeamPicks, traitsMap)
         : 0;
 
-      const score = profThreat * 0.4 + synergyDenial * 0.3 + counterBan * 0.3;
+      // Factor 4: Internal presence (high pick + ban rate)
+      const score = profThreat * 0.35 + synergyDenial * 0.25 + counterBan * 0.2 + presence * 0.2;
 
-      // Determine primary reason
+      // Determine primary reason — presence ranks alongside synergy/counter
       let reason = '';
-      if (synergyDenial > profThreat && synergyDenial > counterBan) {
-        reason = '시너지 차단';
-      } else if (counterBan > profThreat && counterBan > 0) {
-        reason = '카운터 밴';
-      } else {
-        reason = '고숙련 위협';
-      }
+      const candidates: Array<{ name: string; v: number }> = [
+        { name: '시너지 차단', v: synergyDenial },
+        { name: '카운터 밴', v: counterBan },
+        { name: '내전 존재감', v: presence },
+        { name: '고숙련 위협', v: profThreat },
+      ];
+      candidates.sort((a, b) => b.v - a.v);
+      reason = candidates[0].v > 0 ? candidates[0].name : '고숙련 위협';
 
       recs.push({ championId: champ.id, championName: champ.nameKo, score, reason });
     }

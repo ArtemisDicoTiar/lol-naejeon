@@ -80,29 +80,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const raw = await response.json();
 
-    // Parse champion data - LoLalytics format varies, handle flexibly
+    // Parse champion data — LoLalytics format varies (array OR map keyed by cid).
+    // Walk every container shape we've seen and normalize to a single entry list.
     const champions: { id: string; winrate: number; pickrate: number }[] = [];
+    const candidates: unknown[] = [];
+
+    const pushIfRecord = (v: unknown) => {
+      if (Array.isArray(v)) candidates.push(...v);
+      else if (v && typeof v === 'object') candidates.push(...Object.values(v as Record<string, unknown>));
+    };
 
     if (raw && typeof raw === 'object') {
-      // Try array format
-      const champArray: LoLalyticsChampData[] = Array.isArray(raw) ? raw : (raw.data ?? raw.champions ?? []);
+      if (Array.isArray(raw)) candidates.push(...raw);
+      pushIfRecord((raw as Record<string, unknown>).data);
+      pushIfRecord((raw as Record<string, unknown>).champions);
+      pushIfRecord((raw as Record<string, unknown>).cid);
+      // Some endpoints return a top-level object keyed by cid
+      if (!candidates.length) pushIfRecord(raw);
+    }
 
-      for (const entry of champArray) {
-        const champId = CHAMPION_ID_MAP[entry.cid];
-        if (!champId) continue;
+    for (const entryRaw of candidates) {
+      const entry = entryRaw as LoLalyticsChampData & { id?: number };
+      if (!entry || typeof entry !== 'object') continue;
+      const cid = entry.cid ?? entry.id ?? 0;
+      const champId = CHAMPION_ID_MAP[cid];
+      if (!champId) continue;
 
-        const games = entry.games ?? (entry.win ?? 0) + ((entry.pick ?? 0) - (entry.win ?? 0));
-        if (games < 100) continue; // Skip champions with too few games
+      const games = entry.games ?? entry.pick ?? 0;
+      if (games < 20) continue; // Loosened from 100 — ARAM-only pick counts are smaller
 
-        const winrate = entry.win && entry.pick ? (entry.win / entry.pick) * 100 : 50;
-        const pickrate = entry.pick ?? 0;
+      const winrate = entry.win && entry.pick ? (entry.win / entry.pick) * 100 : 50;
+      const pickrate = entry.pick ?? 0;
 
-        champions.push({ id: champId, winrate, pickrate });
-      }
+      champions.push({ id: champId, winrate, pickrate });
     }
 
     if (champions.length === 0) {
-      return res.status(502).json({ error: 'No champion data parsed from LoLalytics response' });
+      const sampleKeys = raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? Object.keys(raw as Record<string, unknown>).slice(0, 10).join(', ')
+        : Array.isArray(raw) ? `array[${raw.length}]` : typeof raw;
+      return res.status(502).json({
+        error: `LoLalytics 응답을 파싱하지 못했습니다. raw 키 샘플: ${sampleKeys}`,
+      });
     }
 
     // Sort by winrate for tier calculation

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
 import type { RecommendedComp } from '@/lib/recommendation/types';
 import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampions } from '@/lib/recommendation/engine';
@@ -39,6 +39,10 @@ export function BanPickScreen({
   const { userId } = useIdentityContext();
   const team1Size = team1PlayerIds.length;
   const team2Size = team2PlayerIds.length;
+  // Content signatures so effects can depend on team membership rather than
+  // array reference identity (parent re-renders churn the references).
+  const team1Sig = team1PlayerIds.join(',');
+  const team2Sig = team2PlayerIds.join(',');
 
   // Ban state: each team bans as many as their OWN player count
   const [team1Bans, setTeam1Bans] = useState<string[]>(Array(team1Size).fill(''));
@@ -279,7 +283,10 @@ export function BanPickScreen({
         return changed ? next : prev;
       });
     }
-  }, [lcu.lastState, champKeyMap, team1PlayerIds, team2PlayerIds, players, onReorderTeams]);
+    // Use content-based signatures for team IDs so we don't re-run when the
+    // parent re-renders and passes a new array reference. onReorderTeams is now
+    // wrapped in useCallback in NewGame.tsx so it has a stable identity.
+  }, [lcu.lastState, champKeyMap, team1Sig, team2Sig, players, onReorderTeams]);
 
   // Estimated proficiencies: auto-estimate for champions without manual proficiency
   const { mergedProficiencies, estimatedMap } = useMemo(() => {
@@ -351,19 +358,28 @@ export function BanPickScreen({
     return m;
   }, [team2PlayerIds, mergedProficiencies]);
 
+  const champFrequency = useMemo(() => {
+    if (!wrStats) return undefined;
+    const out: Record<string, { pickRate: number; banRate: number }> = {};
+    for (const [cid, cs] of Object.entries(wrStats.champOverallStats)) {
+      out[cid] = { pickRate: cs.pickRate, banRate: cs.banRate };
+    }
+    return out;
+  }, [wrStats]);
+
   const team1BanRecs = useMemo(() => generatePerPlayerBanRecs({
     opponentPlayerIds: team2PlayerIds,
     opponentPlayerNames: Object.fromEntries(players.map((p) => [p.id!, p.name])),
     proficiencies: mergedProficiencies, allChampions: champions, alreadyBanned: alreadyBannedAll,
-    ourTeamProficiencies: team1OurProfs,
-  }), [team2PlayerIds, players, mergedProficiencies, champions, alreadyBannedAll, team1OurProfs]);
+    ourTeamProficiencies: team1OurProfs, champFrequency,
+  }), [team2PlayerIds, players, mergedProficiencies, champions, alreadyBannedAll, team1OurProfs, champFrequency]);
 
   const team2BanRecs = useMemo(() => generatePerPlayerBanRecs({
     opponentPlayerIds: team1PlayerIds,
     opponentPlayerNames: Object.fromEntries(players.map((p) => [p.id!, p.name])),
     proficiencies: mergedProficiencies, allChampions: champions, alreadyBanned: alreadyBannedAll,
-    ourTeamProficiencies: team2OurProfs,
-  }), [team1PlayerIds, players, mergedProficiencies, champions, alreadyBannedAll, team2OurProfs]);
+    ourTeamProficiencies: team2OurProfs, champFrequency,
+  }), [team1PlayerIds, players, mergedProficiencies, champions, alreadyBannedAll, team2OurProfs, champFrequency]);
 
   // Opponent picks per team (for counter recommendations)
   const team1Picks = useMemo(() =>
@@ -597,22 +613,41 @@ export function BanPickScreen({
     onConfirm({ bans: banResult, picks });
   };
 
-  // Auto-confirm and navigate when game starts (LCU detected)
+  // Auto-confirm and navigate when game starts (LCU detected) — guard against
+  // double-fire from StrictMode / repeated gameStart messages from the bridge.
+  const confirmedRef = useRef(false);
   useEffect(() => {
-    if (lcu.gameStartedAt && allPicked && !lcuPaused) {
+    if (!lcu.gameStartedAt) {
+      confirmedRef.current = false;
+      return;
+    }
+    if (confirmedRef.current) return;
+    if (allPicked && !lcuPaused) {
+      confirmedRef.current = true;
       handleConfirm();
     }
-  }, [lcu.gameStartedAt]);
+  }, [lcu.gameStartedAt, allPicked, lcuPaused]);
 
   // Grid champions filtered
   const gridChampions = useMemo(() => {
     let list = champions.filter((c) => !fierlessBans.includes(c.id));
+    const searchLower = search.toLowerCase();
     if (search) {
-      list = list.filter((c) => c.nameKo.includes(search) || c.id.toLowerCase().includes(search.toLowerCase()));
+      list = list.filter((c) => c.nameKo.includes(search) || c.id.toLowerCase().includes(searchLower));
     }
     const tierOrder: Record<string, number> = { S: 0, A: 1, B: 2, C: 3, D: 4 };
     const profOrder: Record<string, number> = { 'S': 0, '상': 1, '중': 2, '하': 3, '없음': 4 };
     const isDisabled = (c: Champion) => allBannedIds.has(c.id) || pickedIds.has(c.id);
+
+    // Search relevance: 0=exact ko, 1=ko prefix, 2=en prefix, 3=ko contains, 4=en contains
+    const relevance = (c: Champion): number => {
+      if (!search) return 0;
+      if (c.nameKo === search) return 0;
+      if (c.nameKo.startsWith(search)) return 1;
+      if (c.id.toLowerCase().startsWith(searchLower)) return 2;
+      if (c.nameKo.includes(search)) return 3;
+      return 4;
+    };
 
     const mode = sortMode === 'auto' ? (phase === 'pick' ? 'proficiency' : 'tier') : sortMode;
 
@@ -620,6 +655,15 @@ export function BanPickScreen({
       const dA = isDisabled(a) ? 1 : 0;
       const dB = isDisabled(b) ? 1 : 0;
       if (dA !== dB) return dA - dB;
+
+      // Search relevance takes top priority when searching
+      if (search) {
+        const rA = relevance(a);
+        const rB = relevance(b);
+        if (rA !== rB) return rA - rB;
+        // Within same relevance bucket, prefer shorter name (more specific match)
+        if (a.nameKo.length !== b.nameKo.length) return a.nameKo.length - b.nameKo.length;
+      }
 
       if (mode === 'name') return a.nameKo.localeCompare(b.nameKo, 'ko');
       if (mode === 'winrate') return b.aramWinrate - a.aramWinrate;
@@ -640,7 +684,7 @@ export function BanPickScreen({
       return (tierOrder[a.aramTier] ?? 3) - (tierOrder[b.aramTier] ?? 3);
     });
     return list;
-  }, [champions, fierlessBans, search, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds]);
+  }, [champions, fierlessBans, search, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds, sortMode]);
 
   // --- RENDER ---
   const renderTeamPanel = (team: 1 | 2) => {
@@ -1191,9 +1235,23 @@ export function BanPickScreen({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && search && activeSlot) {
+                  if (e.key !== 'Enter' || !activeSlot) return;
+                  // Case A: search has text → pick top relevant match (hover)
+                  if (search) {
                     const first = gridChampions.find((c) => !allBannedIds.has(c.id) && !pickedIds.has(c.id));
                     if (first) { handleChampionSelect(first.id); setSearch(''); }
+                    return;
+                  }
+                  // Case B: empty search → second Enter locks in the currently hovered champ
+                  if (activeSlot.type === 'pick') {
+                    const pid = activeSlot.playerId;
+                    if (picks[pid] && !lockedPicks.has(pid)) lockPick(pid);
+                  } else {
+                    const bans = getTeamBans(activeSlot.team);
+                    const banId = bans[activeSlot.index];
+                    if (banId && banId !== SKIP_BAN && !isBanLocked(activeSlot.team, activeSlot.index)) {
+                      lockBan(activeSlot.team, activeSlot.index);
+                    }
                   }
                 }}
                 placeholder="검색 후 Enter로 즉시 선택..."

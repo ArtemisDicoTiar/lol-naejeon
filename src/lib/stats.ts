@@ -36,12 +36,52 @@ export interface ChampionCompareEntry {
   diff: number; // internal - aram
 }
 
+export interface PlayerChampionPoolEntry {
+  uniqueCount: number;
+  poolScore: number;
+  topChamps: { championId: string; picks: number; wins: number; losses: number }[];
+}
+
+export interface PlayerRoleRadarPoint {
+  axis: string;
+  role: string;
+  value: number; // winrate 0~100
+  picks: number;
+  wins: number;
+}
+
+export interface PlayerTrendEntry {
+  recentWins: number;
+  recentLosses: number;
+  recentGames: number;
+  recentWinrate: number;
+  allWinrate: number;
+  delta: number;
+}
+
+export interface PlayerStreakEntry {
+  type: 'W' | 'L' | null;
+  count: number;
+}
+
+export interface TrioPlayerSynergyEntry {
+  playerIds: [number, number, number];
+  sameTeamWins: number;
+  sameTeamLosses: number;
+  winrate: number;
+}
+
 export interface FullStats {
   wrStats: WinrateStats;
   players: Player[];
   champions: Champion[];
   radarData: Record<number, PlayerRadarData[]>;
+  roleRadarData: Record<number, PlayerRoleRadarPoint[]>;
+  playerChampionPool: Record<number, PlayerChampionPoolEntry>;
+  playerTrend: Record<number, PlayerTrendEntry>;
+  playerStreak: Record<number, PlayerStreakEntry>;
   headToHead: HeadToHeadEntry[];
+  trioPlayerSynergy: TrioPlayerSynergyEntry[];
   roleDist: { all: RoleDistEntry[]; wins: RoleDistEntry[]; losses: RoleDistEntry[] };
   champCompare: ChampionCompareEntry[];
   formatStats: { format: string; wins: number; losses: number; total: number; winrate: number }[];
@@ -52,6 +92,9 @@ const ROLE_KO: Record<string, string> = {
   poke: '포크', engage: '인게이지', sustain: '서스테인',
   dps: '딜러', tank: '탱커', utility: '유틸리티',
 };
+
+const ROLE_KEYS = ['poke', 'engage', 'sustain', 'dps', 'tank', 'utility'] as const;
+const RECENT_GAMES_WINDOW = 5;
 
 export async function computeFullStats(): Promise<FullStats> {
   const [wrStats, players, champions, allGames, allPicks] = await Promise.all([
@@ -66,6 +109,16 @@ export async function computeFullStats(): Promise<FullStats> {
 
   // --- Radar data per player ---
   const radarData: Record<number, PlayerRadarData[]> = {};
+  const roleRadarData: Record<number, PlayerRoleRadarPoint[]> = {};
+  const playerChampionPool: Record<number, PlayerChampionPoolEntry> = {};
+  const playerTrend: Record<number, PlayerTrendEntry> = {};
+  const playerStreak: Record<number, PlayerStreakEntry> = {};
+
+  // Pre-sort games by playedAt desc once for trend/streak lookups
+  const gamesByRecent = [...allGames]
+    .filter((g) => g.winningTeam !== null)
+    .sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime());
+
   for (const player of players) {
     const pid = player.id!;
     const pStats = wrStats.playerOverallStats[pid];
@@ -98,9 +151,24 @@ export async function computeFullStats(): Promise<FullStats> {
       return Math.min(100, pickRatio * wr * 200);
     };
 
-    // Champion pool breadth
-    const uniqueChamps = new Set(playerPicks.map((p) => p.championId));
-    const poolScore = Math.min(100, (uniqueChamps.size / 20) * 100); // 20 unique = 100
+    // Champion pool breadth (kept for separate display)
+    const uniqueChampMap = new Map<string, { picks: number; wins: number; losses: number }>();
+    for (const pick of playerPicks) {
+      const game = allGames.find((g) => g.id === pick.gameId);
+      if (!game) continue;
+      const rec = uniqueChampMap.get(pick.championId) ?? { picks: 0, wins: 0, losses: 0 };
+      rec.picks++;
+      if (game.winningTeam !== null) {
+        if (pick.team === game.winningTeam) rec.wins++; else rec.losses++;
+      }
+      uniqueChampMap.set(pick.championId, rec);
+    }
+    const poolScore = Math.min(100, (uniqueChampMap.size / 20) * 100);
+    const topChamps = [...uniqueChampMap.entries()]
+      .map(([championId, s]) => ({ championId, ...s }))
+      .sort((a, b) => b.picks - a.picks)
+      .slice(0, 5);
+    playerChampionPool[pid] = { uniqueCount: uniqueChampMap.size, poolScore, topChamps };
 
     // Carry: winrate on proficiency S/상/중 champions
     let carryWins = 0, carryTotal = 0;
@@ -121,26 +189,72 @@ export async function computeFullStats(): Promise<FullStats> {
       { axis: '포크', value: roleScore(['poke']) },
       { axis: '인게이지', value: roleScore(['engage', 'tank']) },
       { axis: '서스테인', value: roleScore(['sustain', 'utility']) },
-      { axis: '챔피언 폭', value: poolScore },
       { axis: '캐리력', value: carryScore },
     ];
+
+    // Role-based radar: one axis per aram role, value = winrate on that role
+    roleRadarData[pid] = ROLE_KEYS.map((role) => {
+      const r = roleWins[role] ?? { picks: 0, wins: 0 };
+      const value = r.picks > 0 ? (r.wins / r.picks) * 100 : 0;
+      return { axis: ROLE_KO[role] ?? role, role, value, picks: r.picks, wins: r.wins };
+    });
+
+    // Recent trend (last N completed games where the player participated)
+    let recentWins = 0, recentLosses = 0;
+    for (const g of gamesByRecent) {
+      if (recentWins + recentLosses >= RECENT_GAMES_WINDOW) break;
+      const myPick = allPicks.find((p) => p.gameId === g.id && p.playerId === pid);
+      if (!myPick) continue;
+      if (myPick.team === g.winningTeam) recentWins++; else recentLosses++;
+    }
+    const recentGames = recentWins + recentLosses;
+    const recentWr = recentGames > 0 ? (recentWins / recentGames) * 100 : 0;
+    playerTrend[pid] = {
+      recentWins, recentLosses, recentGames,
+      recentWinrate: recentWr,
+      allWinrate: winrate,
+      delta: recentGames > 0 ? recentWr - winrate : 0,
+    };
+
+    // Current streak (most-recent → backwards, stop at first break)
+    let streakType: 'W' | 'L' | null = null;
+    let streakCount = 0;
+    for (const g of gamesByRecent) {
+      const myPick = allPicks.find((p) => p.gameId === g.id && p.playerId === pid);
+      if (!myPick) continue;
+      const result: 'W' | 'L' = myPick.team === g.winningTeam ? 'W' : 'L';
+      if (streakType === null) { streakType = result; streakCount = 1; continue; }
+      if (result !== streakType) break;
+      streakCount++;
+    }
+    playerStreak[pid] = { type: streakType, count: streakCount };
   }
 
-  // --- Head to Head ---
+  // --- Head to Head + Trio Synergy (precompute per-game player→team map for speed) ---
+  const gameTeamMap = new Map<number, Map<number, number>>(); // gameId → playerId → team
+  const gameResultMap = new Map<number, number>(); // gameId → winningTeam
+  for (const game of allGames) {
+    if (game.winningTeam === null || game.id === undefined) continue;
+    gameResultMap.set(game.id, game.winningTeam);
+    const map = new Map<number, number>();
+    for (const p of allPicks) {
+      if (p.gameId === game.id) map.set(p.playerId, p.team);
+    }
+    gameTeamMap.set(game.id, map);
+  }
+
   const headToHead: HeadToHeadEntry[] = [];
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
       const p1 = players[i].id!, p2 = players[j].id!;
       let sameW = 0, sameL = 0;
-      for (const game of allGames) {
-        if (game.winningTeam === null) continue;
-        const picks = allPicks.filter((p) => p.gameId === game.id!);
-        const p1Pick = picks.find((p) => p.playerId === p1);
-        const p2Pick = picks.find((p) => p.playerId === p2);
-        if (!p1Pick || !p2Pick) continue;
-        if (p1Pick.team === p2Pick.team) {
-          if (p1Pick.team === game.winningTeam) sameW++; else sameL++;
-        }
+      for (const [gameId, teamMap] of gameTeamMap) {
+        const t1 = teamMap.get(p1);
+        const t2 = teamMap.get(p2);
+        if (t1 == null || t2 == null) continue;
+        if (t1 !== t2) continue;
+        const winner = gameResultMap.get(gameId)!;
+        if (t1 === winner) sameW++; else sameL++;
       }
       const total = sameW + sameL;
       if (total > 0) {
@@ -148,6 +262,36 @@ export async function computeFullStats(): Promise<FullStats> {
       }
     }
   }
+
+  // 3-player synergy: any trio of our players who played together on the same team
+  const trioPlayerSynergy: TrioPlayerSynergyEntry[] = [];
+  const MIN_TRIO_GAMES = 3;
+  for (let i = 0; i < players.length; i++) {
+    for (let j = i + 1; j < players.length; j++) {
+      for (let k = j + 1; k < players.length; k++) {
+        const p1 = players[i].id!, p2 = players[j].id!, p3 = players[k].id!;
+        let wins = 0, losses = 0;
+        for (const [gameId, teamMap] of gameTeamMap) {
+          const t1 = teamMap.get(p1);
+          const t2 = teamMap.get(p2);
+          const t3 = teamMap.get(p3);
+          if (t1 == null || t2 == null || t3 == null) continue;
+          if (t1 !== t2 || t2 !== t3) continue;
+          if (t1 === gameResultMap.get(gameId)!) wins++; else losses++;
+        }
+        const total = wins + losses;
+        if (total >= MIN_TRIO_GAMES) {
+          trioPlayerSynergy.push({
+            playerIds: [p1, p2, p3],
+            sameTeamWins: wins,
+            sameTeamLosses: losses,
+            winrate: (wins / total) * 100,
+          });
+        }
+      }
+    }
+  }
+  trioPlayerSynergy.sort((a, b) => b.winrate - a.winrate);
 
   // --- Role Distribution ---
   const computeRoleDist = (filter: (game: typeof allGames[0], pick: typeof allPicks[0]) => boolean) => {
@@ -212,7 +356,11 @@ export async function computeFullStats(): Promise<FullStats> {
   }
 
   return {
-    wrStats, players, champions, radarData, headToHead, roleDist, champCompare, formatStats,
+    wrStats, players, champions,
+    radarData, roleRadarData,
+    playerChampionPool, playerTrend, playerStreak,
+    headToHead, trioPlayerSynergy,
+    roleDist, champCompare, formatStats,
     sideStats: { team1Wins: t1Wins, team2Wins: t2Wins, total: t1Wins + t2Wins },
   };
 }

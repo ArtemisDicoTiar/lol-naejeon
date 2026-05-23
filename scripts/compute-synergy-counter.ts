@@ -18,7 +18,9 @@ const OUTPUT_PATH = resolve(ROOT, 'src/data/synergy-counter-data.json');
 
 const MIN_SYNERGY_GAMES = 30;
 const MIN_COUNTER_GAMES = 30;
+const MIN_TRIO_GAMES = 20;
 const SYNERGY_WINRATE_THRESHOLD = 3; // Only keep pairs with >=3% deviation from 50%
+const TRIO_WINRATE_THRESHOLD = 3;
 
 // --- Load champion ID map ---
 interface ChampInfo { id: number; key: string; name: string }
@@ -62,11 +64,17 @@ console.log(`Parsing ${dataLines.length} matches...`);
 // --- Compute statistics ---
 // Synergy: same-team pairs
 const synergyMap = new Map<string, { wins: number; total: number }>();
+// Trio synergy: same-team triples
+const trioMap = new Map<string, { wins: number; total: number }>();
 // Counter: cross-team matchups (key = "A_vs_B" means A faces B)
 const counterMap = new Map<string, { wins: number; total: number }>();
 
 function pairKey(a: string, b: string): string {
   return a < b ? `${a}+${b}` : `${b}+${a}`;
+}
+
+function trioKey(a: string, b: string, c: string): string {
+  return [a, b, c].sort().join('+');
 }
 
 let parsed = 0;
@@ -87,7 +95,7 @@ for (const line of dataLines) {
 
   const t1Won = winner === 1;
 
-  // Synergy: all pairs within each team
+  // Synergy: all pairs + triples within each team
   for (let i = 0; i < t1Keys.length; i++) {
     for (let j = i + 1; j < t1Keys.length; j++) {
       const key = pairKey(t1Keys[i], t1Keys[j]);
@@ -95,6 +103,13 @@ for (const line of dataLines) {
       entry.total++;
       if (t1Won) entry.wins++;
       synergyMap.set(key, entry);
+      for (let k = j + 1; k < t1Keys.length; k++) {
+        const tkey = trioKey(t1Keys[i], t1Keys[j], t1Keys[k]);
+        const tEntry = trioMap.get(tkey) ?? { wins: 0, total: 0 };
+        tEntry.total++;
+        if (t1Won) tEntry.wins++;
+        trioMap.set(tkey, tEntry);
+      }
     }
   }
   for (let i = 0; i < t2Keys.length; i++) {
@@ -104,6 +119,13 @@ for (const line of dataLines) {
       entry.total++;
       if (!t1Won) entry.wins++;
       synergyMap.set(key, entry);
+      for (let k = j + 1; k < t2Keys.length; k++) {
+        const tkey = trioKey(t2Keys[i], t2Keys[j], t2Keys[k]);
+        const tEntry = trioMap.get(tkey) ?? { wins: 0, total: 0 };
+        tEntry.total++;
+        if (!t1Won) tEntry.wins++;
+        trioMap.set(tkey, tEntry);
+      }
     }
   }
 
@@ -142,6 +164,16 @@ for (const [key, stats] of synergyMap) {
   synergyCount++;
 }
 
+const trioSynergies: Record<string, { wins: number; total: number; winrate: number }> = {};
+let trioCount = 0;
+for (const [key, stats] of trioMap) {
+  if (stats.total < MIN_TRIO_GAMES) continue;
+  const wr = Math.round((stats.wins / stats.total) * 1000) / 10;
+  if (Math.abs(wr - 50) < TRIO_WINRATE_THRESHOLD) continue;
+  trioSynergies[key] = { wins: stats.wins, total: stats.total, winrate: wr };
+  trioCount++;
+}
+
 // --- Filter and format counter data ---
 // Aggregate per champion: top strong-against and weak-against
 const champCounters = new Map<string, { against: string; winrate: number; games: number }[]>();
@@ -175,8 +207,10 @@ const output = {
   version: new Date().toISOString().slice(0, 10),
   matchCount: parsed,
   synergyPairCount: synergyCount,
+  trioSynergyCount: trioCount,
   counterChampionCount: Object.keys(counters).length,
   synergies,
+  trioSynergies,
   counters,
 };
 
@@ -184,6 +218,7 @@ writeFileSync(OUTPUT_PATH, JSON.stringify(output, null, 2));
 
 console.log(`\nOutput written to ${OUTPUT_PATH}`);
 console.log(`  Synergy pairs: ${synergyCount}`);
+console.log(`  Trio synergies: ${trioCount}`);
 console.log(`  Counter champions: ${Object.keys(counters).length}`);
 
 // Show top synergies

@@ -3,7 +3,11 @@ import { Card } from '@/components/ui/Card';
 
 export function PlayerRanking({ stats }: { stats: FullStats }) {
   const ranked = stats.players
-    .map((p) => ({ ...p, ...(stats.wrStats.playerOverallStats[p.id!] ?? { wins: 0, losses: 0, winrate: 0, totalPicks: 0 }) }))
+    .map((p) => ({
+      ...p,
+      ...(stats.wrStats.playerOverallStats[p.id!] ?? { wins: 0, losses: 0, winrate: 0, totalPicks: 0 }),
+      pool: stats.playerChampionPool[p.id!]?.uniqueCount ?? 0,
+    }))
     .sort((a, b) => b.winrate - a.winrate);
 
   return (
@@ -18,6 +22,7 @@ export function PlayerRanking({ stats }: { stats: FullStats }) {
               <th className="text-right py-2 px-2">승</th>
               <th className="text-right py-2 px-2">패</th>
               <th className="text-right py-2 px-2">게임</th>
+              <th className="text-right py-2 px-2">챔프폭</th>
               <th className="text-left py-2 px-2">승률 바</th>
             </tr>
           </thead>
@@ -32,6 +37,9 @@ export function PlayerRanking({ stats }: { stats: FullStats }) {
                 <td className="py-2 px-2 text-right text-prof-high/80">{p.wins}</td>
                 <td className="py-2 px-2 text-right text-prof-low/80">{p.losses}</td>
                 <td className="py-2 px-2 text-right text-lol-gold-light/50">{p.totalPicks}</td>
+                <td className="py-2 px-2 text-right font-mono text-lol-gold-light/70">
+                  {p.pool > 0 ? `${p.pool}종` : '-'}
+                </td>
                 <td className="py-2 px-2 w-32">
                   {p.totalPicks > 0 && (
                     <div className="w-full h-3 bg-lol-dark rounded-full overflow-hidden">

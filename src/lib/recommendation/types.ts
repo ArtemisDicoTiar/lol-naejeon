@@ -48,6 +48,10 @@ export interface BanRecommendationInput {
   allChampions: Champion[];
   alreadyBanned: string[];
   ourTeamProficiencies?: Record<number, Map<string, ProficiencyLevel>>;
+  // Internal pick/ban frequency for presence-weighted ranking. Pass
+  // `wrStats.champOverallStats` from useSession/stats — when present, champions
+  // with high pick+ban rates are pushed up in ban recommendations.
+  champFrequency?: Record<string, { pickRate: number; banRate: number }>;
 }
 
 export interface BanRecommendation {

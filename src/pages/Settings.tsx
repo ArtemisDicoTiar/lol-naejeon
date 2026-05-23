@@ -162,12 +162,12 @@ export function Settings() {
       )}
 
       {isMaster && (
-        <Card title="OP.GG 카운터 데이터">
+        <Card title="카운터 데이터 (LoLalytics)">
           <p className="text-sm text-lol-gold-light/60 mb-3">
-            OP.GG에서 챔피언 카운터 데이터를 가져와 추천 알고리즘에 반영합니다.
+            LoLalytics ARAM 카운터 데이터를 가져와 Vercel Blob에 저장합니다. 추천 알고리즘과 챔피언 호버 카드에서 활용됩니다.
           </p>
           <Button variant="secondary" onClick={async () => {
-            setMessage('OP.GG 카운터 데이터 업데이트 중...');
+            setMessage('LoLalytics 카운터 업데이트 중...');
             try {
               const res = await fetch('/api/opgg-sync', { method: 'POST' });
               const data = await res.json();
@@ -180,7 +180,7 @@ export function Settings() {
               setMessage(`업데이트 실패: ${(e as Error).message}`);
             }
           }}>
-            OP.GG 카운터 업데이트
+            카운터 데이터 업데이트
           </Button>
         </Card>
       )}

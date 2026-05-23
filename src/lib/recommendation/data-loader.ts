@@ -3,6 +3,9 @@ export interface SynergyCounterData {
   version: string;
   matchCount: number;
   synergies: Record<string, { wins: number; total: number; winrate: number }>;
+  // Optional: 3-champion combo synergies (same team triples). Older data files
+  // without this field still load — consumers should null-check.
+  trioSynergies?: Record<string, { wins: number; total: number; winrate: number }>;
   counters: Record<string, {
     strongAgainst: { id: string; winrate: number; games: number }[];
     weakAgainst: { id: string; winrate: number; games: number }[];

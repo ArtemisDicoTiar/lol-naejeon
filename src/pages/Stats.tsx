@@ -2,11 +2,18 @@ import { useEffect, useState } from 'react';
 import { computeFullStats, type FullStats } from '@/lib/stats';
 import { Card } from '@/components/ui/Card';
 import { PlayerRanking } from '@/components/stats/PlayerRanking';
+import { PlayerStreak } from '@/components/stats/PlayerStreak';
+import { PlayerTrend } from '@/components/stats/PlayerTrend';
 import { PlayerRadar } from '@/components/stats/PlayerRadar';
+import { PlayerRoleRadar } from '@/components/stats/PlayerRoleRadar';
 import { ChampionStatsTable } from '@/components/stats/ChampionStats';
+import { ChampionPriority } from '@/components/stats/ChampionPriority';
+import { ChampionPoolBreakdown } from '@/components/stats/ChampionPoolBreakdown';
 import { MetaComparison } from '@/components/stats/MetaComparison';
 import { RoleDistribution } from '@/components/stats/RoleDistribution';
 import { HeadToHead } from '@/components/stats/HeadToHead';
+import { TrioPlayerSynergy } from '@/components/stats/TrioPlayerSynergy';
+import { TrioChampionSynergy } from '@/components/stats/TrioChampionSynergy';
 
 export function Stats() {
   const [stats, setStats] = useState<FullStats | null>(null);
@@ -64,8 +71,15 @@ export function Stats() {
       {/* Player Ranking */}
       <PlayerRanking stats={stats} />
 
-      {/* Radar Chart */}
+      {/* Streak + Trend */}
+      <PlayerStreak stats={stats} />
+      <PlayerTrend stats={stats} />
+
+      {/* Ability Radar (champion pool removed) */}
       <PlayerRadar stats={stats} />
+
+      {/* Role-based Radar */}
+      <PlayerRoleRadar stats={stats} />
 
       {/* Role Distribution */}
       <RoleDistribution stats={stats} />
@@ -73,11 +87,21 @@ export function Stats() {
       {/* Meta Comparison */}
       <MetaComparison stats={stats} />
 
+      {/* Ban/Pick Priority */}
+      <ChampionPriority stats={stats} />
+
       {/* Champion Stats Table */}
       <ChampionStatsTable stats={stats} />
 
+      {/* Champion Pool Breakdown */}
+      <ChampionPoolBreakdown stats={stats} />
+
       {/* Head to Head */}
       <HeadToHead stats={stats} />
+
+      {/* Trio synergies (players + champions) */}
+      <TrioPlayerSynergy stats={stats} />
+      <TrioChampionSynergy stats={stats} />
     </div>
   );
 }

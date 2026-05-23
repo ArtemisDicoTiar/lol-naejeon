@@ -159,6 +159,22 @@ export function NewGame() {
   const team1PlayerIds = selectedPlayerIds.filter((id) => teamAssignments[id] === 1);
   const team2PlayerIds = selectedPlayerIds.filter((id) => teamAssignments[id] === 2);
 
+  // Stable callback so BanPickScreen's LCU effect doesn't re-fire each render
+  const handleReorderTeams = useCallback((newT1: number[], newT2: number[]) => {
+    setTeamAssignments(prev => {
+      const next: Record<number, 1 | 2> = {};
+      newT1.forEach(id => { next[id] = 1; });
+      newT2.forEach(id => { next[id] = 2; });
+      // No-op if identical to avoid render storms
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length === nextKeys.length && prevKeys.every(k => prev[Number(k)] === next[Number(k)])) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
   const handleBanPickConfirm = async (result: { bans: Record<1 | 2, string[]>; picks: Record<number, string> }) => {
     const picks = Object.entries(result.picks).map(([playerId, championId]) => ({
       playerId: parseInt(playerId),
@@ -198,12 +214,7 @@ export function NewGame() {
         proficiencies={proficiencies}
         onConfirm={handleBanPickConfirm}
         onBack={() => setStep('setup')}
-        onReorderTeams={(newT1, newT2) => {
-          const newAssignments: Record<number, 1 | 2> = {};
-          newT1.forEach(id => { newAssignments[id] = 1; });
-          newT2.forEach(id => { newAssignments[id] = 2; });
-          setTeamAssignments(newAssignments);
-        }}
+        onReorderTeams={handleReorderTeams}
       />
     );
   }
