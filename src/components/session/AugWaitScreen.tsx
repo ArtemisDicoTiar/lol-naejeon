@@ -33,6 +33,9 @@ export function AugWaitScreen({
   const lcu = useLcuContext();
   const { userId } = useIdentityContext();
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
+  const [manualPicks, setManualPicks] = useState<Record<number, string>>({});
+  const [activePlayerId, setActivePlayerId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => { computeWinrateStats('augmented').then(setWrStats); }, []);
 
@@ -172,48 +175,84 @@ export function AugWaitScreen({
   const handleManualConfirm = () => {
     if (confirmedRef.current) return;
     confirmedRef.current = true;
-    onConfirm({ bans: { 1: [], 2: [] }, picks: lcuPicks });
+    onConfirm({ bans: { 1: [], 2: [] }, picks: currentPicks });
   };
 
   const getPlayer = (id: number) => players.find(p => p.id === id);
-  const pickedCount = Object.keys(lcuPicks).length;
-  const totalPlayers = team1PlayerIds.length + team2PlayerIds.length;
+  const isLcuConnected = lcu.connected;
   const isGameStarted = !!lcu.gameStartedAt;
   const isInChampSelect = lcu.champSelectActive;
   const lcuPhase = lcu.lastState?.phase?.toUpperCase() ?? '';
 
-  const benchChamps = benchChampIds.map(id => champMap.get(id)).filter(Boolean) as Champion[];
+  // Source of truth for picks depends on LCU connection
+  const currentPicks = isLcuConnected ? lcuPicks : manualPicks;
+  const pickedCount = Object.keys(currentPicks).length;
+  const totalPlayers = team1PlayerIds.length + team2PlayerIds.length;
+  const allPickedIds = new Set(Object.values(currentPicks));
+
+  // Pool: LCU bench when connected, ALL champions when manual
+  const benchChamps = isLcuConnected
+    ? (benchChampIds.map(id => champMap.get(id)).filter(Boolean) as Champion[])
+    : champions.filter(c => !allPickedIds.has(c.id));
+
+  // Filtered pool for manual mode search
+  const searchLower = search.toLowerCase();
+  const displayPool = search
+    ? benchChamps.filter(c => c.nameKo.includes(search) || c.id.toLowerCase().includes(searchLower))
+    : benchChamps;
+
+  const handleManualPickChampion = (champId: string) => {
+    if (!activePlayerId) return;
+    setManualPicks(prev => ({ ...prev, [activePlayerId]: champId }));
+    // Auto-advance to next unpicked player in draft order
+    const allIds = [...team1PlayerIds, ...team2PlayerIds];
+    const nextUnpicked = allIds.find(pid => pid !== activePlayerId && !manualPicks[pid]);
+    setActivePlayerId(nextUnpicked ?? null);
+    setSearch('');
+  };
 
   // ── player row renderer ──────────────────────────────────────────────
   const renderPlayerRow = (pid: number, showRecs: boolean) => {
     const player = getPlayer(pid);
-    const champId = lcuPicks[pid];
+    const champId = currentPicks[pid];
     const champ = champId ? champMap.get(champId) : undefined;
     const profMap = mergedProficiencies[pid] ?? new Map();
     const profLevel = champId ? profMap.get(champId) : undefined;
     const isMe = pid === userId;
+    const isActive = !isLcuConnected && activePlayerId === pid;
 
-    // Pool recs for this player (only when showRecs and bench available)
     const poolRecs = showRecs && benchChamps.length > 0
-      ? getRecs(pid, benchChamps, 3)
-      : [];
+      ? getRecs(pid, benchChamps, 3) : [];
 
     return (
-      <div key={pid} className={`p-2 rounded ${isMe ? 'bg-lol-gold/10 border border-lol-gold/30' : 'bg-lol-dark/30'}`}>
+      <div key={pid}
+        onClick={() => !isLcuConnected && setActivePlayerId(pid)}
+        className={`p-2 rounded transition-colors ${
+          isActive
+            ? 'bg-lol-gold/20 border-2 border-lol-gold cursor-pointer'
+            : isMe
+            ? 'bg-lol-gold/10 border border-lol-gold/30'
+            : 'bg-lol-dark/30'
+        } ${!isLcuConnected ? 'cursor-pointer hover:bg-lol-blue/40' : ''}`}>
         <div className="flex items-center gap-2">
           <div className="w-10 h-10 flex-shrink-0">
             {champ
               ? <ChampionIcon champion={champ} size="base" />
-              : <div className="w-10 h-10 rounded border-2 border-dashed border-lol-border/40 flex items-center justify-center">
-                  <span className="text-lol-gold-light/30 text-lg">?</span>
+              : <div className={`w-10 h-10 rounded border-2 border-dashed flex items-center justify-center ${
+                  isActive ? 'border-lol-gold' : 'border-lol-border/40'
+                }`}>
+                  <span className={`text-lg ${isActive ? 'text-lol-gold' : 'text-lol-gold-light/30'}`}>
+                    {isActive ? '↓' : '?'}
+                  </span>
                 </div>
             }
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className={`text-sm font-medium ${isMe ? 'text-lol-gold' : 'text-lol-gold-light'} truncate`}>
+              <span className={`text-sm font-medium ${isActive ? 'text-lol-gold font-bold' : isMe ? 'text-lol-gold' : 'text-lol-gold-light'} truncate`}>
                 {player?.name ?? `#${pid}`}
                 {isMe && <span className="ml-1 text-[10px] text-lol-gold/60">(나)</span>}
+                {isActive && <span className="ml-1 text-[10px] text-lol-gold">← 선택 중</span>}
               </span>
               {profLevel && profLevel !== '없음' && (
                 <ProficiencyBadge level={profLevel} size="sm"
@@ -222,11 +261,17 @@ export function AugWaitScreen({
             </div>
             {champ
               ? <div className="text-xs text-lol-gold-light/60">{champ.nameKo}</div>
-              : <div className="text-xs text-lol-gold-light/30">선택 중...</div>
+              : <div className="text-xs text-lol-gold-light/30">
+                  {isActive ? '아래 챔피언을 클릭해서 배정' : '선택 전'}
+                </div>
             }
           </div>
+          {!isLcuConnected && champ && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setManualPicks(p => { const n = {...p}; delete n[pid]; return n; }); }}
+              className="text-lol-gold-light/30 hover:text-lol-gold-light text-sm cursor-pointer px-1">×</button>
+          )}
         </div>
-        {/* Pool recommendations for this player */}
         {showRecs && poolRecs.length > 0 && (
           <div className="mt-1.5 flex items-center gap-1 pl-12">
             <span className="text-[9px] text-lol-gold-light/40 mr-0.5">추천풀</span>
@@ -236,7 +281,9 @@ export function AugWaitScreen({
                 <ChampionWithHover key={rc.id} champion={rc} wrStats={wrStats}
                   allPlayers={players} proficiencies={mergedProficiencies}
                   estimatedMap={estimatedMap}>
-                  <div className={`relative cursor-default ${i === 0 ? 'ring-1 ring-lol-gold rounded' : ''}`}>
+                  <div
+                    onClick={(e) => { e.stopPropagation(); if (!isLcuConnected && activePlayerId) handleManualPickChampion(rc.id); }}
+                    className={`relative ${!isLcuConnected && activePlayerId ? 'cursor-pointer hover:opacity-80' : 'cursor-default'} ${i === 0 ? 'ring-1 ring-lol-gold rounded' : ''}`}>
                     <ChampionIcon champion={rc} size="sm" />
                     {rcProf && rcProf !== '없음' && (
                       <span className="absolute -top-1 -right-1 text-[7px] bg-lol-dark/90 text-lol-gold rounded px-0.5">
@@ -262,54 +309,84 @@ export function AugWaitScreen({
           <span className="px-3 py-1 rounded border border-purple-400/60 bg-purple-900/30 text-purple-300 text-sm font-medium">
             증바람
           </span>
-          <span className={`text-xs px-2 py-0.5 rounded border ${
-            isGameStarted ? 'border-green-700/50 text-green-300'
-            : isInChampSelect ? 'border-lol-gold/50 text-lol-gold'
-            : 'border-lol-border text-lol-gold-light/40'
-          }`}>
-            {isGameStarted ? '게임 중' : isInChampSelect
-              ? `챔셀 ${lcuPhase}` : '대기 중'}
-          </span>
+          {isLcuConnected ? (
+            <span className={`text-xs px-2 py-0.5 rounded border ${
+              isGameStarted ? 'border-green-700/50 text-green-300'
+              : isInChampSelect ? 'border-lol-gold/50 text-lol-gold'
+              : 'border-lol-border text-lol-gold-light/40'
+            }`}>
+              {isGameStarted ? '게임 중' : isInChampSelect ? `챔셀 ${lcuPhase}` : '클라 대기 중'}
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded border border-yellow-700/50 text-yellow-400">
+              수동 입력 모드
+            </span>
+          )}
         </div>
-        <Button onClick={handleManualConfirm} variant="secondary" disabled={pickedCount === 0}>
-          수동 확정 ({pickedCount}/{totalPlayers})
+        <Button
+          onClick={handleManualConfirm}
+          disabled={pickedCount === 0}
+          variant={pickedCount === totalPlayers ? 'primary' : 'secondary'}>
+          픽 확정 ({pickedCount}/{totalPlayers})
         </Button>
       </div>
 
-      {/* ── Team pool (center) ─────────────────────────────────────── */}
-      <div className="p-3 rounded-lg border border-purple-800/50 bg-purple-900/10">
-        <div className="text-xs text-purple-300/70 mb-2 text-center font-medium">
-          우리 팀 풀 {benchChamps.length > 0 ? `(${benchChamps.length}개)` : '— 챔셀 시작 후 표시됩니다'}
-        </div>
-        {benchChamps.length > 0 ? (
-          <div className="flex flex-wrap gap-2 justify-center">
-            {benchChamps.map(c => (
-              <ChampionWithHover key={c.id} champion={c} wrStats={wrStats}
-                allPlayers={players} proficiencies={mergedProficiencies}
-                estimatedMap={estimatedMap} highlightPlayerIds={myTeamIds}>
-                <div className="flex flex-col items-center gap-0.5">
-                  <ChampionIcon champion={c} size="base" />
-                  <span className="text-[9px] text-lol-gold-light/60">{c.nameKo}</span>
-                  {/* Show best player for this champ */}
-                  {(() => {
-                    const best = getRecs(myTeamIds[0], [c], 1)[0]
-                      ? myTeamIds[0]
-                      : myTeamIds.find(pid => getRecs(pid, [c], 1).length > 0);
-                    const bestPlayer = best ? getPlayer(best) : undefined;
-                    return bestPlayer ? (
-                      <span className="text-[8px] text-lol-gold/60 bg-lol-gold/10 px-1 rounded">
-                        {bestPlayer.name}
-                      </span>
-                    ) : null;
-                  })()}
-                </div>
-              </ChampionWithHover>
-            ))}
+      {/* ── Team pool / full champion grid ─────────────────────────── */}
+      <div className="p-3 rounded-lg border border-purple-800/50 bg-purple-900/10 space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="text-xs text-purple-300/70 font-medium">
+            {isLcuConnected
+              ? `우리 팀 풀 ${benchChamps.length > 0 ? `(${benchChamps.length}개)` : '— 챔셀 시작 후 표시'}`
+              : `전체 챔피언 (${benchChamps.length}개) — 플레이어 선택 후 클릭으로 배정`}
           </div>
-        ) : (
+          {!isLcuConnected && (
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="챔피언 검색..."
+              className="flex-1 bg-lol-blue border border-lol-border rounded px-2 py-1 text-xs text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
+            />
+          )}
+        </div>
+
+        {isLcuConnected && benchChamps.length === 0 ? (
           <p className="text-center text-[11px] text-lol-gold-light/30 py-1">
             LCU에서 풀 데이터를 기다리는 중...
           </p>
+        ) : (
+          <div className={`flex flex-wrap gap-2 ${!isLcuConnected ? 'max-h-56 overflow-y-auto' : ''}`}>
+            {displayPool.map(c => {
+              const bestPid = myTeamIds.reduce<number | null>((best, pid) => {
+                const s = (PROF_SCORE[mergedProficiencies[pid]?.get(c.id) ?? '없음'] ?? 0);
+                const bs = best ? (PROF_SCORE[mergedProficiencies[best]?.get(c.id) ?? '없음'] ?? 0) : -1;
+                return s > bs ? pid : best;
+              }, null);
+              const bestPlayer = bestPid && (PROF_SCORE[mergedProficiencies[bestPid]?.get(c.id) ?? '없음'] ?? 0) > 0
+                ? getPlayer(bestPid) : undefined;
+              return (
+                <ChampionWithHover key={c.id} champion={c} wrStats={wrStats}
+                  allPlayers={players} proficiencies={mergedProficiencies}
+                  estimatedMap={estimatedMap} highlightPlayerIds={myTeamIds}>
+                  <div
+                    onClick={() => !isLcuConnected && activePlayerId && handleManualPickChampion(c.id)}
+                    className={`flex flex-col items-center gap-0.5 rounded p-0.5 transition-colors ${
+                      !isLcuConnected && activePlayerId
+                        ? 'cursor-pointer hover:bg-lol-gold/20 hover:ring-1 hover:ring-lol-gold'
+                        : 'cursor-default'
+                    }`}>
+                    <ChampionIcon champion={c} size="base" />
+                    <span className="text-[9px] text-lol-gold-light/60">{c.nameKo}</span>
+                    {bestPlayer && (
+                      <span className="text-[8px] text-lol-gold/60 bg-lol-gold/10 px-1 rounded">
+                        {bestPlayer.name}
+                      </span>
+                    )}
+                  </div>
+                </ChampionWithHover>
+              );
+            })}
+          </div>
         )}
       </div>
 
