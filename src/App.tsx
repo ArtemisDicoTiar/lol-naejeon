@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Nav } from '@/components/layout/Nav';
 import { IdentitySelector } from '@/components/layout/IdentitySelector';
 import { useIdentity } from '@/hooks/useIdentity';
-import { useLcuBridge, type LcuChampSelectState, type LcuLobbyState } from '@/hooks/useLcuBridge';
+import { useLcuBridge, type LcuChampSelectState, type LcuLobbyState, type LcuLivePlayer } from '@/hooks/useLcuBridge';
 import { Dashboard } from '@/pages/Dashboard';
 import { Players } from '@/pages/Players';
 import { PlayerDetail } from '@/pages/PlayerDetail';
@@ -37,6 +37,7 @@ interface LcuContextType {
   champSelectActive: boolean;
   gameStartedAt: number | null;
   gameEndedAt: number | null;
+  liveGamePlayers: { team1: LcuLivePlayer[]; team2: LcuLivePlayer[] } | null;
   hoverChampion: (championNumericId: number) => void;
   lockInChampion: (championNumericId: number) => void;
   hoverBan: (championNumericId: number) => void;
@@ -46,7 +47,7 @@ interface LcuContextType {
 export const LcuContext = createContext<LcuContextType>({
   connected: false, connect: () => {}, disconnect: () => {},
   lastState: null, lobbyState: null, champSelectActive: false,
-  gameStartedAt: null, gameEndedAt: null,
+  gameStartedAt: null, gameEndedAt: null, liveGamePlayers: null,
   hoverChampion: () => {}, lockInChampion: () => {},
   hoverBan: () => {}, lockInBan: () => {},
 });

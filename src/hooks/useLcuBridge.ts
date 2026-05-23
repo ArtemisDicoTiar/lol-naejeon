@@ -12,6 +12,17 @@ export interface LcuChampSelectState {
   team2Picks: { cellId: number; champId: number; locked?: boolean; summonerId: number; gameName?: string; alias?: string | null }[];
 }
 
+// Player info from Live Client Data API (available after game starts — includes
+// both teams, making opponent picks visible for the first time).
+export interface LcuLivePlayer {
+  summonerName: string;
+  riotId: string;
+  alias: string | null;    // matched from SUMMONER_ALIAS in bridge
+  championName: string;   // display name, e.g. "Miss Fortune"
+  championId: string;     // normalised ID, e.g. "MissFortune"
+  team: 'ORDER' | 'CHAOS';  // ORDER=blue/T1, CHAOS=red/T2
+}
+
 export interface LcuLobbyState {
   team1: { summonerId: number; gameName: string; alias: string | null }[];
   team2: { summonerId: number; gameName: string; alias: string | null }[];
@@ -24,6 +35,7 @@ export function useLcuBridge() {
   const [champSelectActive, setChampSelectActive] = useState(false);
   const [gameStartedAt, setGameStartedAt] = useState<number | null>(null);
   const [gameEndedAt, setGameEndedAt] = useState<number | null>(null);
+  const [liveGamePlayers, setLiveGamePlayers] = useState<{ team1: LcuLivePlayer[]; team2: LcuLivePlayer[] } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<number | null>(null);
 
@@ -60,8 +72,11 @@ export function useLcuBridge() {
           } else if (data.type === 'gameStart') {
             setGameStartedAt(Date.now());
             setChampSelectActive(false);
+            setLiveGamePlayers(null); // reset; bridge will send fresh data
           } else if (data.type === 'gameEnd') {
             setGameEndedAt(Date.now());
+          } else if (data.type === 'liveGamePlayers') {
+            setLiveGamePlayers({ team1: data.team1, team2: data.team2 });
           }
         } catch {}
       };
@@ -123,5 +138,5 @@ export function useLcuBridge() {
     sendToClient({ type: 'lockInBan', championNumericId });
   }, [sendToClient]);
 
-  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive, gameStartedAt, gameEndedAt, hoverChampion, lockInChampion, hoverBan, lockInBan };
+  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive, gameStartedAt, gameEndedAt, liveGamePlayers, hoverChampion, lockInChampion, hoverBan, lockInBan };
 }

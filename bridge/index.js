@@ -2,6 +2,7 @@
 
 import { authenticate, createWebSocketConnection, createHttp1Request } from 'league-connect';
 import { WebSocketServer } from 'ws';
+import https from 'node:https';
 
 const WS_PORT = 8234;
 
@@ -406,6 +407,8 @@ async function connectToLCU() {
           // Cache lobby once more before game starts
           await cacheLobbyMembers();
           broadcast({ type: 'gameStart' });
+          // Fetch actual picks from Live Client Data API (runs in background)
+          scheduleLivePicksFetch();
         } else if (phase === 'WaitingForStats' || phase === 'EndOfGame' || phase === 'PreEndOfGame') {
           broadcast({ type: 'gameEnd' });
         }
@@ -634,6 +637,82 @@ let phaseCheckInterval = null;
 function stopTimerPolling() {
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   if (phaseCheckInterval) { clearInterval(phaseCheckInterval); phaseCheckInterval = null; }
+}
+
+// --- Live Client Data API: fetch all players' champions once game starts ---
+// The Live Client Data API runs on port 2999 (separate from LCU), requires
+// no auth, but uses a self-signed cert → rejectUnauthorized: false.
+
+function fetchLiveClientPlayers() {
+  return new Promise((resolve) => {
+    const req = https.get(
+      'https://127.0.0.1:2999/liveclientdata/playerlist',
+      { rejectUnauthorized: false },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk) => { raw += chunk; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(raw)); }
+          catch { resolve(null); }
+        });
+      },
+    );
+    req.on('error', () => resolve(null));
+    req.setTimeout(5000, () => { req.destroy(); resolve(null); });
+  });
+}
+
+// Normalise Live Client champion display name → internal ID format.
+// E.g. "Miss Fortune" → "MissFortune", "Vel'Koz" → "Velkoz"
+function normalizeChampionName(displayName) {
+  return displayName
+    .replace(/['’]/g, '')   // apostrophes: Vel'Koz → VelKoz, Cho'Gath → ChoGath
+    .replace(/\./g, '')           // dots: Dr. Mundo → Dr Mundo
+    .replace(/\s+/g, '')          // spaces: Miss Fortune → MissFortune
+    .replace(/^Nunu$/, 'Nunu')    // keep as-is
+    .trim();
+}
+
+async function scheduleLivePicksFetch() {
+  const MAX_RETRIES = 15;
+  const INTERVAL_MS = 3000; // 3s between retries → up to 45s total
+
+  for (let i = 0; i < MAX_RETRIES; i++) {
+    await new Promise(r => setTimeout(r, i === 0 ? 5000 : INTERVAL_MS)); // first retry after 5s
+
+    const players = await fetchLiveClientPlayers();
+    if (!Array.isArray(players) || players.length === 0) {
+      console.log(`   ⏳ 라이브 픽 대기 중... (${i + 1}/${MAX_RETRIES})`);
+      continue;
+    }
+
+    const team1 = [];
+    const team2 = [];
+
+    for (const p of players) {
+      const alias = findAlias(p.summonerName) ?? findAlias(p.riotId) ?? null;
+      const entry = {
+        summonerName: p.summonerName,
+        riotId: p.riotId ?? p.summonerName,
+        alias,
+        championName: p.championName,
+        championId: normalizeChampionName(p.championName),
+        team: p.team, // 'ORDER' (blue/T1) or 'CHAOS' (red/T2)
+      };
+      if (p.team === 'ORDER') team1.push(entry);
+      else team2.push(entry);
+    }
+
+    broadcast({ type: 'liveGamePlayers', team1, team2 });
+    const t1Str = team1.map(p => `${p.alias ?? p.summonerName}=${p.championId}`).join(', ');
+    const t2Str = team2.map(p => `${p.alias ?? p.summonerName}=${p.championId}`).join(', ');
+    console.log(`🎮 라이브 픽 확인!`);
+    console.log(`   T1(Order): ${t1Str}`);
+    console.log(`   T2(Chaos): ${t2Str}`);
+    return;
+  }
+
+  console.log('⚠️ 라이브 픽 정보를 시간 내에 가져오지 못했습니다.');
 }
 
 process.on('SIGINT', () => {

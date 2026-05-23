@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { db, getActiveSession, getFierlessBans, deleteGame as dbDeleteGame, deleteSession as dbDeleteSession, updateSessionName as dbUpdateSessionName, type Session, type Game, type GamePick, type GameBan, type GameMode } from '@/lib/db';
+import { db, getActiveSession, getFierlessBans, deleteGame as dbDeleteGame, deleteSession as dbDeleteSession, updateSessionName as dbUpdateSessionName, updateGameMode as dbUpdateGameMode, updateGamePicks as dbUpdateGamePicks, type Session, type Game, type GamePick, type GameBan, type GameMode } from '@/lib/db';
 import { syncToVercel } from '@/lib/auto-sync';
 
 export interface LastGameTeams {
@@ -145,5 +145,18 @@ export function useSession() {
     await refresh();
   };
 
-  return { session, games, fierlessBans, lastGameTeams, loading, refresh, createSession, endSession, addGame, setGameResult, removeGame, removeSession, renameSession };
+  const setGameMode = async (gameId: number, mode: GameMode) => {
+    await dbUpdateGameMode(gameId, mode);
+    await refresh();
+  };
+
+  const correctGamePicks = async (
+    gameId: number,
+    picks: Array<{ playerId: number; championId: string; team: 1 | 2 }>,
+  ) => {
+    await dbUpdateGamePicks(gameId, picks);
+    await refresh();
+  };
+
+  return { session, games, fierlessBans, lastGameTeams, loading, refresh, createSession, endSession, addGame, setGameResult, removeGame, removeSession, renameSession, setGameMode, correctGamePicks };
 }

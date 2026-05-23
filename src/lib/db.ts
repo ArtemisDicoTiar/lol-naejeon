@@ -206,6 +206,18 @@ export async function updateSessionName(sessionId: number, name: string): Promis
   await db.sessions.update(sessionId, { name });
 }
 
+export async function updateGameMode(gameId: number, mode: GameMode): Promise<void> {
+  await db.games.update(gameId, { mode });
+}
+
+export async function updateGamePicks(
+  gameId: number,
+  picks: Array<{ playerId: number; championId: string; team: 1 | 2 }>,
+): Promise<void> {
+  await db.gamePicks.where('gameId').equals(gameId).delete();
+  await db.gamePicks.bulkAdd(picks.map((p) => ({ ...p, gameId })));
+}
+
 export async function getActiveSession(): Promise<Session | null> {
   const all = await db.sessions.toArray();
   return all.find((s) => s.endedAt === null) ?? null;

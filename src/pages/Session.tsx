@@ -17,7 +17,7 @@ export function Session() {
   const navigate = useNavigate();
   const { isMaster } = useIdentityContext();
   const lcu = useLcuContext();
-  const { session, games, fierlessBans, lastGameTeams, loading, setGameResult, endSession, removeGame } = useSession();
+  const { session, games, fierlessBans, lastGameTeams, loading, setGameResult, endSession, removeGame, setGameMode, correctGamePicks } = useSession();
   const { champions } = useChampions();
   const [gamePicks, setGamePicks] = useState<Record<number, GamePick[]>>({});
   const [gameBansMap, setGameBansMap] = useState<Record<number, GameBan[]>>({});
@@ -26,6 +26,61 @@ export function Session() {
 
   useEffect(() => { db.players.toArray().then(setPlayers); }, []);
   useEffect(() => { computeWinrateStats().then(setWrStats); }, [games]);
+
+  // Pending game = last game without winningTeam (in progress)
+  const pendingGame = useMemo(
+    () => games.length > 0 ? games[games.length - 1] : null,
+    [games],
+  );
+  const pendingGamePicks = pendingGame ? (gamePicks[pendingGame.id!] ?? []) : [];
+
+  // Build a champion-name → champion map for normalising live pick data
+  const championByNormId = useMemo(() => {
+    const map = new Map<string, Champion>();
+    for (const c of champions) {
+      map.set(c.id.toLowerCase(), c);
+    }
+    return map;
+  }, [champions]);
+
+  // Try to resolve Live Client Data champion ID → our Champion
+  const resolveLiveChampion = (championId: string): Champion | undefined => {
+    // Direct match (most common)
+    let c = championByNormId.get(championId.toLowerCase());
+    if (c) return c;
+    // Some names differ — try stripping special chars
+    const stripped = championId.replace(/[^a-zA-Z]/g, '').toLowerCase();
+    for (const [key, val] of championByNormId) {
+      if (key.replace(/[^a-z]/g, '') === stripped) return val;
+    }
+    return undefined;
+  };
+
+  // Compute what a corrected pick list would look like from live data
+  const [showLivePanel, setShowLivePanel] = useState(false);
+  const liveGamePlayers = lcu.liveGamePlayers;
+
+  const correctedPicks = useMemo(() => {
+    if (!liveGamePlayers || !pendingGame || !players.length) return null;
+    const playerByAlias = new Map<string, Player>();
+    for (const p of players) playerByAlias.set(p.name, p);
+
+    const buildTeam = (
+      liveTeam: typeof liveGamePlayers.team1,
+      teamNum: 1 | 2,
+    ) => liveTeam
+      .map((lp) => {
+        const champ = resolveLiveChampion(lp.championId);
+        const player = lp.alias ? playerByAlias.get(lp.alias) : undefined;
+        return { livePlayer: lp, champ, player, teamNum };
+      });
+
+    return {
+      team1: buildTeam(liveGamePlayers.team1, 1),
+      team2: buildTeam(liveGamePlayers.team2, 2),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveGamePlayers, pendingGame, players, champions]);
 
   // Auto-navigate to new game when LCU detects champion select
   useEffect(() => {
@@ -135,6 +190,86 @@ export function Session() {
         )}
       </Card>
 
+      {/* Live game picks correction — shown when bridge sends actual picks */}
+      {liveGamePlayers && pendingGame && pendingGame.winningTeam === null && (
+        <Card title="🎮 실제 픽 확인 (게임 중)">
+          <p className="text-xs text-lol-gold-light/60 mb-3">
+            게임 클라이언트에서 실제 픽 정보를 가져왔습니다. 잘못 기록된 픽이 있다면 여기서 보정할 수 있습니다.
+          </p>
+          <button
+            onClick={() => setShowLivePanel(!showLivePanel)}
+            className="cursor-pointer text-sm text-lol-gold-light/70 hover:text-lol-gold mb-3">
+            {showLivePanel ? '▲ 숨기기' : '▼ 픽 정보 보기'}
+          </button>
+          {showLivePanel && correctedPicks && (
+            <div className="space-y-3">
+              {([
+                { label: 'T1 (ORDER/블루)', team: correctedPicks.team1 },
+                { label: 'T2 (CHAOS/레드)', team: correctedPicks.team2 },
+              ] as const).map(({ label, team }) => (
+                <div key={label}>
+                  <div className="text-xs text-lol-gold-light/50 mb-1">{label}</div>
+                  <div className="space-y-1">
+                    {team.map((row, i) => {
+                      const recorded = pendingGamePicks.find((p) =>
+                        row.player && p.playerId === row.player.id && p.team === row.teamNum,
+                      );
+                      const matches = recorded?.championId === row.champ?.id;
+                      return (
+                        <div key={i} className={`flex items-center gap-2 p-1.5 rounded text-sm ${
+                          !row.player ? 'opacity-50' : matches ? '' : 'bg-yellow-900/20 border border-yellow-700/30'
+                        }`}>
+                          {row.champ && <img src={row.champ.imageUrl} className="w-7 h-7 rounded" />}
+                          <span className="text-lol-gold-light">
+                            {row.player?.name ?? row.livePlayer.alias ?? row.livePlayer.summonerName}
+                          </span>
+                          <span className="text-lol-gold-light/60">{row.champ?.nameKo ?? row.livePlayer.championName}</span>
+                          {!row.player && <span className="text-yellow-400/70 text-xs">(매핑 없음)</span>}
+                          {row.player && !matches && recorded && (
+                            <span className="text-yellow-400/70 text-xs">
+                              ← 기록: {champions.find((c) => c.id === recorded.championId)?.nameKo ?? recorded.championId}
+                            </span>
+                          )}
+                          {row.player && !matches && !recorded && (
+                            <span className="text-yellow-400/70 text-xs">← 기록 없음</span>
+                          )}
+                          {matches && <span className="text-prof-high/60 text-xs">✓ 일치</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              <div className="pt-2 flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    if (!confirm('실제 픽 정보로 현재 게임 기록을 보정하시겠습니까? 기존 픽이 교체됩니다.')) return;
+                    const allRows = [...correctedPicks.team1, ...correctedPicks.team2];
+                    const newPicks: Array<{ playerId: number; championId: string; team: 1 | 2 }> = [];
+                    for (const row of allRows) {
+                      if (row.player && row.champ) {
+                        newPicks.push({ playerId: row.player.id!, championId: row.champ.id, team: row.teamNum });
+                      }
+                    }
+                    if (newPicks.length > 0) {
+                      await correctGamePicks(pendingGame.id!, newPicks);
+                      setShowLivePanel(false);
+                      alert(`${newPicks.length}명 픽 보정 완료.`);
+                    } else {
+                      alert('매핑된 픽이 없습니다. 플레이어-소환사명 매핑을 브릿지에서 확인해주세요.');
+                    }
+                  }}>
+                  보정 적용
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowLivePanel(false)}>닫기</Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Games */}
       <Card title={`게임 기록 (${games.length}개)`}>
         {games.length === 0 ? (
@@ -170,13 +305,16 @@ export function Session() {
                     <div className="flex items-center gap-2">
                       <span className="text-lol-gold font-bold">Game #{game.gameNumber}</span>
                       <span className="text-xs bg-lol-gold/20 text-lol-gold px-2 py-0.5 rounded">{game.format}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        (game.mode ?? 'aram') === 'augmented'
-                          ? 'bg-purple-900/40 text-purple-300 border border-purple-700/50'
-                          : 'bg-lol-blue/40 text-lol-gold-light/70 border border-lol-border'
-                      }`}>
+                      <button
+                        onClick={() => setGameMode(game.id!, game.mode === 'augmented' ? 'aram' : 'augmented')}
+                        title="클릭해서 모드 전환"
+                        className={`cursor-pointer text-xs px-2 py-0.5 rounded transition-colors ${
+                          (game.mode ?? 'aram') === 'augmented'
+                            ? 'bg-purple-900/40 text-purple-300 border border-purple-700/50 hover:bg-purple-800/50'
+                            : 'bg-lol-blue/40 text-lol-gold-light/70 border border-lol-border hover:border-lol-gold/50'
+                        }`}>
                         {GAME_MODE_LABELS[game.mode ?? 'aram']}
-                      </span>
+                      </button>
                     </div>
                     <div className="flex items-center gap-2">
                       {game.winningTeam ? (
