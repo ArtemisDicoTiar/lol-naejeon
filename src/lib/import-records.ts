@@ -1,4 +1,4 @@
-import { db } from './db';
+import { db, type GameMode } from './db';
 
 interface ImportTeam {
   players: string[];
@@ -8,6 +8,8 @@ interface ImportTeam {
 
 interface ImportGame {
   format: '3v3' | '3v4';
+  /** 'aram' (default) or 'augmented' (증바람). Omitting defaults to 'aram'. */
+  mode?: GameMode;
   winningTeam: number | null;
   team1: ImportTeam;
   team2: ImportTeam;
@@ -90,6 +92,7 @@ export async function importRecords(data: ImportData): Promise<{ sessions: numbe
         sessionId: sessionId as number,
         gameNumber: gi + 1,
         format: game.format,
+        mode: game.mode ?? 'aram',
         playedAt: new Date(),
         winningTeam: game.winningTeam,
         notes: game.notes ?? '',

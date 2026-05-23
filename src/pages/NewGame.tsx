@@ -7,7 +7,7 @@ import { useLcuContext } from '@/App';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { BanPickScreen } from '@/components/session/BanPickScreen';
-import { getPlayerProficiencies, type ProficiencyLevel } from '@/lib/db';
+import { getPlayerProficiencies, GAME_MODE_LABELS, type ProficiencyLevel, type GameMode } from '@/lib/db';
 
 type Step = 'setup' | 'banpick';
 
@@ -24,6 +24,7 @@ export function NewGame() {
 
   const [step, setStep] = useState<Step>((keepTeams && lastGameTeams) || fromLcu ? 'banpick' : 'setup');
   const [format, setFormat] = useState<'3v3' | '3v4'>(lastGameTeams?.format ?? '3v4');
+  const [mode, setMode] = useState<GameMode>(lastGameTeams?.mode ?? 'aram');
   const [sittingOut, setSittingOut] = useState<Set<number>>(new Set());
   const [teamAssignments, setTeamAssignments] = useState<Record<number, 1 | 2>>({});
   const [proficiencies, setProficiencies] = useState<Record<number, Map<string, ProficiencyLevel>>>({});
@@ -188,7 +189,7 @@ export function NewGame() {
     const t1c = picks.filter(p => p.team === 1).length;
     const t2c = picks.filter(p => p.team === 2).length;
     const gameFormat = (t1c + t2c >= 7) ? '3v4' : '3v3';
-    await addGame(gameFormat, picks, bans);
+    await addGame(gameFormat, picks, bans, mode);
     navigate('/session');
   };
 
@@ -206,6 +207,7 @@ export function NewGame() {
     return (
       <BanPickScreen
         format={format}
+        mode={mode}
         team1PlayerIds={team1PlayerIds}
         team2PlayerIds={team2PlayerIds}
         players={players}
@@ -228,6 +230,27 @@ export function NewGame() {
         <button onClick={() => navigate('/session')} className="text-lol-gold hover:text-lol-gold-light cursor-pointer">&larr;</button>
         <h1 className="text-2xl font-bold text-lol-gold">새 게임 설정</h1>
       </div>
+
+      {/* Game mode: 칼바람 / 증바람 */}
+      <Card title="게임 모드">
+        <div className="flex gap-2">
+          {(['aram', 'augmented'] as GameMode[]).map((m) => (
+            <button key={m} onClick={() => setMode(m)}
+              className={`flex-1 cursor-pointer p-3 rounded border text-center font-medium transition-colors ${
+                mode === m
+                  ? (m === 'augmented'
+                    ? 'border-purple-400 bg-purple-900/30 text-purple-300'
+                    : 'border-lol-gold bg-lol-gold/15 text-lol-gold')
+                  : 'border-lol-border bg-lol-gray text-lol-gold-light/50 hover:border-lol-gold/50'
+              }`}>
+              {GAME_MODE_LABELS[m]}
+              <div className="text-[10px] text-lol-gold-light/40 mt-1">
+                {m === 'aram' ? '일반 칼바람 나락' : '증강 칼바람 (증바람)'}
+              </div>
+            </button>
+          ))}
+        </div>
+      </Card>
 
       {/* Players: select who participates */}
       <Card title={`참가자 선택 (${selectedPlayerIds.length}명 참여)`}>

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
+import type { Champion, Player, ProficiencyLevel, GameMode } from '@/lib/db';
+import { GAME_MODE_LABELS } from '@/lib/db';
 import type { RecommendedComp } from '@/lib/recommendation/types';
 import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampions } from '@/lib/recommendation/engine';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
@@ -19,6 +20,7 @@ import { useLcuContext, useIdentityContext } from '@/App';
 
 interface BanPickScreenProps {
   format: '3v3' | '3v4';
+  mode?: GameMode;
   team1PlayerIds: number[];
   team2PlayerIds: number[];
   players: Player[];
@@ -38,7 +40,7 @@ type ActiveSlot =
 const SKIP_BAN = '__SKIP__';
 
 export function BanPickScreen({
-  format, team1PlayerIds, team2PlayerIds, players, champions,
+  format, mode = 'aram', team1PlayerIds, team2PlayerIds, players, champions,
   fierlessBans, proficiencies, onConfirm, onBack, onReorderTeams,
 }: BanPickScreenProps) {
   const { userId } = useIdentityContext();
@@ -1114,6 +1116,13 @@ export function BanPickScreen({
             className="cursor-pointer px-2 py-1 rounded text-[10px] border border-lol-border text-lol-gold-light/40 hover:text-lol-gold-light hover:border-lol-gold/50 transition-colors">
             리셋
           </button>
+          <span className={`text-[11px] px-2 py-0.5 rounded border font-medium ${
+            mode === 'augmented'
+              ? 'border-purple-400/60 bg-purple-900/30 text-purple-300'
+              : 'border-lol-gold/50 bg-lol-gold/10 text-lol-gold'
+          }`} title={mode === 'augmented' ? '증강 칼바람' : '일반 칼바람'}>
+            {GAME_MODE_LABELS[mode]}
+          </span>
         </div>
         <div className="flex gap-2 items-center">
           {displayTimer !== null && (
@@ -1150,7 +1159,7 @@ export function BanPickScreen({
             className="p-1.5 bg-lol-gray/40 rounded border border-lol-border/60"
           />
         </div>
-        <SideStatsBadge className="p-1.5 bg-lol-gray/40 rounded border border-lol-border/60 shrink-0" />
+        <SideStatsBadge mode={mode} className="p-1.5 bg-lol-gray/40 rounded border border-lol-border/60 shrink-0" />
       </div>
 
       {/* Fierless Banner */}

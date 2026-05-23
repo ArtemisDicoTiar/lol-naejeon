@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { StreakStrip } from '@/components/stats/StreakStrip';
-import { db, type GamePick, type GameBan, type Player } from '@/lib/db';
+import { db, GAME_MODE_LABELS, type GamePick, type GameBan, type Player } from '@/lib/db';
 import { useIdentityContext, useLcuContext } from '@/App';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
 import type { Champion } from '@/lib/db';
@@ -170,6 +170,13 @@ export function Session() {
                     <div className="flex items-center gap-2">
                       <span className="text-lol-gold font-bold">Game #{game.gameNumber}</span>
                       <span className="text-xs bg-lol-gold/20 text-lol-gold px-2 py-0.5 rounded">{game.format}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        (game.mode ?? 'aram') === 'augmented'
+                          ? 'bg-purple-900/40 text-purple-300 border border-purple-700/50'
+                          : 'bg-lol-blue/40 text-lol-gold-light/70 border border-lol-border'
+                      }`}>
+                        {GAME_MODE_LABELS[game.mode ?? 'aram']}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       {game.winningTeam ? (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { db } from '@/lib/db';
+import { db, GAME_MODE_LABELS, type GameMode } from '@/lib/db';
 
 interface SideStats {
   team1Wins: number;
@@ -9,9 +9,10 @@ interface SideStats {
 
 /**
  * Compact "T1 N% / T2 N%" badge for BanPickScreen — shows historical side
- * winrate so players can spot a side bias before drafting.
+ * winrate so players can spot a side bias before drafting. When `mode` is
+ * passed, filters to that game mode only.
  */
-export function SideStatsBadge({ className }: { className?: string }) {
+export function SideStatsBadge({ className, mode }: { className?: string; mode?: GameMode }) {
   const [stats, setStats] = useState<SideStats | null>(null);
 
   useEffect(() => {
@@ -20,13 +21,14 @@ export function SideStatsBadge({ className }: { className?: string }) {
       if (cancelled) return;
       let t1 = 0, t2 = 0;
       for (const g of games) {
+        if (mode && (g.mode ?? 'aram') !== mode) continue;
         if (g.winningTeam === 1) t1++;
         else if (g.winningTeam === 2) t2++;
       }
       setStats({ team1Wins: t1, team2Wins: t2, total: t1 + t2 });
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [mode]);
 
   if (!stats || stats.total === 0) return null;
 
@@ -37,7 +39,9 @@ export function SideStatsBadge({ className }: { className?: string }) {
   return (
     <div className={className ?? 'p-1.5 bg-lol-gray/40 rounded border border-lol-border/60'}>
       <div className="flex items-center justify-center gap-2 text-[10px]">
-        <span className="text-lol-gold-light/40">사이드 승률 (전체 {stats.total}판)</span>
+        <span className="text-lol-gold-light/40">
+          {mode ? `${GAME_MODE_LABELS[mode]} ` : ''}사이드 승률 ({stats.total}판)
+        </span>
         <span className={`font-mono font-bold ${t1Better ? 'text-prof-high' : 'text-blue-400/70'}`}>
           T1 {Math.round(t1Wr)}%
         </span>

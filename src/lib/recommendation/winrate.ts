@@ -1,4 +1,4 @@
-import { db } from '@/lib/db';
+import { db, type GameMode } from '@/lib/db';
 import { computeStatsFromData } from './winrate-pure';
 export { estimateCompWinrate } from './winrate-pure';
 
@@ -36,12 +36,19 @@ export interface WinrateStats {
   totalGames: number;
 }
 
-export async function computeWinrateStats(): Promise<WinrateStats> {
-  const [games, picks, bans] = await Promise.all([
+export async function computeWinrateStats(modeFilter?: GameMode): Promise<WinrateStats> {
+  const [allGames, allPicks, allBans] = await Promise.all([
     db.games.toArray(),
     db.gamePicks.toArray(),
     db.gameBans.toArray(),
   ]);
+  if (!modeFilter) {
+    return computeStatsFromData(allGames, allPicks, allBans);
+  }
+  const games = allGames.filter((g) => (g.mode ?? 'aram') === modeFilter);
+  const gameIdSet = new Set(games.map((g) => g.id));
+  const picks = allPicks.filter((p) => gameIdSet.has(p.gameId));
+  const bans = allBans.filter((b) => gameIdSet.has(b.gameId));
   return computeStatsFromData(games, picks, bans);
 }
 

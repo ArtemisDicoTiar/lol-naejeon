@@ -1,4 +1,4 @@
-import { db, type Champion, type Game, type GamePick, type Player, getPlayerProficiencies, getActiveSession } from './db';
+import { db, type Champion, type Game, type GamePick, type GameMode, type Player, getPlayerProficiencies, getActiveSession } from './db';
 import { computeWinrateStats, type WinrateStats } from './recommendation/winrate';
 import { aramChampionMeta } from '@/data/aram-champion-meta';
 
@@ -189,14 +189,23 @@ const ROLE_KO: Record<string, string> = {
 const ROLE_KEYS = ['poke', 'engage', 'sustain', 'dps', 'tank', 'utility'] as const;
 const RECENT_GAMES_WINDOW = 5;
 
-export async function computeFullStats(): Promise<FullStats> {
-  const [wrStats, players, champions, allGames, allPicks] = await Promise.all([
-    computeWinrateStats(),
+export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats> {
+  const [wrStats, players, champions, allGamesRaw, allPicksRaw] = await Promise.all([
+    computeWinrateStats(modeFilter),
     db.players.toArray(),
     db.champions.toArray(),
     db.games.toArray(),
     db.gamePicks.toArray(),
   ]);
+  // Apply same mode filter to games/picks so downstream calcs (radar, role
+  // dist, head-to-head, trio synergy, etc.) only see the requested mode.
+  const allGames = modeFilter
+    ? allGamesRaw.filter((g) => (g.mode ?? 'aram') === modeFilter)
+    : allGamesRaw;
+  const gameIdSet = modeFilter ? new Set(allGames.map((g) => g.id)) : null;
+  const allPicks = gameIdSet
+    ? allPicksRaw.filter((p) => gameIdSet.has(p.gameId))
+    : allPicksRaw;
 
   const champMap = new Map(champions.map((c) => [c.id, c]));
 

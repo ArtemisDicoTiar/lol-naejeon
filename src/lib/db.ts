@@ -34,11 +34,19 @@ export interface Session {
   endedAt: Date | null;
 }
 
+export type GameMode = 'aram' | 'augmented';
+
+export const GAME_MODE_LABELS: Record<GameMode, string> = {
+  aram: '칼바람',
+  augmented: '증바람',
+};
+
 export interface Game {
   id?: number;
   sessionId: number;
   gameNumber: number;
   format: '3v3' | '3v4';
+  mode: GameMode;
   playedAt: Date;
   winningTeam: number | null;
   notes: string;
@@ -102,6 +110,20 @@ class LolDB extends Dexie {
         delete session.date;
       });
     });
+    // v4: add `mode` to games. Backfill existing rows to 'aram' (regular 칼바람).
+    this.version(4).stores({
+      players: '++id, name',
+      champions: 'id, aramRole, aramTier',
+      proficiencies: '++id, [playerId+championId], playerId, championId',
+      sessions: '++id',
+      games: '++id, sessionId, mode',
+      gamePicks: '++id, gameId, [gameId+playerId], championId',
+      gameBans: '++id, gameId, championId',
+    }).upgrade((tx) => {
+      return tx.table('games').toCollection().modify((game: any) => {
+        if (!game.mode) game.mode = 'aram';
+      });
+    });
   }
 }
 
@@ -131,6 +153,7 @@ async function importDataIntoDb(data: any) {
     if (data.games?.length) {
       await db.games.bulkAdd(data.games.map((g: any) => ({
         ...g,
+        mode: (g.mode === 'augmented' ? 'augmented' : 'aram') as GameMode,
         playedAt: new Date(g.playedAt),
       })));
     }

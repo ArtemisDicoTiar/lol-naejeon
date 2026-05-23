@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { db, getActiveSession, getFierlessBans, deleteGame as dbDeleteGame, deleteSession as dbDeleteSession, updateSessionName as dbUpdateSessionName, type Session, type Game, type GamePick, type GameBan } from '@/lib/db';
+import { db, getActiveSession, getFierlessBans, deleteGame as dbDeleteGame, deleteSession as dbDeleteSession, updateSessionName as dbUpdateSessionName, type Session, type Game, type GamePick, type GameBan, type GameMode } from '@/lib/db';
 import { syncToVercel } from '@/lib/auto-sync';
 
 export interface LastGameTeams {
   format: '3v3' | '3v4';
+  mode: GameMode;
   team1: number[];
   team2: number[];
 }
@@ -33,6 +34,7 @@ export function useSession() {
           const picks = await db.gamePicks.where('gameId').equals(lastGame.id!).toArray();
           setLastGameTeams({
             format: lastGame.format,
+            mode: lastGame.mode ?? 'aram',
             team1: picks.filter((p) => p.team === 1).map((p) => p.playerId),
             team2: picks.filter((p) => p.team === 2).map((p) => p.playerId),
           });
@@ -83,12 +85,14 @@ export function useSession() {
   const addGame = async (
     format: '3v3' | '3v4',
     picks: Omit<GamePick, 'id' | 'gameId'>[],
-    bans?: Omit<GameBan, 'id' | 'gameId'>[]
+    bans?: Omit<GameBan, 'id' | 'gameId'>[],
+    mode: GameMode = 'aram',
   ) => {
     if (!session) return;
     const sig = [
       session.id,
       format,
+      mode,
       ...picks
         .map((p) => `${p.team}:${p.playerId}:${p.championId}`)
         .sort(),
@@ -103,6 +107,7 @@ export function useSession() {
       sessionId: session.id!,
       gameNumber,
       format,
+      mode,
       playedAt: new Date(),
       winningTeam: null,
       notes: '',

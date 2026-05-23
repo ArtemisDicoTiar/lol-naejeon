@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { computeFullStats, type FullStats } from '@/lib/stats';
+import { GAME_MODE_LABELS, type GameMode } from '@/lib/db';
 import { Card } from '@/components/ui/Card';
 import { PlayerRanking } from '@/components/stats/PlayerRanking';
 import { PlayerStreak } from '@/components/stats/PlayerStreak';
@@ -15,30 +16,76 @@ import { HeadToHead } from '@/components/stats/HeadToHead';
 import { TrioPlayerSynergy } from '@/components/stats/TrioPlayerSynergy';
 import { TrioChampionSynergy } from '@/components/stats/TrioChampionSynergy';
 
+type ModeFilter = 'all' | GameMode;
+
 export function Stats() {
   const [stats, setStats] = useState<FullStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
 
   useEffect(() => {
-    computeFullStats().then((s) => { setStats(s); setLoading(false); });
-  }, []);
+    setLoading(true);
+    const filter = modeFilter === 'all' ? undefined : modeFilter;
+    computeFullStats(filter).then((s) => { setStats(s); setLoading(false); });
+  }, [modeFilter]);
+
+  const modeToggle = (
+    <div className="flex gap-2">
+      {([
+        { k: 'all' as ModeFilter, label: '전체' },
+        { k: 'aram' as ModeFilter, label: GAME_MODE_LABELS.aram },
+        { k: 'augmented' as ModeFilter, label: GAME_MODE_LABELS.augmented },
+      ]).map((opt) => (
+        <button key={opt.k} onClick={() => setModeFilter(opt.k)}
+          className={`cursor-pointer px-3 py-1 rounded text-sm border transition-colors ${
+            modeFilter === opt.k
+              ? (opt.k === 'augmented'
+                ? 'border-purple-400 bg-purple-900/30 text-purple-300'
+                : 'border-lol-gold bg-lol-gold/20 text-lol-gold')
+              : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+          }`}>
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
 
   if (loading || !stats) {
-    return <div className="text-center py-8 text-lol-gold">통계 로딩 중...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
+          {modeToggle}
+        </div>
+        <div className="text-center py-8 text-lol-gold">통계 로딩 중...</div>
+      </div>
+    );
   }
 
   if (stats.wrStats.totalGames === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
-        <Card><p className="text-center py-8 text-lol-gold-light/50">게임 기록이 없습니다. 내전을 진행한 후 통계를 확인하세요.</p></Card>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
+          {modeToggle}
+        </div>
+        <Card>
+          <p className="text-center py-8 text-lol-gold-light/50">
+            {modeFilter === 'all'
+              ? '게임 기록이 없습니다. 내전을 진행한 후 통계를 확인하세요.'
+              : `${GAME_MODE_LABELS[modeFilter as GameMode]} 모드 기록이 없습니다.`}
+          </p>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
+        {modeToggle}
+      </div>
 
       {/* Quick stats */}
       {(() => {
