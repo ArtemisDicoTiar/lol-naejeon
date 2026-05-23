@@ -187,11 +187,11 @@ export const aramChampionMeta: Record<string, AramChampionMeta> = {
 
 export const ARAM_ROLE_LABELS: Record<AramRole, string> = {
   poke: '포크',
-  engage: '인게이지',
-  sustain: '서스테인',
+  engage: '이니시',
+  sustain: '유지력',
   dps: '딜러',
   tank: '탱커',
-  utility: '유틸리티',
+  utility: '유틸',
 };
 
 export const ARAM_TIER_LABELS: Record<AramTier, string> = {

@@ -89,8 +89,8 @@ export interface FullStats {
 }
 
 const ROLE_KO: Record<string, string> = {
-  poke: '포크', engage: '인게이지', sustain: '서스테인',
-  dps: '딜러', tank: '탱커', utility: '유틸리티',
+  poke: '포크', engage: '이니시', sustain: '유지력',
+  dps: '딜러', tank: '탱커', utility: '유틸',
 };
 
 const ROLE_KEYS = ['poke', 'engage', 'sustain', 'dps', 'tank', 'utility'] as const;
@@ -187,8 +187,8 @@ export async function computeFullStats(): Promise<FullStats> {
     radarData[pid] = [
       { axis: '승률', value: winrate },
       { axis: '포크', value: roleScore(['poke']) },
-      { axis: '인게이지', value: roleScore(['engage', 'tank']) },
-      { axis: '서스테인', value: roleScore(['sustain', 'utility']) },
+      { axis: '이니시', value: roleScore(['engage', 'tank']) },
+      { axis: '유지력', value: roleScore(['sustain', 'utility']) },
       { axis: '캐리력', value: carryScore },
     ];
 

@@ -3,31 +3,7 @@ import type { WinrateStats } from '@/lib/recommendation/winrate';
 import { ProficiencyBadge, TierBadge, RoleBadge } from '@/components/ui/Badge';
 import type { EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
-
-const TAG_LABELS: Partial<Record<MechanicTag, string>> = {
-  knockup: '넉업',
-  pull: '끌어오기',
-  aoe_cc: 'AoE CC',
-  single_target_cc: '단일 CC',
-  shield: '쉴드',
-  heal: '힐',
-  speed_buff: '이속 버프',
-  attack_steroid: '공격 버프',
-  zone_control: '구역 장악',
-  poke_long: '롱 포크',
-  poke_mid: '미드 포크',
-  burst: '버스트',
-  dps_sustained: '지속 딜',
-  execute: '처형',
-  revive: '부활',
-  invulnerable: '무적',
-  terrain_create: '지형 생성',
-  anti_heal: '치유 감소',
-  tank_shred: '탱커 파쇄',
-  diving: '다이브',
-  dash_reset: '리셋 대쉬',
-  stealth: '은신',
-};
+import { TAG_LABELS } from '@/data/tag-display';
 
 const TAG_COLORS: Partial<Record<MechanicTag, string>> = {
   heal: 'bg-green-800/60 text-green-300',

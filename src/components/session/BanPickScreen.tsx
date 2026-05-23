@@ -6,6 +6,8 @@ import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/l
 import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
 import { estimatePlayerProficiencies, type EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
+import { TAG_LABELS } from '@/data/tag-display';
+import { ARAM_ROLE_LABELS, type AramRole } from '@/data/aram-champion-meta';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
@@ -54,6 +56,9 @@ export function BanPickScreen({
   const [planningTimer, setPlanningTimer] = useState(25);
   const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
   const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
+  const [roleFilter, setRoleFilter] = useState<Set<string>>(new Set());
+  const [traitFilter, setTraitFilter] = useState<Set<MechanicTag>>(new Set());
+  const [showTraitPanel, setShowTraitPanel] = useState(false);
   const [lcuPaused, setLcuPaused] = useState(false); // pause LCU sync after manual reset
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
   const [matchData, setMatchData] = useState<SynergyCounterData | null>(null);
@@ -505,6 +510,8 @@ export function BanPickScreen({
     setPhase('planning');
     setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] });
     setSearch('');
+    setRoleFilter(new Set());
+    setTraitFilter(new Set());
     // Pause LCU sync so it doesn't re-apply old state
     setLcuPaused(true);
   };
@@ -635,6 +642,21 @@ export function BanPickScreen({
     if (search) {
       list = list.filter((c) => c.nameKo.includes(search) || c.id.toLowerCase().includes(searchLower));
     }
+    // Role filter (multi-select OR — champion's aramRole must match any selected)
+    if (roleFilter.size > 0) {
+      list = list.filter((c) => roleFilter.has(c.aramRole));
+    }
+    // Trait filter (multi-select AND — champion must have ALL selected mechanics)
+    if (traitFilter.size > 0) {
+      list = list.filter((c) => {
+        const traits = championTraits[c.id];
+        if (!traits) return false;
+        for (const t of traitFilter) {
+          if (!traits.mechanics.includes(t)) return false;
+        }
+        return true;
+      });
+    }
     const tierOrder: Record<string, number> = { S: 0, A: 1, B: 2, C: 3, D: 4 };
     const profOrder: Record<string, number> = { 'S': 0, '상': 1, '중': 2, '하': 3, '없음': 4 };
     const isDisabled = (c: Champion) => allBannedIds.has(c.id) || pickedIds.has(c.id);
@@ -684,7 +706,7 @@ export function BanPickScreen({
       return (tierOrder[a.aramTier] ?? 3) - (tierOrder[b.aramTier] ?? 3);
     });
     return list;
-  }, [champions, fierlessBans, search, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds, sortMode]);
+  }, [champions, fierlessBans, search, roleFilter, traitFilter, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds, sortMode]);
 
   // --- RENDER ---
   const renderTeamPanel = (team: 1 | 2) => {
@@ -851,9 +873,9 @@ export function BanPickScreen({
 
           let counterRole: string[] = [];
           let counterTip = '';
-          if (pokeCount >= 2) { counterRole = ['engage', 'tank']; counterTip = '상대 포크 다수 → 인게이지로 카운터'; }
-          else if (engageCount >= 2) { counterRole = ['sustain', 'utility']; counterTip = '상대 인게이지 다수 → 서스테인으로 카운터'; }
-          else if (sustainCount >= 2) { counterRole = ['poke']; counterTip = '상대 서스테인 다수 → 포크로 카운터'; }
+          if (pokeCount >= 2) { counterRole = ['engage', 'tank']; counterTip = '상대 포크 다수 → 이니시로 카운터'; }
+          else if (engageCount >= 2) { counterRole = ['sustain', 'utility']; counterTip = '상대 이니시 다수 → 유지력으로 카운터'; }
+          else if (sustainCount >= 2) { counterRole = ['poke']; counterTip = '상대 유지력 다수 → 포크로 카운터'; }
           else { counterRole = ['engage', 'poke', 'dps']; counterTip = '상대 밸런스 조합 → 유연한 대응 추천'; }
 
           // Find counter champions from available pool
@@ -1279,6 +1301,73 @@ export function BanPickScreen({
             </select>
             {/* Skip ban is now in the champion grid as an X card */}
           </div>
+
+          {/* Role filter chips — always visible */}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[10px] text-lol-gold-light/40 mr-1">역할</span>
+            {(Object.keys(ARAM_ROLE_LABELS) as AramRole[]).map((role) => {
+              const active = roleFilter.has(role);
+              return (
+                <button key={role}
+                  onClick={() => setRoleFilter(prev => {
+                    const next = new Set(prev);
+                    if (next.has(role)) next.delete(role); else next.add(role);
+                    return next;
+                  })}
+                  className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ${
+                    active
+                      ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
+                      : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+                  }`}>
+                  {ARAM_ROLE_LABELS[role]}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setShowTraitPanel(s => !s)}
+              className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ml-1 ${
+                showTraitPanel || traitFilter.size > 0
+                  ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
+                  : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+              }`}>
+              특성 {traitFilter.size > 0 ? `(${traitFilter.size})` : ''}{showTraitPanel ? ' ▲' : ' ▼'}
+            </button>
+            {(roleFilter.size > 0 || traitFilter.size > 0) && (
+              <button
+                onClick={() => { setRoleFilter(new Set()); setTraitFilter(new Set()); }}
+                className="cursor-pointer text-[10px] px-2 py-0.5 rounded border border-lol-border/50 text-lol-gold-light/40 hover:text-lol-gold-light ml-1">
+                필터 초기화
+              </button>
+            )}
+          </div>
+
+          {/* Trait filter chips — collapsible panel */}
+          {showTraitPanel && (
+            <div className="flex flex-wrap items-center gap-1 p-2 rounded border border-lol-border bg-lol-dark/40">
+              <span className="text-[10px] text-lol-gold-light/40 mr-1">
+                특성 (선택한 모든 특성 보유)
+              </span>
+              {(Object.keys(TAG_LABELS) as MechanicTag[]).map((tag) => {
+                const active = traitFilter.has(tag);
+                return (
+                  <button key={tag}
+                    onClick={() => setTraitFilter(prev => {
+                      const next = new Set(prev);
+                      if (next.has(tag)) next.delete(tag); else next.add(tag);
+                      return next;
+                    })}
+                    className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ${
+                      active
+                        ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
+                        : 'border-lol-border text-lol-gold-light/40 hover:border-lol-gold/50'
+                    }`}>
+                    {TAG_LABELS[tag]}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="text-xs text-center space-y-1">
             <div className="text-lol-gold-light/40">
               {activeSlot

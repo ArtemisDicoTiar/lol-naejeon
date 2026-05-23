@@ -77,10 +77,10 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
           <span className="text-lol-gold-light/60 font-medium">포크</span> = 포크챔프 픽비율 × 해당 승률 × 200
         </div>
         <div className="p-1.5 bg-lol-blue/30 rounded">
-          <span className="text-lol-gold-light/60 font-medium">인게이지</span> = 인게이지/탱크 픽비율 × 해당 승률 × 200
+          <span className="text-lol-gold-light/60 font-medium">이니시</span> = 이니시/탱커 픽비율 × 해당 승률 × 200
         </div>
         <div className="p-1.5 bg-lol-blue/30 rounded">
-          <span className="text-lol-gold-light/60 font-medium">서스테인</span> = 서스테인/유틸 픽비율 × 해당 승률 × 200
+          <span className="text-lol-gold-light/60 font-medium">유지력</span> = 유지력/유틸 픽비율 × 해당 승률 × 200
         </div>
         <div className="p-1.5 bg-lol-blue/30 rounded">
           <span className="text-lol-gold-light/60 font-medium">캐리력</span> = S/상/중 챔프 승수 / S/상/중 챔프 게임수 × 100
