@@ -18,11 +18,11 @@ export function PlayerRanking({ stats }: { stats: FullStats }) {
             <tr className="text-lol-gold-light/50 border-b border-lol-border">
               <th className="text-left py-2 px-2">#</th>
               <th className="text-left py-2 px-2">플레이어</th>
-              <th className="text-right py-2 px-2">승률</th>
               <th className="text-right py-2 px-2">승</th>
               <th className="text-right py-2 px-2">패</th>
               <th className="text-right py-2 px-2">게임</th>
               <th className="text-right py-2 px-2">챔프폭</th>
+              <th className="text-right py-2 px-2">승률</th>
               <th className="text-left py-2 px-2">승률 바</th>
             </tr>
           </thead>
@@ -31,14 +31,14 @@ export function PlayerRanking({ stats }: { stats: FullStats }) {
               <tr key={p.id} className="border-b border-lol-border/30 hover:bg-lol-blue/30">
                 <td className="py-2 px-2 text-lol-gold font-bold">{i + 1}</td>
                 <td className="py-2 px-2 text-lol-gold-light font-medium">{p.name}</td>
-                <td className={`py-2 px-2 text-right font-mono ${p.winrate >= 55 ? 'text-prof-high' : p.winrate >= 45 ? 'text-lol-gold' : 'text-prof-low'}`}>
-                  {p.totalPicks > 0 ? `${Math.round(p.winrate)}%` : '-'}
-                </td>
                 <td className="py-2 px-2 text-right text-prof-high/80">{p.wins}</td>
                 <td className="py-2 px-2 text-right text-prof-low/80">{p.losses}</td>
                 <td className="py-2 px-2 text-right text-lol-gold-light/50">{p.totalPicks}</td>
                 <td className="py-2 px-2 text-right font-mono text-lol-gold-light/70">
                   {p.pool > 0 ? `${p.pool}종` : '-'}
+                </td>
+                <td className={`py-2 px-2 text-right font-mono ${p.winrate >= 55 ? 'text-prof-high' : p.winrate >= 45 ? 'text-lol-gold' : 'text-prof-low'}`}>
+                  {p.totalPicks > 0 ? `${Math.round(p.winrate)}%` : '-'}
                 </td>
                 <td className="py-2 px-2 w-32">
                   {p.totalPicks > 0 && (

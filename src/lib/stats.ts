@@ -51,6 +51,41 @@ export async function computePlayerStreaks(playerIds: number[]): Promise<Record<
   return computePlayerStreaksFromData(playerIds, games, picks);
 }
 
+// Round-based "today only" streak: counts consecutive same-result games from
+// today, newest → oldest. Used in BanPickScreen so players see their current
+// momentum within this inhouse day (resets every day, no day-aggregation).
+export function computeTodayStreaksFromData(
+  playerIds: number[],
+  games: Game[],
+  picks: GamePick[],
+): Record<number, PlayerStreakEntry> {
+  const today = dayKey(new Date());
+  const todayGames = games
+    .filter((g) => g.winningTeam !== null && g.id !== undefined && dayKey(new Date(g.playedAt)) === today)
+    .sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime());
+  const out: Record<number, PlayerStreakEntry> = {};
+  for (const pid of playerIds) {
+    let type: 'W' | 'L' | null = null;
+    let count = 0;
+    for (const g of todayGames) {
+      const myPick = picks.find((p) => p.gameId === g.id && p.playerId === pid);
+      if (!myPick) continue;
+      const result: 'W' | 'L' = myPick.team === g.winningTeam ? 'W' : 'L';
+      if (type === null) { type = result; count = 1; continue; }
+      if (result !== type) break;
+      count++;
+    }
+    out[pid] = { type, count };
+  }
+  return out;
+}
+
+export async function computeTodayStreaks(playerIds: number[]): Promise<Record<number, PlayerStreakEntry>> {
+  if (playerIds.length === 0) return {};
+  const [games, picks] = await Promise.all([db.games.toArray(), db.gamePicks.toArray()]);
+  return computeTodayStreaksFromData(playerIds, games, picks);
+}
+
 export interface PlayerRadarData {
   axis: string;
   value: number; // 0~100

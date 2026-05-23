@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Player } from '@/lib/db';
-import { computePlayerStreaks } from '@/lib/stats';
+import { computePlayerStreaks, computeTodayStreaks } from '@/lib/stats';
 import type { PlayerStreakEntry } from '@/lib/stats';
 
 interface StreakStripProps {
@@ -13,9 +13,16 @@ interface StreakStripProps {
   hideEmpty?: boolean;
   /** Compact mode for ban-pick top bar. */
   compact?: boolean;
+  /**
+   * 'day' = day-aggregated streak across all history (3승3패 = 무 유지).
+   * 'today' = round-based streak counting today's games only.
+   */
+  mode?: 'day' | 'today';
 }
 
-export function StreakStrip({ players, playerIds, className, hideEmpty = true, compact = false }: StreakStripProps) {
+export function StreakStrip({
+  players, playerIds, className, hideEmpty = true, compact = false, mode = 'day',
+}: StreakStripProps) {
   const [streaks, setStreaks] = useState<Record<number, PlayerStreakEntry>>({});
 
   const ids = playerIds ?? players.map((p) => p.id!);
@@ -24,10 +31,11 @@ export function StreakStrip({ players, playerIds, className, hideEmpty = true, c
   useEffect(() => {
     if (ids.length === 0) { setStreaks({}); return; }
     let cancelled = false;
-    computePlayerStreaks(ids).then((s) => { if (!cancelled) setStreaks(s); });
+    const fn = mode === 'today' ? computeTodayStreaks : computePlayerStreaks;
+    fn(ids).then((s) => { if (!cancelled) setStreaks(s); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sig]);
+  }, [sig, mode]);
 
   const rows = ids
     .map((id) => ({ player: players.find((p) => p.id === id), streak: streaks[id] }))
@@ -35,12 +43,16 @@ export function StreakStrip({ players, playerIds, className, hideEmpty = true, c
 
   const shown = hideEmpty ? rows.filter((r) => r.streak.count > 0) : rows;
 
+  const headerLabel = mode === 'today' ? '오늘 라운드 연승·연패' : '일자 연승·연패';
+  const emptyLabel = mode === 'today'
+    ? '오늘 진행한 게임이 아직 없습니다'
+    : '연승·연패 기록 없음 (일자 단위: 3승 3패는 무 유지)';
+  const unit = mode === 'today' ? '' : '일 ';
+
   if (shown.length === 0) {
     return (
       <div className={className ?? 'p-2 bg-lol-gray/50 rounded border border-lol-border'}>
-        <div className="text-[10px] text-lol-gold-light/40 text-center">
-          연승·연패 기록 없음 (일자 단위로 계산: 3승 3패는 무 유지)
-        </div>
+        <div className="text-[10px] text-lol-gold-light/40 text-center">{emptyLabel}</div>
       </div>
     );
   }
@@ -55,7 +67,7 @@ export function StreakStrip({ players, playerIds, className, hideEmpty = true, c
     <div className={className ?? 'p-2 bg-lol-gray/50 rounded border border-lol-border'}>
       <div className="flex items-center gap-1.5 flex-wrap justify-center">
         <span className={`text-[10px] mr-1 ${compact ? 'text-lol-gold-light/40' : 'text-lol-gold-light/50'}`}>
-          일자 연승·연패
+          {headerLabel}
         </span>
         {shown.map(({ player, streak }) => {
           const isWin = streak.type === 'W';
@@ -67,7 +79,7 @@ export function StreakStrip({ players, playerIds, className, hideEmpty = true, c
                   : 'border-prof-low/40 bg-prof-low/15 text-prof-low'
               }`}>
               <span className="font-medium text-lol-gold-light/80">{player.name}</span>
-              <span className="font-mono font-bold">{streak.count}일 {isWin ? '연승' : '연패'}</span>
+              <span className="font-mono font-bold">{streak.count}{unit}{isWin ? '연승' : '연패'}</span>
             </span>
           );
         })}
