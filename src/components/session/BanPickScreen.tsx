@@ -12,6 +12,7 @@ import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { StreakStrip } from '@/components/stats/StreakStrip';
 import { useLcuContext, useIdentityContext } from '@/App';
 
 interface BanPickScreenProps {
@@ -1128,6 +1129,14 @@ export function BanPickScreen({
           {!allPicked ? '픽 미완료' : !allLocked ? `락인 대기 (${lockedPicks.size}/${team1PlayerIds.length + team2PlayerIds.length})` : '게임 시작!'}
         </Button>
       </div>
+
+      {/* Day-based streak strip (participants of this draft) */}
+      <StreakStrip
+        players={players}
+        playerIds={[...team1PlayerIds, ...team2PlayerIds]}
+        compact
+        className="p-1.5 bg-lol-gray/40 rounded border border-lol-border/60"
+      />
 
       {/* Fierless Banner */}
       {fierlessChampions.length > 0 && (

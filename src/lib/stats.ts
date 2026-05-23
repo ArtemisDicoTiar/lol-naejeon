@@ -1,6 +1,55 @@
-import { db, type Champion, type Player, getPlayerProficiencies } from './db';
+import { db, type Champion, type Game, type GamePick, type Player, getPlayerProficiencies } from './db';
 import { computeWinrateStats, type WinrateStats } from './recommendation/winrate';
 import { aramChampionMeta } from '@/data/aram-champion-meta';
+
+// Local-time YYYY-MM-DD bucket key for grouping a player's games into days.
+function dayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+// Day-based streak: each day a player has games becomes a W/L/tie based on
+// that day's net record. Tie days (wins === losses) act as "maintain" — they
+// don't break or extend the running streak. Walk days from most recent.
+export function computePlayerStreaksFromData(
+  playerIds: number[],
+  games: Game[],
+  picks: GamePick[],
+): Record<number, PlayerStreakEntry> {
+  const completed = games.filter((g) => g.winningTeam !== null && g.id !== undefined);
+  const out: Record<number, PlayerStreakEntry> = {};
+  for (const pid of playerIds) {
+    const buckets = new Map<string, { wins: number; losses: number }>();
+    for (const g of completed) {
+      const myPick = picks.find((p) => p.gameId === g.id && p.playerId === pid);
+      if (!myPick) continue;
+      const key = dayKey(new Date(g.playedAt));
+      const b = buckets.get(key) ?? { wins: 0, losses: 0 };
+      if (myPick.team === g.winningTeam) b.wins++; else b.losses++;
+      buckets.set(key, b);
+    }
+    const sortedDays = [...buckets.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+    let type: 'W' | 'L' | null = null;
+    let count = 0;
+    for (const [, day] of sortedDays) {
+      if (day.wins === day.losses) continue; // tie day — maintain, don't add
+      const r: 'W' | 'L' = day.wins > day.losses ? 'W' : 'L';
+      if (type === null) { type = r; count = 1; continue; }
+      if (r !== type) break;
+      count++;
+    }
+    out[pid] = { type, count };
+  }
+  return out;
+}
+
+export async function computePlayerStreaks(playerIds: number[]): Promise<Record<number, PlayerStreakEntry>> {
+  if (playerIds.length === 0) return {};
+  const [games, picks] = await Promise.all([db.games.toArray(), db.gamePicks.toArray()]);
+  return computePlayerStreaksFromData(playerIds, games, picks);
+}
 
 export interface PlayerRadarData {
   axis: string;
@@ -216,19 +265,10 @@ export async function computeFullStats(): Promise<FullStats> {
       delta: recentGames > 0 ? recentWr - winrate : 0,
     };
 
-    // Current streak (most-recent → backwards, stop at first break)
-    let streakType: 'W' | 'L' | null = null;
-    let streakCount = 0;
-    for (const g of gamesByRecent) {
-      const myPick = allPicks.find((p) => p.gameId === g.id && p.playerId === pid);
-      if (!myPick) continue;
-      const result: 'W' | 'L' = myPick.team === g.winningTeam ? 'W' : 'L';
-      if (streakType === null) { streakType = result; streakCount = 1; continue; }
-      if (result !== streakType) break;
-      streakCount++;
-    }
-    playerStreak[pid] = { type: streakType, count: streakCount };
   }
+  // Day-based streak for every player (computed in one batch)
+  const streakBatch = computePlayerStreaksFromData(players.map((p) => p.id!), allGames, allPicks);
+  for (const pid of Object.keys(streakBatch).map(Number)) playerStreak[pid] = streakBatch[pid];
 
   // --- Head to Head + Trio Synergy (precompute per-game player→team map for speed) ---
   const gameTeamMap = new Map<number, Map<number, number>>(); // gameId → playerId → team

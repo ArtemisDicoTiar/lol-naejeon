@@ -17,11 +17,14 @@ export function PlayerStreak({ stats }: { stats: FullStats }) {
   });
 
   return (
-    <Card title="연승·연패 현황">
+    <Card title="연승·연패 현황 (일자 단위)">
+      <p className="text-xs text-lol-gold-light/40 mb-3">
+        하루의 종합 결과(승 &gt; 패 = 승일, 승 &lt; 패 = 패일, 동률 = 무로 유지)로 계산합니다.
+      </p>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
         {rows.map(({ player, streak }) => {
           const isWin = streak.type === 'W';
-          const label = isWin ? `${streak.count}연승` : `${streak.count}연패`;
+          const label = isWin ? `${streak.count}일 연승` : `${streak.count}일 연패`;
           return (
             <div key={player.id} className={`p-3 rounded border ${
               isWin

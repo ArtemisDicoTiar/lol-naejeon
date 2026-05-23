@@ -5,6 +5,7 @@ import { useChampions } from '@/hooks/useChampions';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
+import { StreakStrip } from '@/components/stats/StreakStrip';
 import { db, type GamePick, type GameBan, type Player } from '@/lib/db';
 import { useIdentityContext, useLcuContext } from '@/App';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
@@ -112,6 +113,15 @@ export function Session() {
             </Link>
           </div>
         </Card>
+      )}
+
+      {/* Day-based streak status */}
+      {players.length > 0 && (
+        <StreakStrip
+          players={players}
+          // Re-mount when games array changes so today's results refresh the strip
+          key={`streak-${games.length}`}
+        />
       )}
 
       {/* Fierless */}
