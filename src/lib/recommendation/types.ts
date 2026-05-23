@@ -10,6 +10,9 @@ export interface RecommendationInput {
   proficiencies: Record<number, Map<string, ProficiencyLevel>>;
   matchData?: SynergyCounterData | null;
   lockedPicks?: Record<number, string>;  // playerId → championId (already picked)
+  // Same presence weighting as BanRecommendationInput — bumps frequently
+  // picked/banned champions up in pick recommendations when otherwise tied.
+  champFrequency?: Record<string, { pickRate: number; banRate: number }>;
 }
 
 export interface ChampionAssignment {

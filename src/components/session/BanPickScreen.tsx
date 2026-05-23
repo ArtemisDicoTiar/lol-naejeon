@@ -3,6 +3,7 @@ import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
 import type { RecommendedComp } from '@/lib/recommendation/types';
 import { generateRecommendations, generatePerPlayerBanRecs, getPlayerTopChampions } from '@/lib/recommendation/engine';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
+import { scoreComposition } from '@/lib/recommendation/scoring';
 import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
 import { estimatePlayerProficiencies, type EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
@@ -13,6 +14,7 @@ import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
 import { ProficiencyBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { StreakStrip } from '@/components/stats/StreakStrip';
+import { SideStatsBadge } from '@/components/stats/SideStatsBadge';
 import { useLcuContext, useIdentityContext } from '@/App';
 
 interface BanPickScreenProps {
@@ -441,6 +443,7 @@ export function BanPickScreen({
       opponentPicks: opponentCurrentPicks.length > 0 ? opponentCurrentPicks : undefined,
       matchData,
       lockedPicks: Object.keys(confirmedPicks).length > 0 ? confirmedPicks : undefined,
+      champFrequency,
     }).slice(0, 10);
     if (wrStats) {
       for (const rec of recs) {
@@ -453,7 +456,13 @@ export function BanPickScreen({
   // Per-player top champions
   const getPlayerRecs = (playerId: number) => {
     const profMap = mergedProficiencies[playerId] ?? new Map();
-    return getPlayerTopChampions(playerId, profMap, availableChampions.filter((c) => !pickedIds.has(c.id) || picks[playerId] === c.id), 7);
+    return getPlayerTopChampions(
+      playerId,
+      profMap,
+      availableChampions.filter((c) => !pickedIds.has(c.id) || picks[playerId] === c.id),
+      7,
+      champFrequency,
+    );
   };
 
   // Track which ban slots are locked
@@ -1130,14 +1139,19 @@ export function BanPickScreen({
         </Button>
       </div>
 
-      {/* Current session round-based streak strip (participants of this draft) */}
-      <StreakStrip
-        players={players}
-        playerIds={[...team1PlayerIds, ...team2PlayerIds]}
-        compact
-        mode="session"
-        className="p-1.5 bg-lol-gray/40 rounded border border-lol-border/60"
-      />
+      {/* Current session round-based streak strip + side winrate reference */}
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <StreakStrip
+            players={players}
+            playerIds={[...team1PlayerIds, ...team2PlayerIds]}
+            compact
+            mode="session"
+            className="p-1.5 bg-lol-gray/40 rounded border border-lol-border/60"
+          />
+        </div>
+        <SideStatsBadge className="p-1.5 bg-lol-gray/40 rounded border border-lol-border/60 shrink-0" />
+      </div>
 
       {/* Fierless Banner */}
       {fierlessChampions.length > 0 && (
@@ -1166,36 +1180,62 @@ export function BanPickScreen({
           { label: '버스트', tags: ['burst'], color: 'text-orange-300 bg-orange-900/70' },
         ];
 
-        const getTeamData = (playerIds: number[]) => {
-          const pickedChamps = playerIds.map((pid) => picks[pid]).filter(Boolean)
-            .map((id) => champions.find((c) => c.id === id)).filter(Boolean);
+        const champMapLocal = new Map(champions.map((c) => [c.id, c]));
+        const traitsMapLocal = new Map(Object.entries(championTraits));
+
+        const getTeamData = (playerIds: number[], opponentPicks: string[]) => {
+          const pickedChamps = playerIds
+            .map((pid) => ({ pid, cid: picks[pid] }))
+            .filter((x) => x.cid)
+            .map((x) => ({ pid: x.pid, champ: champions.find((c) => c.id === x.cid)! }))
+            .filter((x) => x.champ);
           let ap = 0, ad = 0, hybrid = 0;
-          for (const c of pickedChamps) {
-            if (c!.damageType === 'AP') ap++;
-            else if (c!.damageType === 'AD') ad++;
+          for (const { champ } of pickedChamps) {
+            if (champ.damageType === 'AP') ap++;
+            else if (champ.damageType === 'AD') ad++;
             else hybrid++;
           }
           const total = ap + ad + hybrid;
           const apPct = total > 0 ? ((ap + hybrid * 0.5) / total) * 100 : 50;
           const tagCounts = new Map<string, number>();
-          for (const c of pickedChamps) {
-            const traits = championTraits[c!.id];
+          for (const { champ } of pickedChamps) {
+            const traits = championTraits[champ.id];
             if (traits) for (const t of traits.mechanics) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
           }
-          const avgWr = pickedChamps.length > 0
-            ? pickedChamps.reduce((s, c) => s + c!.aramWinrate, 0) / pickedChamps.length : 50;
-          return { apPct, adPct: 100 - apPct, tagCounts, avgWr, count: pickedChamps.length };
+          // Real winrate estimate: scoreComposition (proficiency/synergy/counter
+          // vs opponent picks) → baseScore → estimateCompWinrate blends in each
+          // player's personal champion winrate + global champion winrate.
+          let estimate = 50;
+          if (pickedChamps.length > 0 && wrStats) {
+            const assignments = pickedChamps.map(({ pid, champ }) => ({
+              playerId: pid,
+              playerName: players.find((p) => p.id === pid)?.name ?? '',
+              championId: champ.id,
+              championName: champ.nameKo,
+              proficiency: mergedProficiencies[pid]?.get(champ.id) ?? '중',
+            }));
+            const { score: baseScore } = scoreComposition(
+              assignments, champMapLocal, traitsMapLocal, 'balanced', opponentPicks, matchData
+            );
+            estimate = estimateCompWinrate(assignments, wrStats, baseScore);
+          }
+          return { apPct, adPct: 100 - apPct, tagCounts, estimate, count: pickedChamps.length };
         };
 
         const anyPicks = Object.keys(picks).length > 0;
         if (!anyPicks) return null;
 
-        const t1 = getTeamData(team1PlayerIds);
-        const t2 = getTeamData(team2PlayerIds);
-        const wrTotal = t1.avgWr + t2.avgWr;
-        const t1Pct = wrTotal > 0 ? Math.round((t1.avgWr / wrTotal) * 100) : 50;
+        const t1 = getTeamData(team1PlayerIds, team2Picks);
+        const t2 = getTeamData(team2PlayerIds, team1Picks);
+        // Head-to-head: each team's estimate is a "vs unknown opponent" wr.
+        // Convert to a relative win probability by spreading the difference
+        // around 50% (clamped to [10, 90] to avoid extreme readings on tiny
+        // sample sizes).
+        const diff = t1.estimate - t2.estimate;
+        const t1Pct = Math.max(10, Math.min(90, Math.round(50 + diff / 2)));
         const t2Pct = 100 - t1Pct;
         const t1Winning = t1Pct >= t2Pct;
+        const dataGames = wrStats?.totalGames ?? 0;
 
         const renderSummary = (data: ReturnType<typeof getTeamData>, team: 1 | 2) => {
           if (data.count === 0) return <div className="w-[360px] shrink-0 text-center text-xs text-lol-gold-light/20 py-2">픽 대기중</div>;
@@ -1245,6 +1285,11 @@ export function BanPickScreen({
                 <div className="h-2.5 rounded-full overflow-hidden flex bg-lol-dark/50">
                   <div className={`${t1Winning ? 'bg-green-500/80' : 'bg-blue-500/40'} transition-all`} style={{ width: `${t1Pct}%` }} />
                   <div className={`${!t1Winning ? 'bg-green-500/80' : 'bg-red-500/40'} transition-all`} style={{ width: `${t2Pct}%` }} />
+                </div>
+                <div className="flex justify-between text-[9px] text-lol-gold-light/40 mt-1 font-mono">
+                  <span>단독 {Math.round(t1.estimate)}%</span>
+                  <span className="text-lol-gold-light/30">내전 {dataGames}판 기반</span>
+                  <span>단독 {Math.round(t2.estimate)}%</span>
                 </div>
               </div>
             </div>

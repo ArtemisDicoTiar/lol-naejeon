@@ -14,8 +14,18 @@ function buildTraitsMap(): Map<string, ChampionTraits> {
 const CANDIDATES_PER_SLOT = 5;
 const MAX_RESULTS = 10;
 
+// Shared presence calc — frequently picked/banned champs nudge tied picks up.
+function presenceFor(
+  champId: string,
+  freq?: Record<string, { pickRate: number; banRate: number }>,
+): number {
+  const f = freq?.[champId];
+  if (!f) return 0;
+  return Math.min(1, (f.pickRate + f.banRate * 1.5) / 50);
+}
+
 export function generateRecommendations(input: RecommendationInput): RecommendedComp[] {
-  const { teamPlayers, bannedChampions, allChampions, proficiencies, opponentPicks, matchData, lockedPicks } = input;
+  const { teamPlayers, bannedChampions, allChampions, proficiencies, opponentPicks, matchData, lockedPicks, champFrequency } = input;
   const bannedSet = new Set(bannedChampions);
   const champMap = new Map(allChampions.map((c) => [c.id, c]));
   const traitsMap = buildTraitsMap();
@@ -93,7 +103,8 @@ export function generateRecommendations(input: RecommendationInput): Recommended
           .filter((c) => slot.roles.includes(c.aramRole))
           .map((c) => ({
             champion: c,
-            score: getChampionSlotScore(c, slot.preferredRoles, playerProfs.get(c.id)),
+            score: getChampionSlotScore(c, slot.preferredRoles, playerProfs.get(c.id))
+              + presenceFor(c.id, champFrequency) * 0.5,
           }))
           .sort((a, b) => b.score - a.score)
           .slice(0, CANDIDATES_PER_SLOT)
@@ -328,14 +339,6 @@ export function generatePerPlayerBanRecs(
   const traitsMap = buildTraitsMap();
   const result: Record<number, BanRecommendation[]> = {};
 
-  // presence ∈ [0, 1]; weighted so bans count slightly more than picks since
-  // a high ban rate already signals community consensus on threat.
-  const presenceFor = (champId: string): number => {
-    const f = champFrequency?.[champId];
-    if (!f) return 0;
-    return Math.min(1, (f.pickRate + f.banRate * 1.5) / 50);
-  };
-
   // Build opponent champion pools for synergy denial calc
   const opponentPools = new Map<number, string[]>();
   for (const pid of opponentPlayerIds) {
@@ -371,7 +374,7 @@ export function generatePerPlayerBanRecs(
 
       const tierW = TIER_WEIGHT[champ.aramTier] ?? 1;
       const wrBonus = Math.max(-0.5, Math.min(0.5, (champ.aramWinrate - 50) * 0.1));
-      const presence = presenceFor(champ.id);
+      const presence = presenceFor(champ.id, champFrequency);
 
       // Always compute meta-based fallback score (used if no proficiency data)
       const metaScore = (tierW + wrBonus) / 3.0 + presence * 0.3;
@@ -425,7 +428,8 @@ export function getPlayerTopChampions(
   _playerId: number,
   profMap: Map<string, ProficiencyLevel>,
   availableChampions: Champion[],
-  count = 7
+  count = 7,
+  champFrequency?: Record<string, { pickRate: number; banRate: number }>,
 ): Champion[] {
   return availableChampions
     .filter((c) => {
@@ -434,7 +438,9 @@ export function getPlayerTopChampions(
     })
     .map((c) => ({
       champ: c,
-      score: (PROF_THREAT[profMap.get(c.id)!] ?? 0) * (TIER_WEIGHT[c.aramTier] ?? 1),
+      score:
+        (PROF_THREAT[profMap.get(c.id)!] ?? 0) * (TIER_WEIGHT[c.aramTier] ?? 1)
+        + presenceFor(c.id, champFrequency) * 0.8,
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, count)

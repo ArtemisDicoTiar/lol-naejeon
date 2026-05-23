@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { ProficiencyBadge, TierBadge, RoleBadge } from '@/components/ui/Badge';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ARAM_ROLE_LABELS, type AramRole, type AramTier } from '@/data/aram-champion-meta';
+import { computeWinrateStats, type WinrateStats } from '@/lib/recommendation/winrate';
+import { estimatePlayerProficiencies, type EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
 
 const LEVELS: ProficiencyLevel[] = ['S', '상', '중', '하', '없음'];
 
@@ -19,6 +21,8 @@ export function PlayerDetail() {
   const [roleFilter, setRoleFilter] = useState<AramRole | ''>('');
   const [tierFilter, setTierFilter] = useState<AramTier | ''>('');
   const [profFilter, setProfFilter] = useState<ProficiencyLevel | ''>('');
+  const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
+  const [applyMsg, setApplyMsg] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -26,6 +30,17 @@ export function PlayerDetail() {
     db.players.get(playerId).then((p) => setPlayer(p ?? null));
     getPlayerProficiencies(playerId).then(setProficiencies);
   }, [id]);
+
+  useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
+
+  // Auto-estimated proficiencies from game history (only for champs where
+  // manual is '없음' or unset). Keyed by championId.
+  const estimates = useMemo<Map<string, EstimatedProficiency>>(() => {
+    if (!id || !wrStats || champions.length === 0) return new Map();
+    const playerId = parseInt(id);
+    const aramWrMap = new Map(champions.map((c) => [c.id, c.aramWinrate]));
+    return estimatePlayerProficiencies(playerId, proficiencies, champions.map((c) => c.id), aramWrMap, wrStats);
+  }, [id, wrStats, champions, proficiencies]);
 
   const handleSetProficiency = async (championId: string, level: ProficiencyLevel) => {
     if (!id) return;
@@ -41,27 +56,70 @@ export function PlayerDetail() {
     handleSetProficiency(championId, next);
   };
 
+  // Bulk-apply: write high-confidence estimates → manual proficiencies. Only
+  // touches champs where the user has not already set a level.
+  const applyAllEstimates = async () => {
+    if (!id) return;
+    const playerId = parseInt(id);
+    const toApply: Array<[string, ProficiencyLevel]> = [];
+    for (const [champId, est] of estimates) {
+      if (est.confidence === 'low') continue; // skip 1-game estimates
+      const existing = proficiencies.get(champId);
+      if (existing && existing !== '없음') continue;
+      toApply.push([champId, est.level]);
+    }
+    if (toApply.length === 0) {
+      setApplyMsg('적용할 자동 추정이 없습니다 (이미 모두 수동 설정됨).');
+      return;
+    }
+    if (!confirm(`${toApply.length}개 챔피언에 자동 추정 숙련도를 일괄 적용하시겠습니까? 수동으로 설정된 항목은 건드리지 않습니다.`)) return;
+    for (const [champId, level] of toApply) {
+      await setProficiency(playerId, champId, level);
+    }
+    const fresh = await getPlayerProficiencies(playerId);
+    setProficiencies(fresh);
+    setApplyMsg(`${toApply.length}개 챔피언에 자동 추정 숙련도 적용 완료.`);
+  };
+
+  // Effective level for filter/stats: manual takes priority, estimate fills
+  // when manual is unset or '없음'.
+  const effectiveLevel = (champId: string): ProficiencyLevel => {
+    const manual = proficiencies.get(champId);
+    if (manual && manual !== '없음') return manual;
+    const est = estimates.get(champId);
+    if (est) return est.level;
+    return '없음';
+  };
+
   const filteredChampions = useMemo(() => {
     return champions.filter((c) => {
       if (search && !c.nameKo.includes(search) && !c.id.toLowerCase().includes(search.toLowerCase())) return false;
       if (roleFilter && c.aramRole !== roleFilter) return false;
       if (tierFilter && c.aramTier !== tierFilter) return false;
       if (profFilter) {
-        const level = proficiencies.get(c.id) ?? '없음';
-        if (level !== profFilter) return false;
+        if (effectiveLevel(c.id) !== profFilter) return false;
       }
       return true;
     });
-  }, [champions, search, roleFilter, tierFilter, profFilter, proficiencies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [champions, search, roleFilter, tierFilter, profFilter, proficiencies, estimates]);
 
   const stats = useMemo(() => {
     const counts: Record<ProficiencyLevel, number> = { 'S': 0, '상': 0, '중': 0, '하': 0, '없음': 0 };
-    for (const c of champions) {
-      const level = proficiencies.get(c.id) ?? '없음';
-      counts[level]++;
-    }
+    for (const c of champions) counts[effectiveLevel(c.id)]++;
     return counts;
-  }, [champions, proficiencies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [champions, proficiencies, estimates]);
+
+  const pendingEstimateCount = useMemo(() => {
+    let n = 0;
+    for (const [champId, est] of estimates) {
+      if (est.confidence === 'low') continue;
+      const m = proficiencies.get(champId);
+      if (!m || m === '없음') n++;
+    }
+    return n;
+  }, [estimates, proficiencies]);
 
   if (!player) {
     return <div className="text-center py-8 text-lol-gold-light/60">선수를 찾을 수 없습니다.</div>;
@@ -69,9 +127,24 @@ export function PlayerDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/players" className="text-lol-gold hover:text-lol-gold-light">&larr;</Link>
-        <h1 className="text-2xl font-bold text-lol-gold">{player.name} 숙련도</h1>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Link to="/players" className="text-lol-gold hover:text-lol-gold-light">&larr;</Link>
+          <h1 className="text-2xl font-bold text-lol-gold">{player.name} 숙련도</h1>
+        </div>
+        {pendingEstimateCount > 0 && (
+          <Button variant="secondary" size="sm" onClick={applyAllEstimates}>
+            자동 추정 {pendingEstimateCount}개 일괄 적용
+          </Button>
+        )}
+      </div>
+
+      {applyMsg && (
+        <div className="p-2 bg-lol-gray rounded border border-lol-border text-sm text-lol-gold">{applyMsg}</div>
+      )}
+
+      <div className="text-xs text-lol-gold-light/40">
+        점선 (~상) 뱃지는 게임 기록 기반 자동 추정. 클릭하면 수동으로 고정합니다.
       </div>
 
       {/* Stats Summary */}
@@ -131,11 +204,15 @@ export function PlayerDetail() {
       {/* Champion Grid */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
         {filteredChampions.map((champ) => {
-          const level = proficiencies.get(champ.id) ?? '없음';
+          const manual = proficiencies.get(champ.id);
+          const est = estimates.get(champ.id);
+          const displayLevel = (manual && manual !== '없음') ? manual : (est?.level ?? '없음');
+          const isEstimated = (!manual || manual === '없음') && !!est;
           return (
             <div
               key={champ.id}
               className="flex flex-col items-center gap-1.5 p-2 bg-lol-gray rounded border border-lol-border hover:border-lol-gold/50 transition-colors"
+              title={isEstimated && est ? `자동 추정: ${est.reason}` : undefined}
             >
               <ChampionIcon champion={champ} onClick={() => cycleProficiency(champ.id)} />
               <span className="text-xs text-lol-gold-light/80 text-center leading-tight">
@@ -146,8 +223,9 @@ export function PlayerDetail() {
                 <RoleBadge role={champ.aramRole} />
               </div>
               <ProficiencyBadge
-                level={level}
+                level={displayLevel}
                 size="sm"
+                estimated={isEstimated}
                 onClick={() => cycleProficiency(champ.id)}
               />
             </div>

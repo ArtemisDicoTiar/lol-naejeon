@@ -41,32 +41,54 @@ export function Stats() {
       <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-lol-gold">{stats.wrStats.totalGames}</div>
-            <div className="text-sm text-lol-gold-light/60">총 게임</div>
+      {(() => {
+        const sideTotal = stats.sideStats.total || 1;
+        const t1Wr = (stats.sideStats.team1Wins / sideTotal) * 100;
+        const t2Wr = (stats.sideStats.team2Wins / sideTotal) * 100;
+        const t1Better = t1Wr >= t2Wr;
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-lol-gold">{stats.wrStats.totalGames}</div>
+                <div className="text-sm text-lol-gold-light/60">총 게임</div>
+              </div>
+            </Card>
+            <Card>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-lol-gold">{stats.players.length}</div>
+                <div className="text-sm text-lol-gold-light/60">플레이어</div>
+              </div>
+            </Card>
+            <Card>
+              <div className="text-center">
+                <div className={`text-3xl font-bold font-mono ${t1Better ? 'text-prof-high' : 'text-blue-400/70'}`}>
+                  {Math.round(t1Wr)}%
+                </div>
+                <div className="text-sm text-lol-gold-light/60">
+                  Team 1 승률
+                </div>
+                <div className="text-[10px] text-lol-gold-light/40">
+                  {stats.sideStats.team1Wins}W / {stats.sideStats.total - stats.sideStats.team1Wins}L
+                </div>
+              </div>
+            </Card>
+            <Card>
+              <div className="text-center">
+                <div className={`text-3xl font-bold font-mono ${!t1Better ? 'text-prof-high' : 'text-red-400/70'}`}>
+                  {Math.round(t2Wr)}%
+                </div>
+                <div className="text-sm text-lol-gold-light/60">
+                  Team 2 승률
+                </div>
+                <div className="text-[10px] text-lol-gold-light/40">
+                  {stats.sideStats.team2Wins}W / {stats.sideStats.total - stats.sideStats.team2Wins}L
+                </div>
+              </div>
+            </Card>
           </div>
-        </Card>
-        <Card>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-lol-gold">{stats.players.length}</div>
-            <div className="text-sm text-lol-gold-light/60">플레이어</div>
-          </div>
-        </Card>
-        <Card>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-blue-400">{stats.sideStats.team1Wins}</div>
-            <div className="text-sm text-lol-gold-light/60">Team 1 승</div>
-          </div>
-        </Card>
-        <Card>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-red-400">{stats.sideStats.team2Wins}</div>
-            <div className="text-sm text-lol-gold-light/60">Team 2 승</div>
-          </div>
-        </Card>
-      </div>
+        );
+      })()}
 
       {/* Player Ranking */}
       <PlayerRanking stats={stats} />
