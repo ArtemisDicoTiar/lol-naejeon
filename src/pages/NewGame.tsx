@@ -7,6 +7,7 @@ import { useLcuContext } from '@/App';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { BanPickScreen } from '@/components/session/BanPickScreen';
+import { AugWaitScreen } from '@/components/session/AugWaitScreen';
 import { getPlayerProficiencies, GAME_MODE_LABELS, type ProficiencyLevel, type GameMode } from '@/lib/db';
 
 type Step = 'setup' | 'banpick';
@@ -202,8 +203,20 @@ export function NewGame() {
     );
   }
 
-  // --- BanPick screen (full width) ---
+  // --- BanPick / AugWait screen (full width) ---
   if (step === 'banpick') {
+    if (mode === 'augmented') {
+      return (
+        <AugWaitScreen
+          team1PlayerIds={team1PlayerIds}
+          team2PlayerIds={team2PlayerIds}
+          players={players}
+          champions={champions}
+          onConfirm={handleBanPickConfirm}
+          onBack={() => setStep('setup')}
+        />
+      );
+    }
     return (
       <BanPickScreen
         format={format}
