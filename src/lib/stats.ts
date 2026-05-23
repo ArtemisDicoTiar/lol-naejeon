@@ -1,4 +1,4 @@
-import { db, type Champion, type Game, type GamePick, type Player, getPlayerProficiencies } from './db';
+import { db, type Champion, type Game, type GamePick, type Player, getPlayerProficiencies, getActiveSession } from './db';
 import { computeWinrateStats, type WinrateStats } from './recommendation/winrate';
 import { aramChampionMeta } from '@/data/aram-champion-meta';
 
@@ -51,23 +51,27 @@ export async function computePlayerStreaks(playerIds: number[]): Promise<Record<
   return computePlayerStreaksFromData(playerIds, games, picks);
 }
 
-// Round-based "today only" streak: counts consecutive same-result games from
-// today, newest → oldest. Used in BanPickScreen so players see their current
-// momentum within this inhouse day (resets every day, no day-aggregation).
-export function computeTodayStreaksFromData(
+// Session-based streak: counts consecutive same-result games within ONE
+// session (typically one inhouse day), newest → oldest. Used in BanPickScreen
+// so players see their current momentum in this inhouse.
+//
+// Why session and not calendar day: imported games (via import-records.ts) all
+// share the import-time `playedAt`, so a date filter would falsely lump
+// historical games into "today". Filtering by sessionId is unambiguous.
+export function computeSessionStreaksFromData(
   playerIds: number[],
   games: Game[],
   picks: GamePick[],
+  sessionId: number,
 ): Record<number, PlayerStreakEntry> {
-  const today = dayKey(new Date());
-  const todayGames = games
-    .filter((g) => g.winningTeam !== null && g.id !== undefined && dayKey(new Date(g.playedAt)) === today)
-    .sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime());
+  const sessionGames = games
+    .filter((g) => g.winningTeam !== null && g.id !== undefined && g.sessionId === sessionId)
+    .sort((a, b) => b.gameNumber - a.gameNumber); // newest gameNumber first
   const out: Record<number, PlayerStreakEntry> = {};
   for (const pid of playerIds) {
     let type: 'W' | 'L' | null = null;
     let count = 0;
-    for (const g of todayGames) {
+    for (const g of sessionGames) {
       const myPick = picks.find((p) => p.gameId === g.id && p.playerId === pid);
       if (!myPick) continue;
       const result: 'W' | 'L' = myPick.team === g.winningTeam ? 'W' : 'L';
@@ -80,10 +84,15 @@ export function computeTodayStreaksFromData(
   return out;
 }
 
-export async function computeTodayStreaks(playerIds: number[]): Promise<Record<number, PlayerStreakEntry>> {
+export async function computeSessionStreaks(playerIds: number[]): Promise<Record<number, PlayerStreakEntry>> {
   if (playerIds.length === 0) return {};
-  const [games, picks] = await Promise.all([db.games.toArray(), db.gamePicks.toArray()]);
-  return computeTodayStreaksFromData(playerIds, games, picks);
+  const [games, picks, session] = await Promise.all([
+    db.games.toArray(),
+    db.gamePicks.toArray(),
+    getActiveSession(),
+  ]);
+  if (!session) return {};
+  return computeSessionStreaksFromData(playerIds, games, picks, session.id!);
 }
 
 export interface PlayerRadarData {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Player } from '@/lib/db';
-import { computePlayerStreaks, computeTodayStreaks } from '@/lib/stats';
+import { computePlayerStreaks, computeSessionStreaks } from '@/lib/stats';
 import type { PlayerStreakEntry } from '@/lib/stats';
 
 interface StreakStripProps {
@@ -14,10 +14,10 @@ interface StreakStripProps {
   /** Compact mode for ban-pick top bar. */
   compact?: boolean;
   /**
-   * 'day' = day-aggregated streak across all history (3승3패 = 무 유지).
-   * 'today' = round-based streak counting today's games only.
+   * 'day'     = day-aggregated streak across all history (3승3패 = 무 유지).
+   * 'session' = round-based streak counting current active session only.
    */
-  mode?: 'day' | 'today';
+  mode?: 'day' | 'session';
 }
 
 export function StreakStrip({
@@ -31,7 +31,7 @@ export function StreakStrip({
   useEffect(() => {
     if (ids.length === 0) { setStreaks({}); return; }
     let cancelled = false;
-    const fn = mode === 'today' ? computeTodayStreaks : computePlayerStreaks;
+    const fn = mode === 'session' ? computeSessionStreaks : computePlayerStreaks;
     fn(ids).then((s) => { if (!cancelled) setStreaks(s); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -43,11 +43,11 @@ export function StreakStrip({
 
   const shown = hideEmpty ? rows.filter((r) => r.streak.count > 0) : rows;
 
-  const headerLabel = mode === 'today' ? '오늘 라운드 연승·연패' : '일자 연승·연패';
-  const emptyLabel = mode === 'today'
-    ? '오늘 진행한 게임이 아직 없습니다'
+  const headerLabel = mode === 'session' ? '이번 내전 연승·연패' : '일자 연승·연패';
+  const emptyLabel = mode === 'session'
+    ? '이번 내전에서 결과가 기록된 라운드가 아직 없습니다'
     : '연승·연패 기록 없음 (일자 단위: 3승 3패는 무 유지)';
-  const unit = mode === 'today' ? '' : '일 ';
+  const unit = mode === 'session' ? '' : '일 ';
 
   if (shown.length === 0) {
     return (

@@ -1130,12 +1130,12 @@ export function BanPickScreen({
         </Button>
       </div>
 
-      {/* Today's round-based streak strip (participants of this draft) */}
+      {/* Current session round-based streak strip (participants of this draft) */}
       <StreakStrip
         players={players}
         playerIds={[...team1PlayerIds, ...team2PlayerIds]}
         compact
-        mode="today"
+        mode="session"
         className="p-1.5 bg-lol-gray/40 rounded border border-lol-border/60"
       />
 
