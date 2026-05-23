@@ -10,6 +10,7 @@ export interface LcuChampSelectState {
   team2Bans: { championId: number; completed: boolean }[];
   team1Picks: { cellId: number; champId: number; locked?: boolean; summonerId: number; gameName?: string; alias?: string | null }[];
   team2Picks: { cellId: number; champId: number; locked?: boolean; summonerId: number; gameName?: string; alias?: string | null }[];
+  benchChampions: number[];  // numeric champion IDs in the ARAM reroll pool
 }
 
 // Player info from Live Client Data API (available after game starts — includes
@@ -67,7 +68,7 @@ export function useLcuBridge() {
             setChampSelectActive(true);
             setLastState(prev => {
               if (prev) return { ...prev, phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime };
-              return { phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime, team1Bans: [], team2Bans: [], team1Picks: [], team2Picks: [] };
+              return { phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime, team1Bans: [], team2Bans: [], team1Picks: [], team2Picks: [], benchChampions: [] };
             });
           } else if (data.type === 'gameStart') {
             setGameStartedAt(Date.now());

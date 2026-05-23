@@ -578,7 +578,10 @@ async function parseChampSelectState(data) {
   const timeLeft = Math.ceil((timer.adjustedTimeLeftInPhase ?? 0) / 1000);
   const totalTime = Math.ceil((timer.totalTimeInPhase ?? 0) / 1000);
 
-  return { phase, timeLeft, totalTime, team1Bans, team2Bans, team1Picks, team2Picks };
+  // Bench champions (ARAM reroll pool — populated in augmented ARAM)
+  const benchChampions = (data.benchChampions || []).map(b => b.championId).filter(Boolean);
+
+  return { phase, timeLeft, totalTime, team1Bans, team2Bans, team1Picks, team2Picks, benchChampions };
 }
 
 function stateChanged(prev, next) {

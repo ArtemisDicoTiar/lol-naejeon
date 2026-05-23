@@ -212,6 +212,7 @@ export function NewGame() {
           team2PlayerIds={team2PlayerIds}
           players={players}
           champions={champions}
+          proficiencies={proficiencies}
           onConfirm={handleBanPickConfirm}
           onBack={() => setStep('setup')}
         />
