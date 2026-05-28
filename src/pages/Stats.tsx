@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { computeFullStats, type FullStats } from '@/lib/stats';
 import { GAME_MODE_LABELS, type GameMode } from '@/lib/db';
 import { Card } from '@/components/ui/Card';
-import { CombatRadar } from '@/components/stats/CombatRadar';
 import { PlayerRanking } from '@/components/stats/PlayerRanking';
 import { PlayerStreak } from '@/components/stats/PlayerStreak';
 import { PlayerTrend } from '@/components/stats/PlayerTrend';
@@ -25,7 +24,6 @@ export function Stats() {
   const [stats, setStats] = useState<FullStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
-  const [selectedCombatPlayerIds, setSelectedCombatPlayerIds] = useState<number[]>([]);
   const [selectedRadarPlayerIds, setSelectedRadarPlayerIds] = useState<number[]>([]);
   const radarSelectionInitializedRef = useRef(false);
 
@@ -51,46 +49,6 @@ export function Stats() {
     setSelectedRadarPlayerIds(stats.players.slice(0, 2).map((player) => player.id!));
     radarSelectionInitializedRef.current = true;
   }, [stats]);
-
-  const playerIdsWithCombatData = useMemo(() => {
-    if (!stats) return new Set<number>();
-    return new Set(stats.playerEogSummary.map((entry) => entry.playerId));
-  }, [stats]);
-
-  const resolvedSelectedCombatPlayerIds = useMemo(() => {
-    if (!stats) return [];
-    const availableIds = stats.players
-      .map((player) => player.id)
-      .filter((id): id is number => typeof id === 'number' && playerIdsWithCombatData.has(id));
-    if (availableIds.length === 0) return [];
-    const next = selectedCombatPlayerIds.filter((id) => playerIdsWithCombatData.has(id));
-    return next.length > 0 ? next : availableIds.slice(0, 3);
-  }, [playerIdsWithCombatData, selectedCombatPlayerIds, stats]);
-
-  const combatRadarSeries = useMemo(() => {
-    if (!stats) return [];
-    return resolvedSelectedCombatPlayerIds
-      .map((playerId, index) => {
-        const summary = stats.playerEogSummary.find((entry) => entry.playerId === playerId);
-        const player = stats.players.find((entry) => entry.id === playerId);
-        if (!summary || !player) return null;
-        const colors = ['#c89b3c', '#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f97316'];
-        return {
-          key: `player-${playerId}`,
-          label: player.name,
-          color: colors[index % colors.length],
-          metrics: {
-            damage: summary.avgDamageDealtToChampions,
-            frontline: summary.avgFrontlineContribution,
-            heal: summary.avgTotalHeal,
-            cc: summary.avgTimeCCingOthers,
-            kda: summary.avgKdaParticipation,
-            goldEfficiency: summary.avgGoldEfficiency,
-          },
-        };
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-  }, [resolvedSelectedCombatPlayerIds, stats]);
 
   const resolvedSelectedRadarPlayerIds = useMemo(() => {
     if (!stats) return [];
@@ -282,50 +240,7 @@ export function Stats() {
         )}
       </Card>
 
-      <div className="grid items-stretch gap-4 2xl:grid-cols-[minmax(380px,1.1fr)_minmax(0,2.4fr)]">
-        <div className="space-y-3">
-          {stats.playerEogSummary.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {stats.players.map((player) => {
-                const playerId = player.id;
-                if (typeof playerId !== 'number') return null;
-                const hasCombatData = playerIdsWithCombatData.has(playerId);
-                const selected = resolvedSelectedCombatPlayerIds.includes(playerId);
-                return (
-                  <button
-                    key={playerId}
-                    disabled={!hasCombatData}
-                    onClick={() => setSelectedCombatPlayerIds((prev) => (
-                      prev.includes(playerId)
-                        ? prev.filter((id) => id !== playerId)
-                        : [...prev, playerId]
-                    ))}
-                    title={hasCombatData ? undefined : '이 모드에서 수집된 전투 지표가 없습니다.'}
-                    className={`px-3 py-1 rounded text-sm border transition-colors ${
-                      !hasCombatData
-                        ? 'cursor-not-allowed border-lol-border/50 text-lol-gold-light/25 bg-lol-dark/20'
-                        : selected
-                        ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                        : 'cursor-pointer border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
-                    }`}
-                  >
-                    {player.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <CombatRadar
-            title="플레이어 전투 지표 레이더"
-            description="선택한 선수들의 평균 딜량, 전방 기여, 힐량, CC, KDA 관여, 골드 효율을 비교합니다."
-            series={combatRadarSeries}
-            emptyMessage="전투 지표가 수집된 선수가 없습니다."
-            chartHeight={500}
-          />
-        </div>
-
-        <TrioRadar stats={stats} chartHeight={500} />
-      </div>
+      <TrioRadar stats={stats} chartHeight={520} />
 
       {/* Player Ranking */}
       <PlayerRanking stats={stats} />

@@ -8,6 +8,7 @@ const TEAM_COLORS = {
   teamB: '#ef4444',
 };
 
+const PLAYER_COLORS = ['#c89b3c', '#22c55e', '#a855f7', '#f97316', '#06b6d4', '#eab308'];
 const ROLE_KEYS = ['poke', 'engage', 'dps', 'tank'];
 
 interface TrioMetrics {
@@ -65,6 +66,23 @@ function computeTrioMetrics(stats: FullStats, ids: number[]): TrioMetrics | null
   };
 }
 
+function computePlayerOverlayMetrics(stats: FullStats, playerId: number): TrioMetrics {
+  const eog = stats.playerEogSummary.find((entry) => entry.playerId === playerId);
+  const rolePoints = stats.roleRadarData[playerId] ?? [];
+  const coveredRoles = ROLE_KEYS.filter((role) => rolePoints.some((point) => point.role === role && point.picks > 0)).length;
+  const overall = stats.wrStats.playerOverallStats[playerId];
+
+  return {
+    totalGames: overall?.totalPicks ?? 0,
+    winrate: overall?.winrate ?? 0,
+    roleBalance: (coveredRoles / ROLE_KEYS.length) * 100,
+    damage: eog?.avgDamageDealtToChampions ?? 0,
+    frontline: eog?.avgFrontlineContribution ?? 0,
+    cc: eog?.avgTimeCCingOthers ?? 0,
+    goldEfficiency: eog?.avgGoldEfficiency ?? 0,
+  };
+}
+
 function formatRaw(axis: string, value: number) {
   if (axis === '조합 승률' || axis === '역할 밸런스') return `${Math.round(value)}%`;
   if (axis === 'CC') return `${Math.round(value)}초`;
@@ -82,36 +100,58 @@ export function TrioRadar({ stats, chartHeight = 390 }: { stats: FullStats; char
 
   const [teamAIds, setTeamAIds] = useState<number[]>(defaultTeamA);
   const [teamBIds, setTeamBIds] = useState<number[]>(defaultTeamB);
+  const [overlayPlayerIds, setOverlayPlayerIds] = useState<number[]>([]);
   const teamASet = useMemo(() => new Set(teamAIds), [teamAIds]);
   const teamBSet = useMemo(() => new Set(teamBIds), [teamBIds]);
 
   const teamAMetrics = useMemo(() => computeTrioMetrics(stats, teamAIds), [stats, teamAIds]);
   const teamBMetrics = useMemo(() => computeTrioMetrics(stats, teamBIds), [stats, teamBIds]);
+  const overlayPlayers = useMemo(() => {
+    return overlayPlayerIds
+      .map((playerId, index) => {
+        const player = stats.players.find((entry) => entry.id === playerId);
+        if (!player) return null;
+        return {
+          key: `player-${playerId}`,
+          name: player.name,
+          color: PLAYER_COLORS[index % PLAYER_COLORS.length],
+          metrics: computePlayerOverlayMetrics(stats, playerId),
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+  }, [overlayPlayerIds, stats]);
 
   const chartData = useMemo(() => {
     if (!teamAMetrics || !teamBMetrics) return [];
     const rows = [
-      { axis: '조합 승률', teamA: teamAMetrics.winrate, teamB: teamBMetrics.winrate },
-      { axis: '역할 밸런스', teamA: teamAMetrics.roleBalance, teamB: teamBMetrics.roleBalance },
-      { axis: '딜 압박', teamA: teamAMetrics.damage, teamB: teamBMetrics.damage },
-      { axis: '전방', teamA: teamAMetrics.frontline, teamB: teamBMetrics.frontline },
-      { axis: 'CC', teamA: teamAMetrics.cc, teamB: teamBMetrics.cc },
-      { axis: '골드 효율', teamA: teamAMetrics.goldEfficiency, teamB: teamBMetrics.goldEfficiency },
+      { axis: '조합 승률', metric: 'winrate' as const, teamA: teamAMetrics.winrate, teamB: teamBMetrics.winrate },
+      { axis: '역할 밸런스', metric: 'roleBalance' as const, teamA: teamAMetrics.roleBalance, teamB: teamBMetrics.roleBalance },
+      { axis: '딜 압박', metric: 'damage' as const, teamA: teamAMetrics.damage, teamB: teamBMetrics.damage },
+      { axis: '전방', metric: 'frontline' as const, teamA: teamAMetrics.frontline, teamB: teamBMetrics.frontline },
+      { axis: 'CC', metric: 'cc' as const, teamA: teamAMetrics.cc, teamB: teamBMetrics.cc },
+      { axis: '골드 효율', metric: 'goldEfficiency' as const, teamA: teamAMetrics.goldEfficiency, teamB: teamBMetrics.goldEfficiency },
     ];
 
     return rows.map((row) => {
+      const overlayValues = overlayPlayers.map((entry) => entry.metrics[row.metric]);
       const maxValue = row.axis === '조합 승률' || row.axis === '역할 밸런스'
         ? 100
-        : Math.max(row.teamA, row.teamB, 1);
-      return {
+        : Math.max(row.teamA, row.teamB, ...overlayValues, 1);
+      const out: Record<string, string | number> = {
         axis: row.axis,
         teamA: clampScore((row.teamA / maxValue) * 100),
         teamB: clampScore((row.teamB / maxValue) * 100),
         teamARaw: formatRaw(row.axis, row.teamA),
         teamBRaw: formatRaw(row.axis, row.teamB),
       };
+      for (const entry of overlayPlayers) {
+        const raw = entry.metrics[row.metric];
+        out[entry.key] = clampScore((raw / maxValue) * 100);
+        out[`${entry.key}Raw`] = formatRaw(row.axis, raw);
+      }
+      return out;
     });
-  }, [teamAMetrics, teamBMetrics]);
+  }, [overlayPlayers, teamAMetrics, teamBMetrics]);
 
   const togglePlayer = (team: 'teamA' | 'teamB', playerId: number) => {
     if (team === 'teamA') {
@@ -133,6 +173,12 @@ export function TrioRadar({ stats, chartHeight = 390 }: { stats: FullStats; char
       if (prev.includes(playerId)) return prev;
       return prev.length >= 3 ? [prev[1], prev[2], playerId] : [...prev, playerId];
     });
+  };
+
+  const toggleOverlayPlayer = (playerId: number) => {
+    setOverlayPlayerIds((prev) =>
+      prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId],
+    );
   };
 
   const renderTeamSelector = (team: 'teamA' | 'teamB', title: string, selectedSet: Set<number>) => (
@@ -176,6 +222,32 @@ export function TrioRadar({ stats, chartHeight = 390 }: { stats: FullStats; char
         {renderTeamSelector('teamB', 'Team B', teamBSet)}
       </div>
 
+      <div className="mb-4 rounded border border-lol-border/60 bg-lol-dark/30 p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-sm font-medium text-lol-gold">개인 점선 오버레이</div>
+          <div className="text-[11px] text-lol-gold-light/40">{overlayPlayerIds.length}명 선택</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {stats.players.map((player) => {
+            const playerId = player.id!;
+            const selected = overlayPlayerIds.includes(playerId);
+            return (
+              <button
+                key={playerId}
+                onClick={() => toggleOverlayPlayer(playerId)}
+                className={`rounded border px-3 py-1 text-sm transition-colors ${
+                  selected
+                    ? 'cursor-pointer border-lol-gold bg-lol-gold/20 text-lol-gold'
+                    : 'cursor-pointer border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+                }`}
+              >
+                {player.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {teamAIds.length !== 3 || teamBIds.length !== 3 ? (
         <p className="text-center py-8 text-lol-gold-light/50">각 팀에 플레이어 3명씩 선택하세요.</p>
       ) : !teamAMetrics || !teamBMetrics ? (
@@ -198,17 +270,30 @@ export function TrioRadar({ stats, chartHeight = 390 }: { stats: FullStats; char
               <Tooltip
                 contentStyle={{ backgroundColor: '#091428', border: '1px solid #463714', borderRadius: 8, color: '#f0e6d2' }}
                 formatter={(_value, name, item) => {
-                  const payload = item.payload as { teamARaw?: string; teamBRaw?: string };
-                  return [name === 'Team A' ? payload.teamARaw : payload.teamBRaw, String(name)];
+                  const payload = item.payload as Record<string, string | number | undefined>;
+                  const dataKey = String(item.dataKey);
+                  return [payload[`${dataKey}Raw`] ?? _value, String(name)];
                 }}
               />
               <Radar name="Team A" dataKey="teamA" stroke={TEAM_COLORS.teamA} fill={TEAM_COLORS.teamA} fillOpacity={0.16} strokeWidth={2} />
               <Radar name="Team B" dataKey="teamB" stroke={TEAM_COLORS.teamB} fill={TEAM_COLORS.teamB} fillOpacity={0.16} strokeWidth={2} />
+              {overlayPlayers.map((entry) => (
+                <Radar
+                  key={entry.key}
+                  name={entry.name}
+                  dataKey={entry.key}
+                  stroke={entry.color}
+                  fill={entry.color}
+                  fillOpacity={0}
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                />
+              ))}
               <Legend wrapperStyle={{ color: '#f0e6d2', fontSize: 12 }} />
             </RadarChart>
           </ResponsiveContainer>
           <div className="mt-3 text-[11px] text-lol-gold-light/40">
-            조합 승률과 역할 밸런스는 절대값, 전투 지표는 두 팀 중 높은 값을 100으로 정규화했습니다.
+            실선은 3인팀, 점선은 개인 지표입니다. 조합 승률과 역할 밸런스는 절대값, 전투 지표는 표시 대상 중 높은 값을 100으로 정규화했습니다.
           </div>
         </div>
       )}

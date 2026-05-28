@@ -280,9 +280,9 @@ export function PlayerStats() {
         <div className="text-center py-8 text-lol-gold">유저 통계 로딩 중...</div>
       ) : (
         <>
-          <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_320px]">
-            <Card className="overflow-hidden">
-              <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <Card className="overflow-hidden">
+            <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+              <div className="space-y-4">
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-lol-gold/20 bg-lol-dark/45 p-5 text-center">
                   <div
                     className="grid h-40 w-40 place-items-center rounded-full p-2"
@@ -311,56 +311,56 @@ export function PlayerStats() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <MetricTile label="최근 폼" value={`${formatDecimal(profile.recentWinrate)}%`} sub={`${profile.recentWins}승 ${profile.recentLosses}패`} />
-                    <MetricTile
-                      label="현재 흐름"
-                      value={profile.streakType ? `${profile.streakCount}${profile.streakType === 'W' ? '연승' : '연패'}` : '-'}
-                      tone={profile.streakType === 'W' ? 'green' : profile.streakType === 'L' ? 'red' : 'gold'}
-                    />
-                    <MetricTile
-                      label="최근 편차"
-                      value={signedPercent(profile.trendDelta)}
-                      tone={profile.trendDelta >= 0 ? 'green' : 'red'}
-                    />
-                    <MetricTile
-                      label="평균 KDA"
-                      value={`${formatDecimal(profile.avgKills)} / ${formatDecimal(profile.avgDeaths)} / ${formatDecimal(profile.avgAssists)}`}
-                      sub={`관여 ${formatDecimal(profile.avgKdaParticipation)}`}
-                      tone="blue"
-                    />
-                  </div>
+                <CombatRadar
+                  title="전투 지표 레이더"
+                  description="현재 필터 기준 전체 평균과 비교합니다."
+                  series={combatRadarSeries}
+                  emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
+                  chartHeight={260}
+                />
+              </div>
 
-                  <div className="rounded-xl border border-lol-border/70 bg-lol-dark/35 p-4">
-                    <div className="mb-3 text-sm font-medium text-lol-gold">핵심 지표</div>
-                    <div className="space-y-3">
-                      <MiniMeter label="시즌 승률" value={profile.winrate} right={`${profile.wins}W / ${profile.losses}L`} color="bg-lol-gold" />
-                      <MiniMeter label="최근 폼" value={profile.recentWinrate} right={`${profile.recentGames}게임`} color="bg-prof-high" />
-                      <MiniMeter label="폼 편차" value={50 + profile.trendDelta} right={signedPercent(profile.trendDelta)} color={profile.trendDelta >= 0 ? 'bg-prof-high' : 'bg-red-400'} />
-                    </div>
-                  </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <MetricTile label="최근 폼" value={`${formatDecimal(profile.recentWinrate)}%`} sub={`${profile.recentWins}승 ${profile.recentLosses}패`} />
+                  <MetricTile
+                    label="현재 흐름"
+                    value={profile.streakType ? `${profile.streakCount}${profile.streakType === 'W' ? '연승' : '연패'}` : '-'}
+                    tone={profile.streakType === 'W' ? 'green' : profile.streakType === 'L' ? 'red' : 'gold'}
+                  />
+                  <MetricTile
+                    label="최근 편차"
+                    value={signedPercent(profile.trendDelta)}
+                    tone={profile.trendDelta >= 0 ? 'green' : 'red'}
+                  />
+                  <MetricTile
+                    label="평균 KDA"
+                    value={`${formatDecimal(profile.avgKills)} / ${formatDecimal(profile.avgDeaths)} / ${formatDecimal(profile.avgAssists)}`}
+                    sub={`관여 ${formatDecimal(profile.avgKdaParticipation)}`}
+                    tone="blue"
+                  />
+                </div>
 
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                    <MetricTile label="평균 딜량" value={formatNumber(profile.avgDamageDealtToChampions)} />
-                    <MetricTile label="받은 피해" value={formatNumber(profile.avgDamageTaken)} />
-                    <MetricTile label="전방 기여" value={formatNumber(profile.avgFrontlineContribution)} />
-                    <MetricTile label="CC 시간" value={formatNumber(profile.avgTimeCCingOthers)} />
-                    <MetricTile label="골드 효율" value={formatDecimal(profile.avgGoldEfficiency)} />
-                    <MetricTile label="힐량" value={formatNumber(profile.avgTotalHeal)} />
+                <div className="rounded-xl border border-lol-border/70 bg-lol-dark/35 p-4">
+                  <div className="mb-3 text-sm font-medium text-lol-gold">핵심 지표</div>
+                  <div className="space-y-3">
+                    <MiniMeter label="시즌 승률" value={profile.winrate} right={`${profile.wins}W / ${profile.losses}L`} color="bg-lol-gold" />
+                    <MiniMeter label="최근 폼" value={profile.recentWinrate} right={`${profile.recentGames}게임`} color="bg-prof-high" />
+                    <MiniMeter label="폼 편차" value={50 + profile.trendDelta} right={signedPercent(profile.trendDelta)} color={profile.trendDelta >= 0 ? 'bg-prof-high' : 'bg-red-400'} />
                   </div>
                 </div>
-              </div>
-            </Card>
 
-            <CombatRadar
-              title="전투 지표 레이더"
-              description="현재 필터 기준 전체 평균과 비교합니다."
-              series={combatRadarSeries}
-              emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
-              chartHeight={270}
-            />
-          </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                  <MetricTile label="평균 딜량" value={formatNumber(profile.avgDamageDealtToChampions)} />
+                  <MetricTile label="받은 피해" value={formatNumber(profile.avgDamageTaken)} />
+                  <MetricTile label="전방 기여" value={formatNumber(profile.avgFrontlineContribution)} />
+                  <MetricTile label="CC 시간" value={formatNumber(profile.avgTimeCCingOthers)} />
+                  <MetricTile label="골드 효율" value={formatDecimal(profile.avgGoldEfficiency)} />
+                  <MetricTile label="힐량" value={formatNumber(profile.avgTotalHeal)} />
+                </div>
+              </div>
+            </div>
+          </Card>
 
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
             <Card title="주력 챔피언">
