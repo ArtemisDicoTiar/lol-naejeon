@@ -77,6 +77,13 @@ export function useLcuBridge() {
   const reconnectRef = useRef<number | null>(null);
   const pendingRequestRef = useRef(new Map<string, { resolve: (value: LcuRetroGame[]) => void; reject: (reason?: unknown) => void }>());
 
+  const rejectPendingRequests = useCallback((message: string) => {
+    for (const pending of pendingRequestRef.current.values()) {
+      pending.reject(new Error(message));
+    }
+    pendingRequestRef.current.clear();
+  }, []);
+
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -98,12 +105,16 @@ export function useLcuBridge() {
           if (data.type === 'champSelectUpdate') {
             setLastState(data);
             setChampSelectActive(true);
+            setGameStartedAt(null);
+            setGameEndedAt(null);
           } else if (data.type === 'champSelectEnd') {
             setChampSelectActive(false);
           } else if (data.type === 'lobbyUpdate') {
             setLobbyState({ team1: data.team1, team2: data.team2 });
           } else if (data.type === 'timerUpdate') {
             setChampSelectActive(true);
+            setGameStartedAt(null);
+            setGameEndedAt(null);
             setLastState(prev => {
               if (prev) return { ...prev, phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime };
               return { phase: data.phase, timeLeft: data.timeLeft, totalTime: data.totalTime, team1Bans: [], team2Bans: [], team1Picks: [], team2Picks: [], benchChampions: [] };
@@ -111,6 +122,8 @@ export function useLcuBridge() {
           } else if (data.type === 'gameStart') {
             setGameStartedAt(Date.now());
             setChampSelectActive(false);
+            setLastState(null);
+            setLobbyState(null);
             setLiveGamePlayers(null); // reset; bridge will send fresh data
             setEog({ status: 'idle', capture: null, participantStats: [], linkedGameId: null, error: null });
           } else if (data.type === 'gameEnd') {
@@ -162,6 +175,10 @@ export function useLcuBridge() {
       ws.onclose = () => {
         setConnected(false);
         wsRef.current = null;
+        setLastState(null);
+        setLobbyState(null);
+        setChampSelectActive(false);
+        rejectPendingRequests('클라이언트 브릿지 연결이 종료되었습니다.');
       };
 
       ws.onerror = () => {
@@ -172,7 +189,7 @@ export function useLcuBridge() {
     } catch {
       setConnected(false);
     }
-  }, []);
+  }, [rejectPendingRequests]);
 
   const disconnect = useCallback(() => {
     if (reconnectRef.current) {
@@ -189,14 +206,16 @@ export function useLcuBridge() {
     setGameEndedAt(null);
     setLiveGamePlayers(null);
     setEog({ status: 'idle', capture: null, participantStats: [], linkedGameId: null, error: null });
-  }, []);
+    rejectPendingRequests('클라이언트 브릿지 연결이 종료되었습니다.');
+  }, [rejectPendingRequests]);
 
   useEffect(() => {
     return () => {
       wsRef.current?.close();
       if (reconnectRef.current) clearInterval(reconnectRef.current);
+      rejectPendingRequests('클라이언트 브릿지 연결이 종료되었습니다.');
     };
-  }, []);
+  }, [rejectPendingRequests]);
 
   const sendToClient = useCallback((msg: Record<string, unknown>) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

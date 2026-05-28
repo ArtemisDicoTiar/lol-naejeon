@@ -142,7 +142,7 @@ export function NewGame() {
   const { champions } = useChampions();
   const lcu = useLcuContext();
 
-  const [step, setStep] = useState<Step>((keepTeams && lastGameTeams) || fromLcu ? 'banpick' : 'setup');
+  const [step, setStep] = useState<Step>((keepTeams && lastGameTeams) ? 'banpick' : 'setup');
   const [format, setFormat] = useState<'3v3' | '3v4'>(lastGameTeams?.format ?? '3v4');
   const [mode, setMode] = useState<GameMode>(lastGameTeams?.mode ?? 'aram');
   const [sittingOut, setSittingOut] = useState<Set<number>>(new Set());

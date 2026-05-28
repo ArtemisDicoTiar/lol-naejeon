@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '@/hooks/useSession';
 import { useChampions } from '@/hooks/useChampions';
 import { Card } from '@/components/ui/Card';
@@ -16,6 +16,7 @@ import { getTagLabel, getTagColor } from '@/data/tag-display';
 
 export function Session() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isMaster } = useIdentityContext();
   const lcu = useLcuContext();
   const { session, games, fierlessBans, lastGameTeams, loading, setGameResult, endSession, removeGame, setGameMode, correctGamePicks } = useSession();
@@ -27,6 +28,7 @@ export function Session() {
   const [unlinkedCaptures, setUnlinkedCaptures] = useState<GameEogCapture[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
+  const autoNavigateRef = useRef(false);
 
   useEffect(() => { db.players.toArray().then(setPlayers); }, []);
   useEffect(() => { computeWinrateStats().then(setWrStats); }, [games]);
@@ -88,10 +90,22 @@ export function Session() {
 
   // Auto-navigate to new game when LCU detects champion select
   useEffect(() => {
-    if (lcu.connected && lcu.champSelectActive && !lcu.gameStartedAt && session && isMaster) {
+    if (!lcu.champSelectActive) {
+      autoNavigateRef.current = false;
+      return;
+    }
+    if (
+      lcu.connected &&
+      !lcu.gameStartedAt &&
+      session &&
+      isMaster &&
+      !autoNavigateRef.current &&
+      location.pathname !== '/session/new-game'
+    ) {
+      autoNavigateRef.current = true;
       navigate('/session/new-game?fromLcu=true');
     }
-  }, [lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, session, isMaster, navigate]);
+  }, [lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, location.pathname, session, isMaster, navigate]);
 
   const loadAncillaryGameData = useCallback(async () => {
     const picks: Record<number, GamePick[]> = {};

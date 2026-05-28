@@ -119,7 +119,9 @@ export function BanPickScreen({
   const [team1Bans, setTeam1Bans] = useState<string[]>(Array(team1Size).fill(''));
   const [team2Bans, setTeam2Bans] = useState<string[]>(Array(team2Size).fill(''));
   const [picks, setPicks] = useState<Record<number, string>>({});
-  const [activeSlot, setActiveSlot] = useState<ActiveSlot>({ type: 'pick', playerId: team1PlayerIds[0] });
+  const [activeSlot, setActiveSlot] = useState<ActiveSlot>(
+    team1PlayerIds[0] ? { type: 'pick', playerId: team1PlayerIds[0] } : null,
+  );
   const [search, setSearch] = useState('');
   const [phase, setPhase] = useState<'planning' | 'ban' | 'pick'>('planning');
   const [planningTimer, setPlanningTimer] = useState(25);
@@ -649,8 +651,10 @@ export function BanPickScreen({
     setActiveSlot(null);
   };
 
-  const allPicked = [...team1PlayerIds, ...team2PlayerIds].every((id) => picks[id]);
-  const allLocked = [...team1PlayerIds, ...team2PlayerIds].every((id) => lockedPicks.has(id));
+  const totalSlots = team1PlayerIds.length + team2PlayerIds.length;
+  const teamsReady = team1PlayerIds.length > 0 && team2PlayerIds.length > 0 && totalSlots > 0;
+  const allPicked = teamsReady && [...team1PlayerIds, ...team2PlayerIds].every((id) => picks[id]);
+  const allLocked = teamsReady && [...team1PlayerIds, ...team2PlayerIds].every((id) => lockedPicks.has(id));
   const canConfirm = allPicked && allLocked;
 
   // Swap
@@ -707,11 +711,11 @@ export function BanPickScreen({
       return;
     }
     if (confirmedRef.current) return;
-    if (allPicked && !lcuPaused) {
+    if (teamsReady && allPicked && !lcuPaused) {
       confirmedRef.current = true;
       handleConfirm();
     }
-  }, [lcu.gameStartedAt, allPicked, lcuPaused]);
+  }, [lcu.gameStartedAt, teamsReady, allPicked, lcuPaused]);
 
   const computeGridChampions = (query: string) => {
     let list = champions.filter((c) => !fierlessBans.includes(c.id));
