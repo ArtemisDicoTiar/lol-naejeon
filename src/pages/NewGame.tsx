@@ -9,8 +9,127 @@ import { Button } from '@/components/ui/Button';
 import { BanPickScreen } from '@/components/session/BanPickScreen';
 import { AugWaitScreen } from '@/components/session/AugWaitScreen';
 import { getPlayerProficiencies, GAME_MODE_LABELS, type ProficiencyLevel, type GameMode } from '@/lib/db';
+import { computeFullStats, type FullStats } from '@/lib/stats';
 
 type Step = 'setup' | 'banpick';
+
+interface BalanceRecommendation {
+  team1: number[];
+  team2: number[];
+  team1Score: number;
+  team2Score: number;
+  diff: number;
+  reason: string;
+}
+
+function combinations<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return [[]];
+  if (size > items.length) return [];
+  const out: T[][] = [];
+  const walk = (start: number, picked: T[]) => {
+    if (picked.length === size) {
+      out.push([...picked]);
+      return;
+    }
+    for (let index = start; index <= items.length - (size - picked.length); index++) {
+      picked.push(items[index]);
+      walk(index + 1, picked);
+      picked.pop();
+    }
+  };
+  walk(0, []);
+  return out;
+}
+
+function average(values: number[]) {
+  const valid = values.filter((value) => Number.isFinite(value));
+  if (valid.length === 0) return 0;
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
+
+function getPlayerPower(stats: FullStats, playerId: number) {
+  const overall = stats.wrStats.playerOverallStats[playerId];
+  const ability = average((stats.radarData[playerId] ?? []).map((point) => point.value));
+  const role = average((stats.roleRadarData[playerId] ?? []).filter((point) => point.picks > 0).map((point) => point.value));
+  const eog = stats.playerEogSummary.find((entry) => entry.playerId === playerId);
+  const eogScore = eog
+    ? average([
+      (eog.avgDamageDealtToChampions / Math.max(stats.eogOverview.avgDamageDealtToChampions, 1)) * 50,
+      (eog.avgFrontlineContribution / Math.max(stats.eogOverview.avgFrontlineContribution, 1)) * 50,
+      (eog.avgTimeCCingOthers / Math.max(stats.eogOverview.avgTimeCCingOthers, 1)) * 50,
+      (eog.avgGoldEfficiency / Math.max(stats.eogOverview.avgGoldEfficiency, 1)) * 50,
+    ])
+    : ability;
+
+  return (
+    (overall?.winrate ?? 50) * 0.35 +
+    ability * 0.30 +
+    role * 0.15 +
+    eogScore * 0.20
+  );
+}
+
+function getPairSynergy(stats: FullStats, a: number, b: number) {
+  const row = stats.headToHead.find((entry) =>
+    (entry.player1Id === a && entry.player2Id === b) || (entry.player1Id === b && entry.player2Id === a),
+  );
+  if (!row) return 0;
+  const games = row.sameTeamWins + row.sameTeamLosses;
+  const confidence = Math.min(games / 5, 1);
+  return (row.sameTeamWinrate - 50) * confidence;
+}
+
+function getTrioSynergy(stats: FullStats, team: number[]) {
+  if (team.length < 3) return 0;
+  const teamSet = new Set(team);
+  const row = stats.trioPlayerSynergy.find((entry) => entry.playerIds.every((id) => teamSet.has(id)));
+  if (!row) return 0;
+  const games = row.sameTeamWins + row.sameTeamLosses;
+  const confidence = Math.min(games / 5, 1);
+  return (row.winrate - 50) * confidence;
+}
+
+function getTeamScore(stats: FullStats, team: number[]) {
+  const base = team.reduce((sum, playerId) => sum + getPlayerPower(stats, playerId), 0);
+  let pairBonus = 0;
+  for (let i = 0; i < team.length; i++) {
+    for (let j = i + 1; j < team.length; j++) {
+      pairBonus += getPairSynergy(stats, team[i], team[j]);
+    }
+  }
+  const trioBonus = getTrioSynergy(stats, team);
+  return base + pairBonus * 0.25 + trioBonus * 0.35;
+}
+
+function findGoldenBalance(stats: FullStats, playerIds: number[]): BalanceRecommendation | null {
+  if (playerIds.length < 2) return null;
+  const team1Size = Math.ceil(playerIds.length / 2);
+  const candidates = combinations(playerIds, team1Size);
+  let best: BalanceRecommendation | null = null;
+
+  for (const team1 of candidates) {
+    const team1Set = new Set(team1);
+    const team2 = playerIds.filter((id) => !team1Set.has(id));
+    if (team2.length === 0) continue;
+    const team1Score = getTeamScore(stats, team1);
+    const team2Score = getTeamScore(stats, team2);
+    const diff = Math.abs(team1Score - team2Score);
+    const sizePenalty = Math.abs(team1.length - team2.length) * 8;
+    const adjustedDiff = diff + sizePenalty;
+    if (!best || adjustedDiff < best.diff) {
+      best = {
+        team1,
+        team2,
+        team1Score,
+        team2Score,
+        diff: adjustedDiff,
+        reason: `전력차 ${diff.toFixed(1)}점 · ${team1.length}v${team2.length}`,
+      };
+    }
+  }
+
+  return best;
+}
 
 export function NewGame() {
   const navigate = useNavigate();
@@ -29,6 +148,8 @@ export function NewGame() {
   const [sittingOut, setSittingOut] = useState<Set<number>>(new Set());
   const [teamAssignments, setTeamAssignments] = useState<Record<number, 1 | 2>>({});
   const [proficiencies, setProficiencies] = useState<Record<number, Map<string, ProficiencyLevel>>>({});
+  const [balanceRecommendation, setBalanceRecommendation] = useState<BalanceRecommendation | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
   const confirmInFlightRef = useRef(false);
 
   const allPlayerIds = players.map((p) => p.id!);
@@ -45,6 +166,7 @@ export function NewGame() {
         lastGameTeams.team2.forEach((id) => { assignments[id] = 2; });
         setTeamAssignments(assignments);
         setFormat(lastGameTeams.format);
+        setBalanceRecommendation(null);
         // Figure out who sat out
         const played = new Set([...lastGameTeams.team1, ...lastGameTeams.team2]);
         const satOut = allPlayerIds.filter((id) => !played.has(id));
@@ -89,6 +211,7 @@ export function NewGame() {
     const detectedFormat: '3v3' | '3v4' = totalLcu >= 7 ? '3v4' : '3v3';
     setFormat(detectedFormat);
     setTeamAssignments(newAssignments);
+    setBalanceRecommendation(null);
 
     // Anyone not in either team is sitting out
     const satOut = allPlayerIds.filter(id => !matched.has(id));
@@ -140,6 +263,7 @@ export function NewGame() {
   }, [selectedPlayerIds]);
 
   const toggleSittingOut = (id: number) => {
+    setBalanceRecommendation(null);
     setSittingOut(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -152,10 +276,12 @@ export function NewGame() {
   };
 
   const assignTeam = (playerId: number, team: 1 | 2) => {
+    setBalanceRecommendation(null);
     setTeamAssignments((prev) => ({ ...prev, [playerId]: team }));
   };
 
   const autoBalance = () => {
+    setBalanceRecommendation(null);
     const ids = [...selectedPlayerIds];
     for (let i = ids.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -165,6 +291,24 @@ export function NewGame() {
     const assignments: Record<number, 1 | 2> = {};
     ids.forEach((id, idx) => { assignments[id] = idx < half ? 1 : 2; });
     setTeamAssignments(assignments);
+  };
+
+  const recommendGoldenBalance = async () => {
+    if (selectedPlayerIds.length < 2) return;
+    setBalanceLoading(true);
+    try {
+      const stats = await computeFullStats(mode);
+      const recommendation = findGoldenBalance(stats, selectedPlayerIds);
+      if (!recommendation) return;
+      const assignments: Record<number, 1 | 2> = {};
+      recommendation.team1.forEach((id) => { assignments[id] = 1; });
+      recommendation.team2.forEach((id) => { assignments[id] = 2; });
+      setTeamAssignments(assignments);
+      setFormat(selectedPlayerIds.length >= 7 ? '3v4' : '3v3');
+      setBalanceRecommendation(recommendation);
+    } finally {
+      setBalanceLoading(false);
+    }
   };
 
   const allTeamsAssigned = selectedPlayerIds.length >= 2 &&
@@ -306,9 +450,34 @@ export function NewGame() {
       {/* Teams */}
       {selectedPlayerIds.length >= 2 && (
         <Card title={`팀 편성 (${team1Size} vs ${team2Size})`}>
-          <div className="flex justify-end mb-3">
+          <div className="flex flex-wrap justify-end gap-2 mb-3">
+            <Button variant="primary" size="sm" onClick={recommendGoldenBalance} disabled={balanceLoading}>
+              {balanceLoading ? '계산 중...' : '황금 밸런스 추천'}
+            </Button>
             <Button variant="secondary" size="sm" onClick={autoBalance}>랜덤 배정</Button>
           </div>
+
+          {balanceRecommendation && (
+            <div className="mb-4 rounded border border-lol-gold/30 bg-lol-gold/10 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-medium text-lol-gold">추천 조합 적용됨</div>
+                  <div className="text-xs text-lol-gold-light/50">{balanceRecommendation.reason}</div>
+                </div>
+                <div className="flex gap-2 text-xs">
+                  <span className="rounded bg-blue-950/40 border border-blue-800/50 px-2 py-1 text-blue-300">
+                    T1 {balanceRecommendation.team1Score.toFixed(1)}
+                  </span>
+                  <span className="rounded bg-red-950/40 border border-red-800/50 px-2 py-1 text-red-300">
+                    T2 {balanceRecommendation.team2Score.toFixed(1)}
+                  </span>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] text-lol-gold-light/40">
+                승률, 능력치 레이더, 역할별 승률, 종료 후 전투지표, 기존 같은팀 시너지를 섞어 전력차가 가장 작은 조합을 고릅니다.
+              </p>
+            </div>
+          )}
 
           {unassigned.length > 0 && (
             <div className="mb-4 p-3 bg-lol-dark/50 rounded border border-dashed border-lol-gold/30">
@@ -343,7 +512,7 @@ export function NewGame() {
                         <span>{getPlayerName(id)}</span>
                         <div className="flex gap-1">
                           <button onClick={() => assignTeam(id, teamNum === 1 ? 2 : 1)} className="text-xs text-lol-gold-light/50 hover:text-lol-gold cursor-pointer px-1">&harr;</button>
-                          <button onClick={() => setTeamAssignments((prev) => { const n = { ...prev }; delete n[id]; return n; })} className="text-xs text-red-400/60 hover:text-red-400 cursor-pointer px-1">&times;</button>
+                          <button onClick={() => { setBalanceRecommendation(null); setTeamAssignments((prev) => { const n = { ...prev }; delete n[id]; return n; }); }} className="text-xs text-red-400/60 hover:text-red-400 cursor-pointer px-1">&times;</button>
                         </div>
                       </div>
                     ))}
