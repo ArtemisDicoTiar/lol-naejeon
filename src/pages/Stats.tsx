@@ -312,14 +312,21 @@ export function Stats() {
       <PlayerStreak stats={stats} />
       <PlayerTrend stats={stats} />
 
-      {/* Ability Radar (champion pool removed) */}
-      <PlayerRadar stats={stats} />
-
-      {/* Role-based Radar */}
-      <PlayerRoleRadar stats={stats} />
-
-      {/* EOG-based playstyle radar */}
-      <PlayerStyleRadar stats={stats} />
+      <div>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-lol-gold">플레이어 능력치 레이더</h2>
+            <p className="text-sm text-lol-gold-light/45">
+              기본 능력치, 역할별 승률, 실제 전투 성향을 한 줄에서 비교합니다.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-3">
+          <PlayerRadar stats={stats} compact />
+          <PlayerRoleRadar stats={stats} compact />
+          <PlayerStyleRadar stats={stats} compact />
+        </div>
+      </div>
 
       {/* Role Distribution */}
       <RoleDistribution stats={stats} />

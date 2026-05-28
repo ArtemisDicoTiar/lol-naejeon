@@ -40,7 +40,7 @@ function formatRawValue(axis: keyof StyleMetrics, value: number) {
   return Math.round(value).toLocaleString('ko-KR');
 }
 
-export function PlayerStyleRadar({ stats }: { stats: FullStats }) {
+export function PlayerStyleRadar({ stats, compact = false }: { stats: FullStats; compact?: boolean }) {
   const playerIdsWithData = useMemo(
     () => new Set(stats.playerEogSummary.map((entry) => entry.playerId)),
     [stats.playerEogSummary],
@@ -90,9 +90,9 @@ export function PlayerStyleRadar({ stats }: { stats: FullStats }) {
 
   return (
     <Card title="플레이스타일 레이더">
-      <p className="mb-4 text-sm text-lol-gold-light/55">
+      {!compact && <p className="mb-4 text-sm text-lol-gold-light/55">
         종료 후 통계가 수집된 게임 기준으로 실제 전투 성향을 비교합니다. 각 축은 선택한 플레이어 중 최고값을 100으로 정규화합니다.
-      </p>
+      </p>}
       <div className="flex flex-wrap gap-2 mb-4">
         {stats.players.map((player, index) => {
           const playerId = player.id!;
@@ -104,7 +104,7 @@ export function PlayerStyleRadar({ stats }: { stats: FullStats }) {
               disabled={!hasData}
               onClick={() => togglePlayer(playerId)}
               title={hasData ? undefined : '이 모드에서 수집된 종료 후 통계가 없습니다.'}
-              className={`px-3 py-1 rounded text-sm border transition-colors ${
+              className={`rounded border transition-colors ${compact ? 'px-2 py-1 text-xs' : 'px-3 py-1 text-sm'} ${
                 !hasData
                   ? 'cursor-not-allowed border-lol-border/50 text-lol-gold-light/25 bg-lol-dark/20'
                   : selected
@@ -122,10 +122,10 @@ export function PlayerStyleRadar({ stats }: { stats: FullStats }) {
       {selectedSummaries.length === 0 ? (
         <p className="text-center py-8 text-lol-gold-light/50">비교할 플레이어를 선택하세요.</p>
       ) : (
-        <ResponsiveContainer width="100%" height={400}>
-          <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="74%">
+        <ResponsiveContainer width="100%" height={compact ? 310 : 400}>
+          <RadarChart data={chartData} cx="50%" cy="50%" outerRadius={compact ? '67%' : '74%'}>
             <PolarGrid stroke="#463714" />
-            <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: 12 }} />
+            <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: compact ? 10 : 12 }} />
             <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#f0e6d280', fontSize: 10 }} />
             <Tooltip
               contentStyle={{ backgroundColor: '#091428', border: '1px solid #463714', borderRadius: 8, color: '#f0e6d2' }}
@@ -157,13 +157,13 @@ export function PlayerStyleRadar({ stats }: { stats: FullStats }) {
         </ResponsiveContainer>
       )}
 
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] text-lol-gold-light/40">
+      {!compact && <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] text-lol-gold-light/40">
         {AXES.map((axis) => (
           <div key={axis.key} className="p-1.5 bg-lol-blue/30 rounded">
             <span className="text-lol-gold-light/60 font-medium">{axis.label}</span> = {axis.help}
           </div>
         ))}
-      </div>
+      </div>}
     </Card>
   );
 }

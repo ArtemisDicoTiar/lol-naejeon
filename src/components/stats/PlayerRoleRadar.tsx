@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 
 const COLORS = ['#c89b3c', '#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f97316', '#06b6d4'];
 
-export function PlayerRoleRadar({ stats }: { stats: FullStats }) {
+export function PlayerRoleRadar({ stats, compact = false }: { stats: FullStats; compact?: boolean }) {
   const [selectedIds, setSelectedIds] = useState<number[]>(
     stats.players.slice(0, 2).map((p) => p.id!)
   );
@@ -29,11 +29,11 @@ export function PlayerRoleRadar({ stats }: { stats: FullStats }) {
 
   return (
     <Card title="플레이어 역할별 승률 레이더">
-      <p className="text-xs text-lol-gold-light/40 mb-3">각 역할(포크/인게이지/...)로 플레이한 챔프의 승률입니다. 픽 수가 0이면 0%로 표시됩니다.</p>
+      {!compact && <p className="text-xs text-lol-gold-light/40 mb-3">각 역할(포크/인게이지/...)로 플레이한 챔프의 승률입니다. 픽 수가 0이면 0%로 표시됩니다.</p>}
       <div className="flex flex-wrap gap-2 mb-4">
         {stats.players.map((p, i) => (
           <button key={p.id} onClick={() => togglePlayer(p.id!)}
-            className={`cursor-pointer px-3 py-1 rounded text-sm border transition-colors ${
+            className={`cursor-pointer rounded border transition-colors ${compact ? 'px-2 py-1 text-xs' : 'px-3 py-1 text-sm'} ${
               selectedIds.includes(p.id!)
                 ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
                 : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
@@ -47,10 +47,10 @@ export function PlayerRoleRadar({ stats }: { stats: FullStats }) {
       {selectedIds.length === 0 ? (
         <p className="text-center py-8 text-lol-gold-light/50">플레이어를 선택하세요</p>
       ) : (
-        <ResponsiveContainer width="100%" height={400}>
-          <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="75%">
+        <ResponsiveContainer width="100%" height={compact ? 310 : 400}>
+          <RadarChart data={chartData} cx="50%" cy="50%" outerRadius={compact ? '67%' : '75%'}>
             <PolarGrid stroke="#463714" />
-            <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: 12 }} />
+            <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: compact ? 10 : 12 }} />
             <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#f0e6d280', fontSize: 10 }} />
             {selectedIds.map((pid) => {
               const name = stats.players.find((p) => p.id === pid)?.name ?? '';
@@ -68,7 +68,7 @@ export function PlayerRoleRadar({ stats }: { stats: FullStats }) {
       )}
 
       {/* Pick counts table */}
-      {selectedIds.length > 0 && (
+      {!compact && selectedIds.length > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-xs">
             <thead>

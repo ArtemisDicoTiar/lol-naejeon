@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 
 const COLORS = ['#c89b3c', '#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f97316', '#06b6d4'];
 
-export function PlayerRadar({ stats }: { stats: FullStats }) {
+export function PlayerRadar({ stats, compact = false }: { stats: FullStats; compact?: boolean }) {
   const [selectedIds, setSelectedIds] = useState<number[]>(
     stats.players.slice(0, 2).map((p) => p.id!)
   );
@@ -36,7 +36,7 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
       <div className="flex flex-wrap gap-2 mb-4">
         {stats.players.map((p, i) => (
           <button key={p.id} onClick={() => togglePlayer(p.id!)}
-            className={`cursor-pointer px-3 py-1 rounded text-sm border transition-colors ${
+            className={`cursor-pointer rounded border transition-colors ${compact ? 'px-2 py-1 text-xs' : 'px-3 py-1 text-sm'} ${
               selectedIds.includes(p.id!)
                 ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
                 : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
@@ -50,10 +50,10 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
       {selectedIds.length === 0 ? (
         <p className="text-center py-8 text-lol-gold-light/50">플레이어를 선택하세요</p>
       ) : (
-        <ResponsiveContainer width="100%" height={400}>
-          <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="75%">
+        <ResponsiveContainer width="100%" height={compact ? 310 : 400}>
+          <RadarChart data={chartData} cx="50%" cy="50%" outerRadius={compact ? '67%' : '75%'}>
             <PolarGrid stroke="#463714" />
-            <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: 12 }} />
+            <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: compact ? 10 : 12 }} />
             <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#f0e6d280', fontSize: 10 }} />
             {selectedIds.map((pid) => {
               const name = stats.players.find((p) => p.id === pid)?.name ?? '';
@@ -70,7 +70,7 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
       )}
 
       {/* Formula descriptions */}
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] text-lol-gold-light/40">
+      {!compact && <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] text-lol-gold-light/40">
         <div className="p-1.5 bg-lol-blue/30 rounded">
           <span className="text-lol-gold-light/60 font-medium">승률</span> = 전체 승수 / 전체 게임수 × 100
         </div>
@@ -86,7 +86,7 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
         <div className="p-1.5 bg-lol-blue/30 rounded">
           <span className="text-lol-gold-light/60 font-medium">캐리력</span> = S/상/중 챔프 승수 / S/상/중 챔프 게임수 × 100
         </div>
-      </div>
+      </div>}
     </Card>
   );
 }
