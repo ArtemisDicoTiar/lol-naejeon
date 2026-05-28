@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '@/hooks/useSession';
 import { usePlayers } from '@/hooks/usePlayers';
@@ -6,6 +6,15 @@ import { useChampions } from '@/hooks/useChampions';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useIdentityContext, useLcuContext } from '@/App';
+import { computeFullStats, type FullStats } from '@/lib/stats';
+
+function formatPercent(value: number) {
+  return `${value.toFixed(1)}%`;
+}
+
+function formatNumber(value: number) {
+  return Math.round(value).toLocaleString('ko-KR');
+}
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -17,6 +26,7 @@ export function Dashboard() {
   const { champions, syncing } = useChampions();
   const [sessionName, setSessionName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [stats, setStats] = useState<FullStats | null>(null);
   const autoNavigateRef = useRef(false);
 
   // Auto-navigate to new game when LCU detects champion select
@@ -37,6 +47,47 @@ export function Dashboard() {
       navigate('/session/new-game?fromLcu=true');
     }
   }, [lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, location.pathname, session, isMaster, navigate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadStats = async () => {
+      const next = await computeFullStats();
+      if (!cancelled) setStats(next);
+    };
+    void loadStats();
+    const handleDataChanged = () => { void loadStats(); };
+    window.addEventListener('lol-data-changed', handleDataChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('lol-data-changed', handleDataChanged);
+    };
+  }, []);
+
+  const playerName = useMemo(() => {
+    return new Map(players.map((player) => [player.id!, player.name]));
+  }, [players]);
+
+  const dashboardHighlights = useMemo(() => {
+    if (!stats) return null;
+    const topWinrate = Object.values(stats.wrStats.playerOverallStats)
+      .filter((entry) => entry.totalPicks >= 3)
+      .sort((a, b) => b.winrate - a.winrate || b.totalPicks - a.totalPicks)[0] ?? null;
+    const damageKing = stats.playerEogSummary
+      .filter((entry) => entry.games >= 1)
+      .sort((a, b) => b.avgDamageDealtToChampions - a.avgDamageDealtToChampions)[0] ?? null;
+    const hotChampion = [...stats.champCompare]
+      .sort((a, b) => (b.internalPicks + b.internalBans) - (a.internalPicks + a.internalBans))[0] ?? null;
+    const bestTrio = stats.trioPlayerSynergy[0] ?? null;
+    const currentStreak = Object.entries(stats.playerStreak)
+      .map(([id, streak]) => ({ playerId: Number(id), ...streak }))
+      .filter((entry) => entry.type && entry.count > 0)
+      .sort((a, b) => b.count - a.count)[0] ?? null;
+    return { topWinrate, damageKing, hotChampion, bestTrio, currentStreak };
+  }, [stats]);
+
+  const completedSessionGames = games.filter((game) => game.winningTeam !== null);
+  const team1Wins = completedSessionGames.filter((game) => game.winningTeam === 1).length;
+  const team2Wins = completedSessionGames.filter((game) => game.winningTeam === 2).length;
 
   if (sessionLoading || syncing) {
     return (
@@ -60,12 +111,114 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-lol-gold">눈오는 헤네시스</h1>
-        <span className="text-sm text-lol-gold-light/60">
-          {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
-        </span>
+      <div className="relative overflow-hidden rounded-2xl border border-lol-gold/30 bg-[radial-gradient(circle_at_15%_20%,rgba(200,155,60,0.22),transparent_28%),linear-gradient(135deg,#010a13_0%,#0a1428_55%,#1e2328_100%)] p-5 md:p-7 shadow-2xl shadow-black/30">
+        <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full border border-lol-gold/20 bg-lol-gold/5 blur-sm" />
+        <div className="absolute bottom-3 right-5 hidden text-8xl font-black tracking-[-0.12em] text-lol-gold/5 md:block">ARAM</div>
+        <div className="relative grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-end">
+          <div>
+            <div className="mb-3 inline-flex rounded-full border border-lol-gold/30 bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/60">
+              {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+            </div>
+            <h1 className="text-4xl font-black tracking-tight text-lol-gold md:text-6xl">
+              눈오는 헤네시스
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-lol-gold-light/65 md:text-base">
+              우리끼리 하는 칼바람 내전 기록실. 밴픽, 피어리스 밴, 유저별 통계, LCU 종료 후 세부 지표까지 한 곳에 모읍니다.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              {session ? (
+                <>
+                  <Link to="/session/new-game"><Button size="lg">새 게임 시작</Button></Link>
+                  <Link to="/session"><Button variant="secondary" size="lg">현재 세션 보기</Button></Link>
+                </>
+              ) : (
+                <Link to="/players"><Button variant="secondary" size="lg">선수 먼저 보기</Button></Link>
+              )}
+              <Link to="/stats"><Button variant="ghost" size="lg">누적 통계</Button></Link>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4">
+              <div className="text-xs text-lol-gold-light/45">누적 게임</div>
+              <div className="mt-1 text-3xl font-black text-lol-gold">{stats?.wrStats.totalGames ?? 0}</div>
+            </div>
+            <div className="rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4">
+              <div className="text-xs text-lol-gold-light/45">등록 선수</div>
+              <div className="mt-1 text-3xl font-black text-lol-gold">{players.length}</div>
+            </div>
+            <div className="rounded-xl border border-blue-500/20 bg-blue-950/20 p-4">
+              <div className="text-xs text-lol-gold-light/45">Team 1</div>
+              <div className="mt-1 text-2xl font-black text-blue-300">{team1Wins}승</div>
+            </div>
+            <div className="rounded-xl border border-red-500/20 bg-red-950/20 p-4">
+              <div className="text-xs text-lol-gold-light/45">Team 2</div>
+              <div className="mt-1 text-2xl font-black text-red-300">{team2Wins}승</div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {dashboardHighlights && (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">Winrate Boss</div>
+            <div className="mt-2 text-lg font-bold text-lol-gold">
+              {dashboardHighlights.topWinrate ? playerName.get(dashboardHighlights.topWinrate.playerId) ?? '알 수 없음' : '기록 없음'}
+            </div>
+            <div className="text-sm text-lol-gold-light/55">
+              {dashboardHighlights.topWinrate
+                ? `${formatPercent(dashboardHighlights.topWinrate.winrate)} · ${dashboardHighlights.topWinrate.totalPicks}게임`
+                : '3게임 이상 기록 필요'}
+            </div>
+          </div>
+          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">Damage King</div>
+            <div className="mt-2 text-lg font-bold text-lol-gold">
+              {dashboardHighlights.damageKing ? playerName.get(dashboardHighlights.damageKing.playerId) ?? '알 수 없음' : '수집 대기'}
+            </div>
+            <div className="text-sm text-lol-gold-light/55">
+              {dashboardHighlights.damageKing
+                ? `평균 ${formatNumber(dashboardHighlights.damageKing.avgDamageDealtToChampions)} 딜`
+                : 'EOG 세부통계 필요'}
+            </div>
+          </div>
+          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">핫 챔피언</div>
+            <div className="mt-2 text-lg font-bold text-lol-gold">
+              {dashboardHighlights.hotChampion?.nameKo ?? '기록 없음'}
+            </div>
+            <div className="text-sm text-lol-gold-light/55">
+              {dashboardHighlights.hotChampion
+                ? `${dashboardHighlights.hotChampion.internalPicks}픽 · ${dashboardHighlights.hotChampion.internalBans}밴`
+                : '픽/밴 기록 필요'}
+            </div>
+          </div>
+          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">최고 3인 조합</div>
+            <div className="mt-2 truncate text-lg font-bold text-lol-gold">
+              {dashboardHighlights.bestTrio
+                ? dashboardHighlights.bestTrio.playerIds.map((id) => playerName.get(id) ?? '알 수 없음').join(' · ')
+                : '기록 없음'}
+            </div>
+            <div className="text-sm text-lol-gold-light/55">
+              {dashboardHighlights.bestTrio
+                ? `${formatPercent(dashboardHighlights.bestTrio.winrate)} · ${dashboardHighlights.bestTrio.sameTeamWins + dashboardHighlights.bestTrio.sameTeamLosses}게임`
+                : '같은 팀 3게임 이상 필요'}
+            </div>
+          </div>
+          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">현재 흐름</div>
+            <div className={`mt-2 text-lg font-bold ${dashboardHighlights.currentStreak?.type === 'W' ? 'text-prof-high' : dashboardHighlights.currentStreak?.type === 'L' ? 'text-prof-low' : 'text-lol-gold'}`}>
+              {dashboardHighlights.currentStreak ? playerName.get(dashboardHighlights.currentStreak.playerId) ?? '알 수 없음' : '기록 없음'}
+            </div>
+            <div className="text-sm text-lol-gold-light/55">
+              {dashboardHighlights.currentStreak
+                ? `${dashboardHighlights.currentStreak.count}${dashboardHighlights.currentStreak.type === 'W' ? '연승' : '연패'}`
+                : '완료된 게임 필요'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* No active session */}
       {!session && (
