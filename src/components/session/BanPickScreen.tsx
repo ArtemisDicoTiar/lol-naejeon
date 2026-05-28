@@ -38,6 +38,70 @@ type ActiveSlot =
   | null;
 
 const SKIP_BAN = '__SKIP__';
+type LaneRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support';
+
+const LANE_LABELS: Record<LaneRole, string> = {
+  top: '탑',
+  jungle: '정글',
+  mid: '미드',
+  adc: '원딜',
+  support: '서폿',
+};
+
+const CHAMPION_LANES: Partial<Record<string, LaneRole>> = {
+  Aatrox: 'top', Akali: 'mid', Akshan: 'mid', Ambessa: 'top', Camille: 'top',
+  Chogath: 'top', Darius: 'top', DrMundo: 'top', Fiora: 'top', Gangplank: 'top',
+  Garen: 'top', Gnar: 'top', Gragas: 'top', Gwen: 'top', Illaoi: 'top',
+  Irelia: 'top', Jax: 'top', Jayce: 'top', KSante: 'top', Kayle: 'top',
+  Kennen: 'top', Kled: 'top', Malphite: 'top', Mordekaiser: 'top', Nasus: 'top',
+  Ornn: 'top', Pantheon: 'top', Poppy: 'top', Quinn: 'top', Renekton: 'top',
+  Riven: 'top', Rumble: 'top', Sett: 'top', Shen: 'top', Singed: 'top',
+  Sion: 'top', TahmKench: 'top', Teemo: 'top', Trundle: 'top', Tryndamere: 'top',
+  Urgot: 'top', Vladimir: 'top', Volibear: 'top', Warwick: 'top', Wukong: 'top',
+  Yorick: 'top',
+
+  Amumu: 'jungle', BelVeth: 'jungle', Briar: 'jungle', Diana: 'jungle',
+  Elise: 'jungle', Evelynn: 'jungle', Fiddlesticks: 'jungle', Graves: 'jungle',
+  Hecarim: 'jungle', Ivern: 'jungle', JarvanIV: 'jungle', Karthus: 'jungle',
+  Kayn: 'jungle', Khazix: 'jungle', Kindred: 'jungle', LeeSin: 'jungle',
+  Lillia: 'jungle', MasterYi: 'jungle', Nidalee: 'jungle', Nocturne: 'jungle',
+  Nunu: 'jungle', Rammus: 'jungle', RekSai: 'jungle', Rengar: 'jungle',
+  Sejuani: 'jungle', Shaco: 'jungle', Shyvana: 'jungle', Skarner: 'jungle',
+  Taliyah: 'jungle', Udyr: 'jungle', Vi: 'jungle', Viego: 'jungle', XinZhao: 'jungle',
+  Zac: 'jungle',
+
+  Ahri: 'mid', Anivia: 'mid', Annie: 'mid', AurelionSol: 'mid', Aurora: 'mid',
+  Azir: 'mid', Brand: 'mid', Cassiopeia: 'mid', Corki: 'mid', Ekko: 'mid',
+  Fizz: 'mid', Galio: 'mid', Heimerdinger: 'mid', Hwei: 'mid', Kassadin: 'mid',
+  Katarina: 'mid', LeBlanc: 'mid', Lissandra: 'mid', Lux: 'mid', Malzahar: 'mid',
+  Mel: 'mid', Naafiri: 'mid', Neeko: 'mid', Orianna: 'mid', Qiyana: 'mid',
+  Ryze: 'mid', Swain: 'mid', Sylas: 'mid', Syndra: 'mid', Talon: 'mid',
+  TwistedFate: 'mid', Veigar: 'mid', Velkoz: 'mid', Vex: 'mid', Viktor: 'mid',
+  Xerath: 'mid', Yasuo: 'mid', Yone: 'mid', Zoe: 'mid', Zyra: 'mid',
+
+  Aphelios: 'adc', Ashe: 'adc', Caitlyn: 'adc', Draven: 'adc', Ezreal: 'adc',
+  Jhin: 'adc', Jinx: 'adc', Kaisa: 'adc', Kalista: 'adc', KogMaw: 'adc',
+  Lucian: 'adc', MissFortune: 'adc', Nilah: 'adc', Samira: 'adc', Senna: 'adc',
+  Sivir: 'adc', Smolder: 'adc', Tristana: 'adc', Twitch: 'adc', Varus: 'adc',
+  Vayne: 'adc', Xayah: 'adc', Zeri: 'adc',
+
+  Alistar: 'support', Bard: 'support', Blitzcrank: 'support', Braum: 'support',
+  Janna: 'support', Karma: 'support', Leona: 'support', Lulu: 'support',
+  Milio: 'support', Morgana: 'support', Nami: 'support', Nautilus: 'support',
+  Pyke: 'support', Rakan: 'support', Rell: 'support', Renata: 'support',
+  Seraphine: 'support', Sona: 'support', Soraka: 'support', Taric: 'support',
+  Thresh: 'support', Yuumi: 'support', Zilean: 'support',
+};
+
+function getChampionLane(champion: Champion): LaneRole {
+  const mapped = CHAMPION_LANES[champion.id];
+  if (mapped) return mapped;
+  if (champion.tags.includes('Marksman')) return 'adc';
+  if (champion.tags.includes('Support')) return 'support';
+  if (champion.tags.includes('Assassin') || champion.tags.includes('Mage')) return 'mid';
+  if (champion.tags.includes('Tank') || champion.tags.includes('Fighter')) return 'top';
+  return 'mid';
+}
 
 export function BanPickScreen({
   format, mode = 'aram', team1PlayerIds, team2PlayerIds, players, champions,
@@ -61,9 +125,9 @@ export function BanPickScreen({
   const [planningTimer, setPlanningTimer] = useState(25);
   const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
   const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
-  const [roleFilter, setRoleFilter] = useState<Set<string>>(new Set());
-  const [traitFilter, setTraitFilter] = useState<Set<MechanicTag>>(new Set());
-  const [showTraitPanel, setShowTraitPanel] = useState(false);
+  const [roleFilter, setRoleFilter] = useState<AramRole | null>(null);
+  const [laneFilter, setLaneFilter] = useState<LaneRole | null>(null);
+  const [traitFilter, setTraitFilter] = useState<MechanicTag | null>(null);
   const [lcuPaused, setLcuPaused] = useState(false); // pause LCU sync after manual reset
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
   const [matchData, setMatchData] = useState<SynergyCounterData | null>(null);
@@ -523,8 +587,9 @@ export function BanPickScreen({
     setPhase('planning');
     setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] });
     setSearch('');
-    setRoleFilter(new Set());
-    setTraitFilter(new Set());
+    setRoleFilter(null);
+    setLaneFilter(null);
+    setTraitFilter(null);
     // Pause LCU sync so it doesn't re-apply old state
     setLcuPaused(true);
   };
@@ -655,19 +720,17 @@ export function BanPickScreen({
     if (trimmedQuery) {
       list = list.filter((c) => c.nameKo.includes(trimmedQuery) || c.id.toLowerCase().includes(searchLower));
     }
-    // Role filter (multi-select OR — champion's aramRole must match any selected)
-    if (roleFilter.size > 0) {
-      list = list.filter((c) => roleFilter.has(c.aramRole));
+    if (roleFilter) {
+      list = list.filter((c) => c.aramRole === roleFilter);
     }
-    // Trait filter (multi-select AND — champion must have ALL selected mechanics)
-    if (traitFilter.size > 0) {
+    if (laneFilter) {
+      list = list.filter((c) => getChampionLane(c) === laneFilter);
+    }
+    if (traitFilter) {
       list = list.filter((c) => {
         const traits = championTraits[c.id];
         if (!traits) return false;
-        for (const t of traitFilter) {
-          if (!traits.mechanics.includes(t)) return false;
-        }
-        return true;
+        return traits.mechanics.includes(traitFilter);
       });
     }
     const tierOrder: Record<string, number> = { S: 0, A: 1, B: 2, C: 3, D: 4 };
@@ -724,7 +787,7 @@ export function BanPickScreen({
   // Grid champions filtered
   const gridChampions = useMemo(() => (
     computeGridChampions(search)
-  ), [champions, fierlessBans, search, roleFilter, traitFilter, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds, sortMode]);
+  ), [champions, fierlessBans, search, roleFilter, laneFilter, traitFilter, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds, sortMode]);
 
   // --- RENDER ---
   const renderTeamPanel = (team: 1 | 2) => {
@@ -1384,14 +1447,10 @@ export function BanPickScreen({
           <div className="flex flex-wrap items-center gap-1">
             <span className="text-[10px] text-lol-gold-light/40 mr-1">역할</span>
             {(Object.keys(ARAM_ROLE_LABELS) as AramRole[]).map((role) => {
-              const active = roleFilter.has(role);
+              const active = roleFilter === role;
               return (
                 <button key={role}
-                  onClick={() => setRoleFilter(prev => {
-                    const next = new Set(prev);
-                    if (next.has(role)) next.delete(role); else next.add(role);
-                    return next;
-                  })}
+                  onClick={() => setRoleFilter((prev) => prev === role ? null : role)}
                   className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ${
                     active
                       ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
@@ -1401,50 +1460,50 @@ export function BanPickScreen({
                 </button>
               );
             })}
-            <button
-              onClick={() => setShowTraitPanel(s => !s)}
-              className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ml-1 ${
-                showTraitPanel || traitFilter.size > 0
-                  ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                  : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
-              }`}>
-              특성 {traitFilter.size > 0 ? `(${traitFilter.size})` : ''}{showTraitPanel ? ' ▲' : ' ▼'}
-            </button>
-            {(roleFilter.size > 0 || traitFilter.size > 0) && (
+            {(roleFilter || laneFilter || traitFilter) && (
               <button
-                onClick={() => { setRoleFilter(new Set()); setTraitFilter(new Set()); }}
+                onClick={() => { setRoleFilter(null); setLaneFilter(null); setTraitFilter(null); }}
                 className="cursor-pointer text-[10px] px-2 py-0.5 rounded border border-lol-border/50 text-lol-gold-light/40 hover:text-lol-gold-light ml-1">
                 필터 초기화
               </button>
             )}
           </div>
 
-          {/* Trait filter chips — collapsible panel */}
-          {showTraitPanel && (
-            <div className="flex flex-wrap items-center gap-1 p-2 rounded border border-lol-border bg-lol-dark/40">
-              <span className="text-[10px] text-lol-gold-light/40 mr-1">
-                특성 (선택한 모든 특성 보유)
-              </span>
-              {(Object.keys(TAG_LABELS) as MechanicTag[]).map((tag) => {
-                const active = traitFilter.has(tag);
-                return (
-                  <button key={tag}
-                    onClick={() => setTraitFilter(prev => {
-                      const next = new Set(prev);
-                      if (next.has(tag)) next.delete(tag); else next.add(tag);
-                      return next;
-                    })}
-                    className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                      active
-                        ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                        : 'border-lol-border text-lol-gold-light/40 hover:border-lol-gold/50'
-                    }`}>
-                    {TAG_LABELS[tag]}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[10px] text-lol-gold-light/40 mr-1">라인</span>
+            {(Object.keys(LANE_LABELS) as LaneRole[]).map((lane) => {
+              const active = laneFilter === lane;
+              return (
+                <button key={lane}
+                  onClick={() => setLaneFilter((prev) => prev === lane ? null : lane)}
+                  className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ${
+                    active
+                      ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
+                      : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+                  }`}>
+                  {LANE_LABELS[lane]}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1 p-2 rounded border border-lol-border bg-lol-dark/40">
+            <span className="text-[10px] text-lol-gold-light/40 mr-1">특성</span>
+            {(Object.keys(TAG_LABELS) as MechanicTag[]).map((tag) => {
+              const active = traitFilter === tag;
+              return (
+                <button key={tag}
+                  onClick={() => setTraitFilter((prev) => prev === tag ? null : tag)}
+                  className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ${
+                    active
+                      ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
+                      : 'border-lol-border text-lol-gold-light/40 hover:border-lol-gold/50'
+                  }`}>
+                  {TAG_LABELS[tag]}
+                </button>
+              );
+            })}
+          </div>
 
           <div className="text-xs text-center space-y-1">
             <div className="text-lol-gold-light/40">
