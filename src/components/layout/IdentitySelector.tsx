@@ -6,9 +6,10 @@ interface IdentitySelectorProps {
   onSelect: (id: number | null) => void;
   currentId: number | null;
   inline?: boolean;
+  forceSelection?: boolean;
 }
 
-export function IdentitySelector({ players, onSelect, currentId, inline }: IdentitySelectorProps) {
+export function IdentitySelector({ players, onSelect, currentId, inline, forceSelection = false }: IdentitySelectorProps) {
   if (inline) {
     return (
       <select
@@ -16,7 +17,7 @@ export function IdentitySelector({ players, onSelect, currentId, inline }: Ident
         onChange={(e) => onSelect(e.target.value ? parseInt(e.target.value) : null)}
         className="bg-lol-blue border border-lol-border rounded px-2 py-1 text-xs text-lol-gold cursor-pointer"
       >
-        <option value="">관전자</option>
+        {!forceSelection && <option value="">관전자</option>}
         {players.map((p) => (
           <option key={p.id} value={p.id}>{p.name}</option>
         ))}
@@ -44,9 +45,11 @@ export function IdentitySelector({ players, onSelect, currentId, inline }: Ident
             </button>
           ))}
         </div>
-        <Button variant="ghost" className="w-full" onClick={() => onSelect(null)}>
-          관전자로 입장
-        </Button>
+        {!forceSelection && (
+          <Button variant="ghost" className="w-full" onClick={() => onSelect(null)}>
+            관전자로 입장
+          </Button>
+        )}
       </div>
     </div>
   );

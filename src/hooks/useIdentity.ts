@@ -10,6 +10,7 @@ export function useIdentity() {
     return stored ? parseInt(stored) : null;
   });
   const [players, setPlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(true);
   const [masterPlayerId, setMasterPlayerId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -17,6 +18,7 @@ export function useIdentity() {
       setPlayers(p);
       const master = p.find((pl) => pl.name === MASTER_PLAYER_NAME);
       if (master) setMasterPlayerId(master.id!);
+      setLoading(false);
     });
   }, []);
 
@@ -31,7 +33,8 @@ export function useIdentity() {
 
   const isMaster = userId !== null && userId === masterPlayerId;
   const playerName = players.find((p) => p.id === userId)?.name ?? '관전자';
-  const needsSelection = userId === null;
+  const hasValidUser = userId !== null && players.some((player) => player.id === userId);
+  const needsSelection = !loading && players.length > 0 && !hasValidUser;
 
-  return { userId, setUserId, isMaster, playerName, needsSelection, players };
+  return { userId: hasValidUser ? userId : null, setUserId, isMaster, playerName, needsSelection, players, loading };
 }

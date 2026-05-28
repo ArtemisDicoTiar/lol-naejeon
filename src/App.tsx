@@ -73,6 +73,7 @@ function AppContent() {
         players={identity.players}
         onSelect={(id) => identity.setUserId(id)}
         currentId={identity.userId}
+        forceSelection
       />
     );
   }
