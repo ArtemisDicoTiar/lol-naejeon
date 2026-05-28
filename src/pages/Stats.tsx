@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { computeFullStats, type FullStats } from '@/lib/stats';
 import { GAME_MODE_LABELS, type GameMode } from '@/lib/db';
 import { Card } from '@/components/ui/Card';
@@ -26,6 +26,8 @@ export function Stats() {
   const [loading, setLoading] = useState(true);
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [selectedCombatPlayerIds, setSelectedCombatPlayerIds] = useState<number[]>([]);
+  const [selectedRadarPlayerIds, setSelectedRadarPlayerIds] = useState<number[]>([]);
+  const radarSelectionInitializedRef = useRef(false);
 
   const loadStats = useCallback(() => {
     setLoading(true);
@@ -43,6 +45,12 @@ export function Stats() {
     window.addEventListener('lol-data-changed', handleDataChanged);
     return () => window.removeEventListener('lol-data-changed', handleDataChanged);
   }, [loadStats]);
+
+  useEffect(() => {
+    if (!stats || radarSelectionInitializedRef.current) return;
+    setSelectedRadarPlayerIds(stats.players.slice(0, 2).map((player) => player.id!));
+    radarSelectionInitializedRef.current = true;
+  }, [stats]);
 
   const playerIdsWithCombatData = useMemo(() => {
     if (!stats) return new Set<number>();
@@ -83,6 +91,18 @@ export function Stats() {
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
   }, [resolvedSelectedCombatPlayerIds, stats]);
+
+  const resolvedSelectedRadarPlayerIds = useMemo(() => {
+    if (!stats) return [];
+    const playerIdSet = new Set(stats.players.map((player) => player.id));
+    return selectedRadarPlayerIds.filter((id) => playerIdSet.has(id));
+  }, [selectedRadarPlayerIds, stats]);
+
+  const toggleRadarPlayer = (playerId: number) => {
+    setSelectedRadarPlayerIds((prev) =>
+      prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId],
+    );
+  };
 
   const modeToggle = (
     <div className="flex gap-2">
@@ -262,48 +282,49 @@ export function Stats() {
         )}
       </Card>
 
-      {stats.playerEogSummary.length > 0 && (
+      <div className="grid gap-4 2xl:grid-cols-2">
         <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {stats.players.map((player) => {
-              const playerId = player.id;
-              if (typeof playerId !== 'number') return null;
-              const hasCombatData = playerIdsWithCombatData.has(playerId);
-              const selected = resolvedSelectedCombatPlayerIds.includes(playerId);
-              return (
-                <button
-                  key={playerId}
-                  disabled={!hasCombatData}
-                  onClick={() => setSelectedCombatPlayerIds((prev) => (
-                    prev.includes(playerId)
-                      ? prev.filter((id) => id !== playerId)
-                      : [...prev, playerId]
-                  ))}
-                  title={hasCombatData ? undefined : '이 모드에서 수집된 전투 지표가 없습니다.'}
-                  className={`px-3 py-1 rounded text-sm border transition-colors ${
-                    !hasCombatData
-                      ? 'cursor-not-allowed border-lol-border/50 text-lol-gold-light/25 bg-lol-dark/20'
-                      : selected
-                      ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                      : 'cursor-pointer border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
-                  }`}
-                >
-                  {player.name}
-                </button>
-              );
-            })}
-          </div>
+          {stats.playerEogSummary.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {stats.players.map((player) => {
+                const playerId = player.id;
+                if (typeof playerId !== 'number') return null;
+                const hasCombatData = playerIdsWithCombatData.has(playerId);
+                const selected = resolvedSelectedCombatPlayerIds.includes(playerId);
+                return (
+                  <button
+                    key={playerId}
+                    disabled={!hasCombatData}
+                    onClick={() => setSelectedCombatPlayerIds((prev) => (
+                      prev.includes(playerId)
+                        ? prev.filter((id) => id !== playerId)
+                        : [...prev, playerId]
+                    ))}
+                    title={hasCombatData ? undefined : '이 모드에서 수집된 전투 지표가 없습니다.'}
+                    className={`px-3 py-1 rounded text-sm border transition-colors ${
+                      !hasCombatData
+                        ? 'cursor-not-allowed border-lol-border/50 text-lol-gold-light/25 bg-lol-dark/20'
+                        : selected
+                        ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
+                        : 'cursor-pointer border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+                    }`}
+                  >
+                    {player.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <CombatRadar
             title="플레이어 전투 지표 레이더"
             description="선택한 선수들의 평균 딜량, 전방 기여, 힐량, CC, KDA 관여, 골드 효율을 비교합니다."
             series={combatRadarSeries}
-            emptyMessage="비교할 선수를 하나 이상 선택하세요."
+            emptyMessage="전투 지표가 수집된 선수가 없습니다."
           />
         </div>
-      )}
 
-      {/* Trio Radar */}
-      <TrioRadar stats={stats} />
+        <TrioRadar stats={stats} />
+      </div>
 
       {/* Player Ranking */}
       <PlayerRanking stats={stats} />
@@ -317,14 +338,35 @@ export function Stats() {
           <div>
             <h2 className="text-lg font-bold text-lol-gold">플레이어 능력치 레이더</h2>
             <p className="text-sm text-lol-gold-light/45">
-              기본 능력치, 역할별 승률, 실제 전투 성향을 한 줄에서 비교합니다.
+              위 선택 버튼 하나로 기본 능력치, 역할별 승률, 실제 전투 성향을 같이 비교합니다.
             </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {stats.players.map((player, index) => {
+              const playerId = player.id!;
+              const selected = resolvedSelectedRadarPlayerIds.includes(playerId);
+              const color = ['#c89b3c', '#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f97316', '#06b6d4'][index % 7];
+              return (
+                <button
+                  key={playerId}
+                  onClick={() => toggleRadarPlayer(playerId)}
+                  className={`cursor-pointer rounded border px-3 py-1 text-sm transition-colors ${
+                    selected
+                      ? 'bg-lol-gold/20 text-lol-gold'
+                      : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+                  }`}
+                  style={selected ? { borderColor: color, color } : {}}
+                >
+                  {player.name}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="grid gap-4 xl:grid-cols-3">
-          <PlayerRadar stats={stats} compact />
-          <PlayerRoleRadar stats={stats} compact />
-          <PlayerStyleRadar stats={stats} compact />
+          <PlayerRadar stats={stats} compact selectedIds={resolvedSelectedRadarPlayerIds} onTogglePlayer={toggleRadarPlayer} hideSelector />
+          <PlayerRoleRadar stats={stats} compact selectedIds={resolvedSelectedRadarPlayerIds} onTogglePlayer={toggleRadarPlayer} hideSelector />
+          <PlayerStyleRadar stats={stats} compact selectedIds={resolvedSelectedRadarPlayerIds} onTogglePlayer={toggleRadarPlayer} hideSelector />
         </div>
       </div>
 

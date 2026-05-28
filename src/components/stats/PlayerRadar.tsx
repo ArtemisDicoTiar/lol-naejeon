@@ -5,15 +5,30 @@ import { Card } from '@/components/ui/Card';
 
 const COLORS = ['#c89b3c', '#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f97316', '#06b6d4'];
 
-export function PlayerRadar({ stats, compact = false }: { stats: FullStats; compact?: boolean }) {
-  const [selectedIds, setSelectedIds] = useState<number[]>(
+export function PlayerRadar({
+  stats,
+  compact = false,
+  selectedIds: controlledSelectedIds,
+  onTogglePlayer,
+  hideSelector = false,
+}: {
+  stats: FullStats;
+  compact?: boolean;
+  selectedIds?: number[];
+  onTogglePlayer?: (playerId: number) => void;
+  hideSelector?: boolean;
+}) {
+  const [internalSelectedIds, setInternalSelectedIds] = useState<number[]>(
     stats.players.slice(0, 2).map((p) => p.id!)
   );
+  const selectedIds = controlledSelectedIds ?? internalSelectedIds;
 
   const togglePlayer = (id: number) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
-    );
+    if (onTogglePlayer) {
+      onTogglePlayer(id);
+      return;
+    }
+    setInternalSelectedIds((prev) => prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]);
   };
 
   // Merge radar data for selected players
@@ -33,7 +48,7 @@ export function PlayerRadar({ stats, compact = false }: { stats: FullStats; comp
   return (
     <Card title="플레이어 능력치 (레이더 차트)">
       {/* Player selector */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      {!hideSelector && <div className="flex flex-wrap gap-2 mb-4">
         {stats.players.map((p, i) => (
           <button key={p.id} onClick={() => togglePlayer(p.id!)}
             className={`cursor-pointer rounded border transition-colors ${compact ? 'px-2 py-1 text-xs' : 'px-3 py-1 text-sm'} ${
@@ -45,7 +60,7 @@ export function PlayerRadar({ stats, compact = false }: { stats: FullStats; comp
             {p.name}
           </button>
         ))}
-      </div>
+      </div>}
 
       {selectedIds.length === 0 ? (
         <p className="text-center py-8 text-lol-gold-light/50">플레이어를 선택하세요</p>

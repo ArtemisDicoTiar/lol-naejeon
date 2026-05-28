@@ -40,7 +40,19 @@ function formatRawValue(axis: keyof StyleMetrics, value: number) {
   return Math.round(value).toLocaleString('ko-KR');
 }
 
-export function PlayerStyleRadar({ stats, compact = false }: { stats: FullStats; compact?: boolean }) {
+export function PlayerStyleRadar({
+  stats,
+  compact = false,
+  selectedIds: controlledSelectedIds,
+  onTogglePlayer,
+  hideSelector = false,
+}: {
+  stats: FullStats;
+  compact?: boolean;
+  selectedIds?: number[];
+  onTogglePlayer?: (playerId: number) => void;
+  hideSelector?: boolean;
+}) {
   const playerIdsWithData = useMemo(
     () => new Set(stats.playerEogSummary.map((entry) => entry.playerId)),
     [stats.playerEogSummary],
@@ -49,11 +61,13 @@ export function PlayerStyleRadar({ stats, compact = false }: { stats: FullStats;
     () => stats.players.map((player) => player.id!).filter((id) => playerIdsWithData.has(id)).slice(0, 3),
     [playerIdsWithData, stats.players],
   );
-  const [selectedIds, setSelectedIds] = useState<number[]>(defaultSelectedIds);
+  const [internalSelectedIds, setInternalSelectedIds] = useState<number[]>(defaultSelectedIds);
+  const selectedIds = controlledSelectedIds ?? internalSelectedIds;
   const resolvedSelectedIds = useMemo(() => {
     const valid = selectedIds.filter((id) => playerIdsWithData.has(id));
-    return valid.length > 0 ? valid : defaultSelectedIds;
-  }, [defaultSelectedIds, playerIdsWithData, selectedIds]);
+    if (valid.length > 0) return valid;
+    return controlledSelectedIds ? [] : defaultSelectedIds;
+  }, [controlledSelectedIds, defaultSelectedIds, playerIdsWithData, selectedIds]);
 
   const summariesByPlayerId = useMemo(
     () => new Map(stats.playerEogSummary.map((entry) => [entry.playerId, entry])),
@@ -83,9 +97,11 @@ export function PlayerStyleRadar({ stats, compact = false }: { stats: FullStats;
 
   const togglePlayer = (playerId: number) => {
     if (!playerIdsWithData.has(playerId)) return;
-    setSelectedIds((prev) =>
-      prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId],
-    );
+    if (onTogglePlayer) {
+      onTogglePlayer(playerId);
+      return;
+    }
+    setInternalSelectedIds((prev) => prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]);
   };
 
   return (
@@ -93,7 +109,7 @@ export function PlayerStyleRadar({ stats, compact = false }: { stats: FullStats;
       {!compact && <p className="mb-4 text-sm text-lol-gold-light/55">
         종료 후 통계가 수집된 게임 기준으로 실제 전투 성향을 비교합니다. 각 축은 선택한 플레이어 중 최고값을 100으로 정규화합니다.
       </p>}
-      <div className="flex flex-wrap gap-2 mb-4">
+      {!hideSelector && <div className="flex flex-wrap gap-2 mb-4">
         {stats.players.map((player, index) => {
           const playerId = player.id!;
           const selected = resolvedSelectedIds.includes(playerId);
@@ -117,7 +133,7 @@ export function PlayerStyleRadar({ stats, compact = false }: { stats: FullStats;
             </button>
           );
         })}
-      </div>
+      </div>}
 
       {selectedSummaries.length === 0 ? (
         <p className="text-center py-8 text-lol-gold-light/50">비교할 플레이어를 선택하세요.</p>
