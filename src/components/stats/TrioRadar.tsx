@@ -72,7 +72,7 @@ function formatRaw(axis: string, value: number) {
   return Math.round(value).toLocaleString('ko-KR');
 }
 
-export function TrioRadar({ stats }: { stats: FullStats }) {
+export function TrioRadar({ stats, chartHeight = 390 }: { stats: FullStats; chartHeight?: number }) {
   const defaultTeamA = stats.trioPlayerSynergy[0]?.playerIds ?? stats.players.slice(0, 3).map((player) => player.id!);
   const defaultTeamB = stats.trioPlayerSynergy[1]?.playerIds
     ?? stats.players
@@ -190,7 +190,7 @@ export function TrioRadar({ stats }: { stats: FullStats }) {
               Team B · {playerNames(stats, teamBIds)} · 같은 팀 {teamBMetrics.totalGames}판
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={390}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="74%">
               <PolarGrid stroke="#463714" />
               <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: 12 }} />

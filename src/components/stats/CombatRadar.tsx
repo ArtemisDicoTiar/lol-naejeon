@@ -37,11 +37,13 @@ export function CombatRadar({
   description,
   series,
   emptyMessage = '전투 지표가 아직 없습니다.',
+  chartHeight = 380,
 }: {
   title: string;
   description?: string;
   series: CombatRadarSeries[];
   emptyMessage?: string;
+  chartHeight?: number;
 }) {
   const activeSeries = series.filter((entry) => Object.values(entry.metrics).some((value) => value > 0));
 
@@ -70,7 +72,7 @@ export function CombatRadar({
   return (
     <Card title={title}>
       {description && <p className="mb-4 text-sm text-lol-gold-light/55">{description}</p>}
-      <ResponsiveContainer width="100%" height={380}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
         <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="74%">
           <PolarGrid stroke="#463714" />
           <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: 12 }} />
