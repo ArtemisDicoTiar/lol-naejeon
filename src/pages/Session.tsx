@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '@/hooks/useSession';
 import { useChampions } from '@/hooks/useChampions';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
+import { EogStatsPanel } from '@/components/session/EogStatsPanel';
 import { StreakStrip } from '@/components/stats/StreakStrip';
-import { db, GAME_MODE_LABELS, type GamePick, type GameBan, type Player } from '@/lib/db';
+import { db, GAME_MODE_LABELS, type GameBan, type GameEogCapture, type GameParticipantStat, type GamePick, type Player } from '@/lib/db';
 import { useIdentityContext, useLcuContext } from '@/App';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
 import type { Champion } from '@/lib/db';
@@ -21,6 +22,9 @@ export function Session() {
   const { champions } = useChampions();
   const [gamePicks, setGamePicks] = useState<Record<number, GamePick[]>>({});
   const [gameBansMap, setGameBansMap] = useState<Record<number, GameBan[]>>({});
+  const [gameEogMap, setGameEogMap] = useState<Record<number, GameEogCapture>>({});
+  const [gameParticipantStatsMap, setGameParticipantStatsMap] = useState<Record<number, GameParticipantStat[]>>({});
+  const [unlinkedCaptures, setUnlinkedCaptures] = useState<GameEogCapture[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
 
@@ -46,7 +50,7 @@ export function Session() {
   // Try to resolve Live Client Data champion ID → our Champion
   const resolveLiveChampion = (championId: string): Champion | undefined => {
     // Direct match (most common)
-    let c = championByNormId.get(championId.toLowerCase());
+    const c = championByNormId.get(championId.toLowerCase());
     if (c) return c;
     // Some names differ — try stripping special chars
     const stripped = championId.replace(/[^a-zA-Z]/g, '').toLowerCase();
@@ -84,23 +88,51 @@ export function Session() {
 
   // Auto-navigate to new game when LCU detects champion select
   useEffect(() => {
-    if (lcu.connected && lcu.champSelectActive && session && isMaster) {
+    if (lcu.connected && lcu.champSelectActive && !lcu.gameStartedAt && session && isMaster) {
       navigate('/session/new-game?fromLcu=true');
     }
-  }, [lcu.champSelectActive, lcu.connected, session, isMaster, navigate]);
+  }, [lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, session, isMaster, navigate]);
+
+  const loadAncillaryGameData = useCallback(async () => {
+    const picks: Record<number, GamePick[]> = {};
+    const bans: Record<number, GameBan[]> = {};
+    const eogMap: Record<number, GameEogCapture> = {};
+    const eogStatsMap: Record<number, GameParticipantStat[]> = {};
+
+    for (const game of games) {
+      picks[game.id!] = await db.gamePicks.where('gameId').equals(game.id!).toArray();
+      bans[game.id!] = await db.gameBans.where('gameId').equals(game.id!).toArray();
+      const capture = await db.gameEogCaptures.where('gameId').equals(game.id!).last();
+      if (capture) {
+        eogMap[game.id!] = capture;
+        eogStatsMap[game.id!] = await db.gameParticipantStats.where('captureId').equals(capture.id!).toArray();
+      }
+    }
+
+    const sessionCaptures = session?.id
+      ? await db.gameEogCaptures.where('sessionId').equals(session.id).toArray()
+      : [];
+
+    setGamePicks(picks);
+    setGameBansMap(bans);
+    setGameEogMap(eogMap);
+    setGameParticipantStatsMap(eogStatsMap);
+    setUnlinkedCaptures(
+      sessionCaptures
+        .filter((capture) => !capture.gameId)
+        .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()),
+    );
+  }, [games, session?.id]);
 
   useEffect(() => {
-    (async () => {
-      const picks: Record<number, GamePick[]> = {};
-      const bans: Record<number, GameBan[]> = {};
-      for (const game of games) {
-        picks[game.id!] = await db.gamePicks.where('gameId').equals(game.id!).toArray();
-        bans[game.id!] = await db.gameBans.where('gameId').equals(game.id!).toArray();
-      }
-      setGamePicks(picks);
-      setGameBansMap(bans);
-    })();
-  }, [games]);
+    void loadAncillaryGameData();
+  }, [loadAncillaryGameData]);
+
+  useEffect(() => {
+    const handleDataChanged = () => { void loadAncillaryGameData(); };
+    window.addEventListener('lol-data-changed', handleDataChanged);
+    return () => window.removeEventListener('lol-data-changed', handleDataChanged);
+  }, [loadAncillaryGameData]);
 
   const getChampion = (id: string) => champions.find((c) => c.id === id);
   const getPlayer = (id: number) => players.find((p) => p.id === id);
@@ -177,6 +209,43 @@ export function Session() {
           // Re-mount when games array changes so today's results refresh the strip
           key={`streak-${games.length}`}
         />
+      )}
+
+      {lcu.connected && (lcu.eog.status === 'capturing' || lcu.eog.status === 'failed' || lcu.eog.status === 'captured') && (
+        <Card title="종료 후 수집 상태">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className={`px-2 py-1 rounded border ${
+              lcu.eog.status === 'captured'
+                ? 'border-prof-high/40 text-prof-high'
+                : lcu.eog.status === 'failed'
+                  ? 'border-red-700/40 text-red-300'
+                  : 'border-lol-gold/40 text-lol-gold'
+            }`}>
+              {lcu.eog.status === 'captured' ? 'EOG 수집 완료' : lcu.eog.status === 'failed' ? 'EOG 수집 실패' : 'EOG 수집 중'}
+            </span>
+            {lcu.eog.capture && (
+              <span className="text-lol-gold-light/60">
+                {lcu.eog.capture.participantCount}명 캡처 · {lcu.eog.capture.mappedParticipants}명 매핑
+              </span>
+            )}
+            {lcu.eog.capture?.gameId === null && (
+              <span className="text-yellow-300/80">현재 세션 게임과 자동 연결되지 않았습니다.</span>
+            )}
+            {lcu.eog.error && <span className="text-red-300/80">{lcu.eog.error}</span>}
+          </div>
+        </Card>
+      )}
+
+      {unlinkedCaptures.length > 0 && (
+        <Card title="미연결 종료 데이터">
+          <div className="space-y-2">
+            {unlinkedCaptures.map((capture) => (
+              <div key={capture.id} className="rounded border border-yellow-700/30 bg-yellow-950/10 px-3 py-2 text-sm text-yellow-100/85">
+                {new Date(capture.capturedAt).toLocaleString('ko-KR')} · {capture.participantCount}명 · raw 캡처만 저장됨
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Fierless */}
@@ -279,6 +348,8 @@ export function Session() {
             {games.map((game, idx) => {
               const picks = gamePicks[game.id!] ?? [];
               const bans = gameBansMap[game.id!] ?? [];
+              const eogCapture = gameEogMap[game.id!];
+              const eogStats = gameParticipantStatsMap[game.id!] ?? [];
               const team1 = picks.filter((p) => p.team === 1);
               const team2 = picks.filter((p) => p.team === 2);
               const isLatest = idx === games.length - 1;
@@ -315,6 +386,17 @@ export function Session() {
                         }`}>
                         {GAME_MODE_LABELS[game.mode ?? 'aram']}
                       </button>
+                      {eogCapture && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded border ${
+                          eogCapture.status === 'captured'
+                            ? 'border-prof-high/30 text-prof-high'
+                            : eogCapture.status === 'unlinked'
+                              ? 'border-yellow-700/30 text-yellow-300'
+                              : 'border-red-700/30 text-red-300'
+                        }`}>
+                          EOG {eogCapture.status === 'captured' ? '완료' : eogCapture.status === 'unlinked' ? '미연결' : '실패'}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {game.winningTeam ? (
@@ -338,6 +420,24 @@ export function Session() {
                       getChampion={getChampion}
                       getPlayer={getPlayer}
                     />
+                  )}
+                  {eogCapture && eogStats.length > 0 && (
+                    <div className="mb-3 pb-3 border-b border-lol-border/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs text-lol-gold-light/60">
+                          종료 후 통계 · {new Date(eogCapture.capturedAt).toLocaleTimeString('ko-KR')}
+                        </div>
+                        <div className="text-[10px] text-lol-gold-light/45">
+                          {eogCapture.mappedParticipants}/{eogCapture.participantCount}명 매핑
+                        </div>
+                      </div>
+                      <EogStatsPanel
+                        participantStats={eogStats}
+                        players={players}
+                        champions={champions}
+                        winnerTeam={eogCapture.winnerTeam}
+                      />
+                    </div>
                   )}
                   <div className="grid grid-cols-2 gap-4">
                     {[{ team: team1, num: 1 }, { team: team2, num: 2 }].map(({ team, num }) => (

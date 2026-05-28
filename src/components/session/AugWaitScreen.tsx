@@ -48,8 +48,8 @@ export function AugWaitScreen({
       .then(r => r.json())
       .then(data => {
         const map = new Map<number, string>();
-        for (const [, champ] of Object.entries(data.data as Record<string, any>)) {
-          map.set(parseInt(champ.key), champ.id as string);
+        for (const [, champ] of Object.entries(data.data as Record<string, { key: string; id: string }>)) {
+          map.set(parseInt(champ.key), champ.id);
         }
         setChampKeyMap(map);
       })
@@ -184,15 +184,18 @@ export function AugWaitScreen({
   const isInChampSelect = lcu.champSelectActive;
   const lcuPhase = lcu.lastState?.phase?.toUpperCase() ?? '';
 
-  // Source of truth for picks depends on LCU connection
-  const currentPicks = isLcuConnected ? lcuPicks : manualPicks;
+  // Keep manual corrections visible if LCU misses a player, while letting LCU
+  // overwrite them as soon as it resolves the real pick.
+  const currentPicks = isLcuConnected ? { ...manualPicks, ...lcuPicks } : manualPicks;
   const pickedCount = Object.keys(currentPicks).length;
   const totalPlayers = team1PlayerIds.length + team2PlayerIds.length;
   const allPickedIds = new Set(Object.values(currentPicks));
 
-  // Pool: LCU bench when connected, ALL champions when manual
-  const benchChamps = isLcuConnected
-    ? (benchChampIds.map(id => champMap.get(id)).filter(Boolean) as Champion[])
+  // Pool: prefer LCU bench, but fall back to all unpicked champions if a mode
+  // patch does not expose benchChampions through LCU.
+  const lcuBenchChamps = benchChampIds.map(id => champMap.get(id)).filter(Boolean) as Champion[];
+  const benchChamps = isLcuConnected && lcuBenchChamps.length > 0
+    ? lcuBenchChamps
     : champions.filter(c => !allPickedIds.has(c.id));
 
   // Filtered pool for manual mode search
@@ -336,7 +339,7 @@ export function AugWaitScreen({
         <div className="flex items-center gap-2">
           <div className="text-xs text-purple-300/70 font-medium">
             {isLcuConnected
-              ? `우리 팀 풀 ${benchChamps.length > 0 ? `(${benchChamps.length}개)` : '— 챔셀 시작 후 표시'}`
+              ? `우리 팀 풀 ${lcuBenchChamps.length > 0 ? `(${benchChamps.length}개)` : `대체 풀 (${benchChamps.length}개)`}`
               : `전체 챔피언 (${benchChamps.length}개) — 플레이어 선택 후 클릭으로 배정`}
           </div>
           {!isLcuConnected && (

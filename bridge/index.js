@@ -54,6 +54,9 @@ wss.on('connection', (ws) => {
         await lcuHoverBan(msg.championNumericId);
       } else if (msg.type === 'lockInBan') {
         await lcuLockInBan(msg.championNumericId);
+      } else if (msg.type === 'fetchRecentCustomGames') {
+        const result = await fetchRecentCustomGames(msg.limit);
+        ws.send(JSON.stringify({ type: 'recentCustomGamesResult', requestId: msg.requestId, ...result }));
       }
     } catch {}
   });
@@ -66,11 +69,126 @@ function broadcast(data) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
+  return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(',')}}`;
+}
+
+function hashString(input) {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(i);
+  }
+  return `eog_${(hash >>> 0).toString(16)}`;
+}
+
+function buildFingerprint(raw) {
+  return hashString(stableStringify(raw));
+}
+
+function isCustomHistoryGame(game) {
+  const queueId = Number(game?.queueId ?? game?.queue?.id ?? -1);
+  const queueType = String(game?.queueType ?? game?.gameQueueType ?? '').toUpperCase();
+  const gameType = String(game?.gameType ?? '').toUpperCase();
+  const gameMode = String(game?.gameMode ?? game?.gameModeName ?? '').toUpperCase();
+  return (
+    queueId === 0 ||
+    queueType.includes('CUSTOM') ||
+    gameType.includes('CUSTOM') ||
+    gameMode.includes('CUSTOM')
+  );
+}
+
+function collectStringHints(value, out = []) {
+  if (value === null || value === undefined) return out;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    out.push(String(value));
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStringHints(item, out);
+    return out;
+  }
+  if (typeof value === 'object') {
+    for (const [key, val] of Object.entries(value)) {
+      if (/mode|queue|map|variant|variation|mutator|augment|game|type|name|description/i.test(key)) {
+        out.push(String(key));
+        collectStringHints(val, out);
+      }
+    }
+  }
+  return out;
+}
+
+function inferInternalMode(game) {
+  const hints = collectStringHints(game).join(' ').toUpperCase();
+  const queueId = Number(game?.queueId ?? game?.queue?.id ?? game?.gameQueueConfigId ?? -1);
+  if (
+    hints.includes('AUGMENT') ||
+    hints.includes('AUGMENTED') ||
+    hints.includes('증강') ||
+    hints.includes('증바람') ||
+    hints.includes('CHERRY') ||
+    hints.includes('STRAWBERRY') ||
+    queueId === 1700 ||
+    queueId === 1710
+  ) {
+    return 'augmented';
+  }
+  return 'aram';
+}
+
+function normalizeHistoryGame(game) {
+  const participantIdentities = game?.participantIdentities || [];
+  const identityById = new Map(
+    participantIdentities.map((entry) => [entry.participantId, entry.player || {}]),
+  );
+
+  const participants = (game?.participants || []).map((participant) => {
+    const player = identityById.get(participant.participantId) || {};
+    const summonerName = player.gameName || player.summonerName || player.displayName || '';
+    return {
+      participantId: participant.participantId,
+      teamId: participant.teamId,
+      championId: participant.championId,
+      summonerName,
+      alias: findAlias(summonerName) ?? null,
+      riotId: player.riotId || player.riotIdGameName || null,
+      stats: participant.stats || {},
+    };
+  });
+
+  const winnerTeamId = (game?.teams || []).find((team) => team.win === 'Win' || team.win === true)?.teamId ?? null;
+
+  return {
+    gameId: game.gameId,
+    gameCreation: game.gameCreation || game.gameCreationDate || Date.now(),
+    gameDuration: game.gameDuration || 0,
+    queueId: game.queueId ?? null,
+    mapId: game.mapId ?? null,
+    gameMode: game.gameMode || game.gameModeName || null,
+    gameType: game.gameType || null,
+    mode: inferInternalMode(game),
+    winnerTeamId,
+    participants,
+    raw: game,
+  };
+}
+
 // --- Lobby snapshot for fallback alias resolution ---
 let lobbySnapshot = { team100: [], team200: [] };
 
 // --- LCU Write: hover/lock-in champion for current user ---
 let mySummonerId = null;
+let eogCapturePromise = null;
+let lastEogFingerprint = null;
+let lastEogCapturedAt = 0;
 
 async function getMySelldId() {
   if (!credentials) return undefined;
@@ -281,6 +399,119 @@ async function cacheLobbyMembers() {
   } catch {}
 }
 
+async function fetchCurrentGameflowPhase() {
+  if (!credentials) return null;
+  try {
+    const resp = await createHttp1Request({ method: 'GET', url: '/lol-gameflow/v1/gameflow-phase' }, credentials);
+    if (resp.status === 200) return resp.json();
+  } catch {}
+  return null;
+}
+
+async function fetchRecentCustomGames(limit = 20) {
+  try {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 50));
+    const endIndex = Math.max(0, safeLimit - 1);
+    const resp = await createHttp1Request({
+      method: 'GET',
+      url: `/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=${endIndex}`,
+    }, credentials);
+    if (resp.status !== 200) {
+      return { ok: false, error: `match history status ${resp.status}`, items: [] };
+    }
+
+    const payload = resp.json();
+    const games = payload?.games?.games || payload?.games || [];
+    const customGames = games.filter(isCustomHistoryGame);
+    const items = [];
+
+    for (const game of customGames) {
+      try {
+        const detailResp = await createHttp1Request({
+          method: 'GET',
+          url: `/lol-match-history/v1/games/${game.gameId}`,
+        }, credentials);
+        if (detailResp.status !== 200) continue;
+        const detail = detailResp.json();
+        items.push(normalizeHistoryGame(detail?.game || detail));
+      } catch {}
+    }
+
+    return { ok: true, items };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error), items: [] };
+  }
+}
+
+async function fetchEogStatsBlock() {
+  if (!credentials) throw new Error('LCU credentials unavailable');
+  const resp = await createHttp1Request({ method: 'GET', url: '/lol-end-of-game/v1/eog-stats-block' }, credentials);
+  if (resp.status !== 200) {
+    throw new Error(`eog-stats-block status ${resp.status}`);
+  }
+  return resp.json();
+}
+
+async function captureEndOfGameStats(trigger = 'phase') {
+  if (eogCapturePromise) return eogCapturePromise;
+
+  const startedAt = new Date().toISOString();
+  broadcast({ type: 'eogCaptureStarted', trigger, startedAt });
+
+  eogCapturePromise = (async () => {
+    const delays = [1500, 3000, 5000];
+    let lastError = 'EOG data unavailable';
+
+    for (const delay of delays) {
+      await sleep(delay);
+      try {
+        const raw = await fetchEogStatsBlock();
+        const fingerprint = buildFingerprint(raw);
+        const now = Date.now();
+        if (fingerprint === lastEogFingerprint && now - lastEogCapturedAt < 60_000) {
+          broadcast({
+            type: 'eogCaptureSucceeded',
+            trigger,
+            startedAt,
+            capturedAt: new Date(now).toISOString(),
+            fingerprint,
+            raw,
+            duplicate: true,
+          });
+          return;
+        }
+
+        lastEogFingerprint = fingerprint;
+        lastEogCapturedAt = now;
+        broadcast({
+          type: 'eogCaptureSucceeded',
+          trigger,
+          startedAt,
+          capturedAt: new Date(now).toISOString(),
+          fingerprint,
+          raw,
+          duplicate: false,
+        });
+        return;
+      } catch (error) {
+        lastError = error?.message || String(error);
+      }
+    }
+
+    broadcast({
+      type: 'eogCaptureFailed',
+      trigger,
+      startedAt,
+      failedAt: new Date().toISOString(),
+      error: lastError,
+    });
+  })().finally(() => {
+    eogCapturePromise = null;
+  });
+
+  return eogCapturePromise;
+}
+
 function extractName(member) {
   return member.gameName || member.summonerName || member.displayName || member.internalName || member.name || '';
 }
@@ -317,6 +548,7 @@ async function connectToLCU() {
   console.log('⏳ 챔피언 셀렉트 대기 중...\n');
 
   let lastState = null;
+  let lastGameflowPhase = null;
 
   ws.on('message', async (messageBuffer) => {
     const message = messageBuffer.toString();
@@ -402,6 +634,8 @@ async function connectToLCU() {
       // Gameflow phase changes: detect game start/end
       if (uri === '/lol-gameflow/v1/gameflow-phase') {
         const phase = data;  // payload is just the phase string
+        if (phase === lastGameflowPhase) return;
+        lastGameflowPhase = phase;
         console.log(`🎮 게임 페이즈: ${phase}`);
         if (phase === 'InProgress' || phase === 'GameStart') {
           // Cache lobby once more before game starts
@@ -411,6 +645,7 @@ async function connectToLCU() {
           scheduleLivePicksFetch();
         } else if (phase === 'WaitingForStats' || phase === 'EndOfGame' || phase === 'PreEndOfGame') {
           broadcast({ type: 'gameEnd' });
+          captureEndOfGameStats(`gameflow:${phase}`);
         }
       }
     } catch {}
@@ -422,6 +657,14 @@ async function connectToLCU() {
 
   // Pre-cache lobby members if already in a lobby
   await cacheLobbyMembers();
+
+  const currentPhase = await fetchCurrentGameflowPhase();
+  if (currentPhase) {
+    lastGameflowPhase = currentPhase;
+    if (currentPhase === 'WaitingForStats' || currentPhase === 'EndOfGame' || currentPhase === 'PreEndOfGame') {
+      captureEndOfGameStats(`startup:${currentPhase}`);
+    }
+  }
 
   // Poll in case already in champ select
   try {
@@ -578,10 +821,23 @@ async function parseChampSelectState(data) {
   const timeLeft = Math.ceil((timer.adjustedTimeLeftInPhase ?? 0) / 1000);
   const totalTime = Math.ceil((timer.totalTimeInPhase ?? 0) / 1000);
 
-  // Bench champions (ARAM reroll pool — populated in augmented ARAM)
-  const benchChampions = (data.benchChampions || []).map(b => b.championId).filter(Boolean);
+  // Bench champions (ARAM reroll pool — populated in augmented ARAM). LCU has
+  // returned both object rows and raw numeric arrays across patches/modes.
+  const benchSources = [
+    data.benchChampions,
+    data.benchChampionIds,
+    data.gameData?.benchChampions,
+    data.gameData?.benchChampionIds,
+  ].filter(Boolean);
+  const benchChampions = [];
+  for (const source of benchSources) {
+    for (const entry of source || []) {
+      const championId = Number(typeof entry === 'number' ? entry : entry?.championId ?? entry?.id);
+      if (championId > 0 && !benchChampions.includes(championId)) benchChampions.push(championId);
+    }
+  }
 
-  return { phase, timeLeft, totalTime, team1Bans, team2Bans, team1Picks, team2Picks, benchChampions };
+  return { phase, mode: inferInternalMode(data), timeLeft, totalTime, team1Bans, team2Bans, team1Picks, team2Picks, benchChampions };
 }
 
 function stateChanged(prev, next) {

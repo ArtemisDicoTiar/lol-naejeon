@@ -19,10 +19,10 @@ export function Dashboard() {
 
   // Auto-navigate to new game when LCU detects champion select
   useEffect(() => {
-    if (lcu.connected && lcu.champSelectActive && session && isMaster) {
+    if (lcu.connected && lcu.champSelectActive && !lcu.gameStartedAt && session && isMaster) {
       navigate('/session/new-game?fromLcu=true');
     }
-  }, [lcu.champSelectActive, lcu.connected, session, isMaster, navigate]);
+  }, [lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, session, isMaster, navigate]);
 
   if (sessionLoading || syncing) {
     return (

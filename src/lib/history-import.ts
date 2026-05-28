@@ -32,7 +32,27 @@ function inferWinningTeam(winnerTeamId: number | null): 1 | 2 | null {
   return null;
 }
 
-function inferMode(): GameMode {
+function inferMode(game: LcuRetroGame): GameMode {
+  if (game.mode === 'augmented') return 'augmented';
+  const raw = JSON.stringify({
+    queueId: game.queueId,
+    mapId: game.mapId,
+    gameMode: game.gameMode,
+    gameType: game.gameType,
+    raw: game.raw,
+  }).toUpperCase();
+  if (
+    raw.includes('AUGMENT') ||
+    raw.includes('AUGMENTED') ||
+    raw.includes('증강') ||
+    raw.includes('증바람') ||
+    raw.includes('CHERRY') ||
+    raw.includes('STRAWBERRY') ||
+    game.queueId === 1700 ||
+    game.queueId === 1710
+  ) {
+    return 'augmented';
+  }
   return 'aram';
 }
 
@@ -98,7 +118,7 @@ async function importSingleRetroGame(
     sessionId: session.id!,
     gameNumber: nextGameNumber,
     format: inferFormat(participants.length),
-    mode: inferMode(),
+    mode: inferMode(game),
     playedAt: new Date(game.gameCreation),
     winningTeam: inferWinningTeam(game.winnerTeamId),
     notes: '',
@@ -199,6 +219,10 @@ export async function importRetroCustomGames(games: LcuRetroGame[]): Promise<Ret
   for (const game of uniqueGames) {
     const exists = await db.games.where('sourceMatchId').equals(game.gameId).first();
     if (exists) {
+      const detectedMode = inferMode(game);
+      if ((exists.mode ?? 'aram') !== detectedMode) {
+        await db.games.update(exists.id!, { mode: detectedMode });
+      }
       skipped++;
       continue;
     }

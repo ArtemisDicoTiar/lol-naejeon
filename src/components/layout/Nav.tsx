@@ -7,6 +7,7 @@ export const links = [
   { to: '/', label: '대시보드' },
   { to: '/session', label: '내전 세션' },
   { to: '/players', label: '선수 관리' },
+  { to: '/player-stats', label: '유저 통계' },
   { to: '/champions', label: '챔피언' },
   { to: '/stats', label: '통계' },
   { to: '/history', label: '기록' },

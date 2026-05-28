@@ -17,7 +17,8 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
   };
 
   // Merge radar data for selected players
-  const axes = stats.radarData[stats.players[0]?.id!]?.map((d) => d.axis) ?? [];
+  const firstPlayerId = stats.players[0]?.id;
+  const axes = firstPlayerId ? stats.radarData[firstPlayerId]?.map((d) => d.axis) ?? [] : [];
   const chartData = axes.map((axis) => {
     const entry: Record<string, string | number> = { axis };
     for (const pid of selectedIds) {
@@ -80,7 +81,7 @@ export function PlayerRadar({ stats }: { stats: FullStats }) {
           <span className="text-lol-gold-light/60 font-medium">이니시</span> = 이니시/탱커 픽비율 × 해당 승률 × 200
         </div>
         <div className="p-1.5 bg-lol-blue/30 rounded">
-          <span className="text-lol-gold-light/60 font-medium">유지력</span> = 유지력/유틸 픽비율 × 해당 승률 × 200
+          <span className="text-lol-gold-light/60 font-medium">챔프폭</span> = 사용 챔피언 수를 50~100 상대 스케일로 보정
         </div>
         <div className="p-1.5 bg-lol-blue/30 rounded">
           <span className="text-lol-gold-light/60 font-medium">캐리력</span> = S/상/중 챔프 승수 / S/상/중 챔프 게임수 × 100

@@ -4,7 +4,7 @@ import { Nav } from '@/components/layout/Nav';
 import { Footer } from '@/components/layout/Footer';
 import { IdentitySelector } from '@/components/layout/IdentitySelector';
 import { useIdentity } from '@/hooks/useIdentity';
-import { useLcuBridge, type LcuChampSelectState, type LcuLobbyState, type LcuLivePlayer } from '@/hooks/useLcuBridge';
+import { useLcuBridge, type LcuChampSelectState, type LcuEogState, type LcuLobbyState, type LcuLivePlayer, type LcuRetroGame } from '@/hooks/useLcuBridge';
 import { Dashboard } from '@/pages/Dashboard';
 import { Players } from '@/pages/Players';
 import { PlayerDetail } from '@/pages/PlayerDetail';
@@ -12,6 +12,7 @@ import { Champions } from '@/pages/Champions';
 import { Session } from '@/pages/Session';
 import { NewGame } from '@/pages/NewGame';
 import { Stats } from '@/pages/Stats';
+import { PlayerStats } from '@/pages/PlayerStats';
 import { History } from '@/pages/History';
 import { Settings } from '@/pages/Settings';
 
@@ -39,6 +40,8 @@ interface LcuContextType {
   gameStartedAt: number | null;
   gameEndedAt: number | null;
   liveGamePlayers: { team1: LcuLivePlayer[]; team2: LcuLivePlayer[] } | null;
+  eog: LcuEogState;
+  fetchRecentCustomGames: (limit?: number) => Promise<LcuRetroGame[]>;
   hoverChampion: (championNumericId: number) => void;
   lockInChampion: (championNumericId: number) => void;
   hoverBan: (championNumericId: number) => void;
@@ -48,7 +51,8 @@ interface LcuContextType {
 export const LcuContext = createContext<LcuContextType>({
   connected: false, connect: () => {}, disconnect: () => {},
   lastState: null, lobbyState: null, champSelectActive: false,
-  gameStartedAt: null, gameEndedAt: null, liveGamePlayers: null,
+  gameStartedAt: null, gameEndedAt: null, liveGamePlayers: null, eog: { status: 'idle', capture: null, participantStats: [], linkedGameId: null, error: null },
+  fetchRecentCustomGames: async () => [],
   hoverChampion: () => {}, lockInChampion: () => {},
   hoverBan: () => {}, lockInBan: () => {},
 });
@@ -87,6 +91,7 @@ function AppContent() {
               <Route path="/session" element={<Session />} />
               <Route path="/session/new-game" element={<NewGame />} />
               <Route path="/stats" element={<Stats />} />
+              <Route path="/player-stats" element={<PlayerStats />} />
               <Route path="/history" element={<History />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

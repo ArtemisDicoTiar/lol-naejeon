@@ -14,7 +14,8 @@ export function PlayerRoleRadar({ stats }: { stats: FullStats }) {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]);
   };
 
-  const axes = stats.roleRadarData[stats.players[0]?.id!]?.map((d) => d.axis) ?? [];
+  const firstPlayerId = stats.players[0]?.id;
+  const axes = firstPlayerId ? stats.roleRadarData[firstPlayerId]?.map((d) => d.axis) ?? [] : [];
   const chartData = axes.map((axis) => {
     const entry: Record<string, string | number> = { axis };
     for (const pid of selectedIds) {

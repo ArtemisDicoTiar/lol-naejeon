@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSession } from '@/hooks/useSession';
 import { usePlayers } from '@/hooks/usePlayers';
@@ -29,6 +29,7 @@ export function NewGame() {
   const [sittingOut, setSittingOut] = useState<Set<number>>(new Set());
   const [teamAssignments, setTeamAssignments] = useState<Record<number, 1 | 2>>({});
   const [proficiencies, setProficiencies] = useState<Record<number, Map<string, ProficiencyLevel>>>({});
+  const confirmInFlightRef = useRef(false);
 
   const allPlayerIds = players.map((p) => p.id!);
   const selectedPlayerIds = allPlayerIds.filter((id) => !sittingOut.has(id));
@@ -38,17 +39,20 @@ export function NewGame() {
   // Pre-fill from last game if keepTeams
   useEffect(() => {
     if (keepTeams && lastGameTeams) {
-      const assignments: Record<number, 1 | 2> = {};
-      lastGameTeams.team1.forEach((id) => { assignments[id] = 1; });
-      lastGameTeams.team2.forEach((id) => { assignments[id] = 2; });
-      setTeamAssignments(assignments);
-      setFormat(lastGameTeams.format);
-      // Figure out who sat out
-      const played = new Set([...lastGameTeams.team1, ...lastGameTeams.team2]);
-      const satOut = allPlayerIds.filter((id) => !played.has(id));
-      if (satOut.length > 0) setSittingOut(new Set(satOut));
+      const timer = window.setTimeout(() => {
+        const assignments: Record<number, 1 | 2> = {};
+        lastGameTeams.team1.forEach((id) => { assignments[id] = 1; });
+        lastGameTeams.team2.forEach((id) => { assignments[id] = 2; });
+        setTeamAssignments(assignments);
+        setFormat(lastGameTeams.format);
+        // Figure out who sat out
+        const played = new Set([...lastGameTeams.team1, ...lastGameTeams.team2]);
+        const satOut = allPlayerIds.filter((id) => !played.has(id));
+        if (satOut.length > 0) setSittingOut(new Set(satOut));
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
-  }, [keepTeams, lastGameTeams]);
+  }, [allPlayerIds, keepTeams, lastGameTeams]);
 
   const playerNameToId = useMemo(() => {
     return new Map(players.map(p => [p.name, p.id!]));
@@ -100,19 +104,29 @@ export function NewGame() {
   // Auto-detect teams from LOBBY (before champ select even starts)
   useEffect(() => {
     if (!lcu.connected || !lcu.lobbyState) return;
-    const t1Aliases = lcu.lobbyState.team1.map(m => m.alias).filter(Boolean) as string[];
-    const t2Aliases = lcu.lobbyState.team2.map(m => m.alias).filter(Boolean) as string[];
-    applyTeamsFromAliases(t1Aliases, t2Aliases);
+    const timer = window.setTimeout(() => {
+      const t1Aliases = lcu.lobbyState?.team1.map(m => m.alias).filter(Boolean) as string[] ?? [];
+      const t2Aliases = lcu.lobbyState?.team2.map(m => m.alias).filter(Boolean) as string[] ?? [];
+      applyTeamsFromAliases(t1Aliases, t2Aliases);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [lcu.connected, lcu.lobbyState, applyTeamsFromAliases]);
 
   // Auto-detect teams from champ select (cellId-based, more accurate)
   useEffect(() => {
     if (!lcu.connected || !lcu.champSelectActive || !lcu.lastState) return;
-    const state = lcu.lastState;
-    const t1Aliases = state.team1Picks.map(p => p.alias).filter(Boolean) as string[];
-    const t2Aliases = state.team2Picks.map(p => p.alias).filter(Boolean) as string[];
-    applyTeamsFromAliases(t1Aliases, t2Aliases);
-  }, [lcu.connected, lcu.champSelectActive, lcu.lastState, applyTeamsFromAliases]);
+    const timer = window.setTimeout(() => {
+      const state = lcu.lastState;
+      if (!state) return;
+      if (fromLcu && state.mode === 'augmented') {
+        setMode((prev) => prev === 'augmented' ? prev : 'augmented');
+      }
+      const t1Aliases = state.team1Picks.map(p => p.alias).filter(Boolean) as string[];
+      const t2Aliases = state.team2Picks.map(p => p.alias).filter(Boolean) as string[];
+      applyTeamsFromAliases(t1Aliases, t2Aliases);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [lcu.connected, lcu.champSelectActive, lcu.lastState, applyTeamsFromAliases, fromLcu]);
 
   // Load proficiencies
   useEffect(() => {
@@ -178,6 +192,8 @@ export function NewGame() {
   }, []);
 
   const handleBanPickConfirm = async (result: { bans: Record<1 | 2, string[]>; picks: Record<number, string> }) => {
+    if (confirmInFlightRef.current) return;
+    confirmInFlightRef.current = true;
     const picks = Object.entries(result.picks).map(([playerId, championId]) => ({
       playerId: parseInt(playerId),
       championId,
@@ -191,7 +207,7 @@ export function NewGame() {
     const t2c = picks.filter(p => p.team === 2).length;
     const gameFormat = (t1c + t2c >= 7) ? '3v4' : '3v3';
     await addGame(gameFormat, picks, bans, mode);
-    navigate('/session');
+    navigate('/session', { replace: true });
   };
 
   if (!session) {

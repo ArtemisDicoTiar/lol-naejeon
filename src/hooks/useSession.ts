@@ -52,6 +52,11 @@ export function useSession() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const handleDataChanged = () => { void refresh(); };
+    window.addEventListener('lol-data-changed', handleDataChanged);
+    return () => window.removeEventListener('lol-data-changed', handleDataChanged);
+  }, [refresh]);
 
   const createSession = async (name?: string) => {
     const existing = await getActiveSession();

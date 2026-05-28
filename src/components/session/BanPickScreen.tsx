@@ -68,6 +68,7 @@ export function BanPickScreen({
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
   const [matchData, setMatchData] = useState<SynergyCounterData | null>(null);
   const lcu = useLcuContext();
+  const searchComposingRef = useRef(false);
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
   useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
@@ -647,12 +648,12 @@ export function BanPickScreen({
     }
   }, [lcu.gameStartedAt, allPicked, lcuPaused]);
 
-  // Grid champions filtered
-  const gridChampions = useMemo(() => {
+  const computeGridChampions = (query: string) => {
     let list = champions.filter((c) => !fierlessBans.includes(c.id));
-    const searchLower = search.toLowerCase();
-    if (search) {
-      list = list.filter((c) => c.nameKo.includes(search) || c.id.toLowerCase().includes(searchLower));
+    const trimmedQuery = query.trim();
+    const searchLower = trimmedQuery.toLowerCase();
+    if (trimmedQuery) {
+      list = list.filter((c) => c.nameKo.includes(trimmedQuery) || c.id.toLowerCase().includes(searchLower));
     }
     // Role filter (multi-select OR — champion's aramRole must match any selected)
     if (roleFilter.size > 0) {
@@ -675,11 +676,11 @@ export function BanPickScreen({
 
     // Search relevance: 0=exact ko, 1=ko prefix, 2=en prefix, 3=ko contains, 4=en contains
     const relevance = (c: Champion): number => {
-      if (!search) return 0;
-      if (c.nameKo === search) return 0;
-      if (c.nameKo.startsWith(search)) return 1;
+      if (!trimmedQuery) return 0;
+      if (c.nameKo === trimmedQuery) return 0;
+      if (c.nameKo.startsWith(trimmedQuery)) return 1;
       if (c.id.toLowerCase().startsWith(searchLower)) return 2;
-      if (c.nameKo.includes(search)) return 3;
+      if (c.nameKo.includes(trimmedQuery)) return 3;
       return 4;
     };
 
@@ -691,7 +692,7 @@ export function BanPickScreen({
       if (dA !== dB) return dA - dB;
 
       // Search relevance takes top priority when searching
-      if (search) {
+      if (trimmedQuery) {
         const rA = relevance(a);
         const rB = relevance(b);
         if (rA !== rB) return rA - rB;
@@ -718,7 +719,12 @@ export function BanPickScreen({
       return (tierOrder[a.aramTier] ?? 3) - (tierOrder[b.aramTier] ?? 3);
     });
     return list;
-  }, [champions, fierlessBans, search, roleFilter, traitFilter, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds, sortMode]);
+  };
+
+  // Grid champions filtered
+  const gridChampions = useMemo(() => (
+    computeGridChampions(search)
+  ), [champions, fierlessBans, search, roleFilter, traitFilter, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds, sortMode]);
 
   // --- RENDER ---
   const renderTeamPanel = (team: 1 | 2) => {
@@ -1320,11 +1326,19 @@ export function BanPickScreen({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onCompositionStart={() => { searchComposingRef.current = true; }}
+                onCompositionEnd={(e) => {
+                  searchComposingRef.current = false;
+                  setSearch(e.currentTarget.value);
+                }}
                 onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing || searchComposingRef.current) return;
                   if (e.key !== 'Enter' || !activeSlot) return;
+                  const query = e.currentTarget.value;
                   // Case A: search has text → pick top relevant match (hover)
-                  if (search) {
-                    const first = gridChampions.find((c) => !allBannedIds.has(c.id) && !pickedIds.has(c.id));
+                  if (query.trim()) {
+                    const first = computeGridChampions(query)
+                      .find((c) => !allBannedIds.has(c.id) && !pickedIds.has(c.id));
                     if (first) { handleChampionSelect(first.id); setSearch(''); }
                     return;
                   }

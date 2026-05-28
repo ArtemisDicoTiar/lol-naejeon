@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { persistEogCapture } from '@/lib/eog';
+import type { GameEogCapture, GameParticipantStat } from '@/lib/db';
 
 const BRIDGE_URL = 'ws://localhost:8234';
 
 export interface LcuChampSelectState {
   phase: string;
+  mode?: 'aram' | 'augmented';
   timeLeft: number;  // seconds remaining in current phase
   totalTime: number; // total seconds for current phase
   team1Bans: { championId: number; completed: boolean }[];
@@ -29,6 +32,38 @@ export interface LcuLobbyState {
   team2: { summonerId: number; gameName: string; alias: string | null }[];
 }
 
+export interface LcuEogState {
+  status: 'idle' | 'capturing' | 'captured' | 'failed';
+  capture: GameEogCapture | null;
+  participantStats: GameParticipantStat[];
+  linkedGameId: number | null;
+  error: string | null;
+}
+
+export interface LcuRetroGameParticipant {
+  participantId: number;
+  teamId: number;
+  championId: number;
+  summonerName: string;
+  alias: string | null;
+  riotId: string | null;
+  stats: Record<string, unknown>;
+}
+
+export interface LcuRetroGame {
+  gameId: number;
+  gameCreation: number;
+  gameDuration: number;
+  queueId: number | null;
+  mapId: number | null;
+  gameMode: string | null;
+  gameType: string | null;
+  mode?: 'aram' | 'augmented';
+  winnerTeamId: number | null;
+  participants: LcuRetroGameParticipant[];
+  raw: Record<string, unknown>;
+}
+
 export function useLcuBridge() {
   const [connected, setConnected] = useState(false);
   const [lastState, setLastState] = useState<LcuChampSelectState | null>(null);
@@ -37,8 +72,10 @@ export function useLcuBridge() {
   const [gameStartedAt, setGameStartedAt] = useState<number | null>(null);
   const [gameEndedAt, setGameEndedAt] = useState<number | null>(null);
   const [liveGamePlayers, setLiveGamePlayers] = useState<{ team1: LcuLivePlayer[]; team2: LcuLivePlayer[] } | null>(null);
+  const [eog, setEog] = useState<LcuEogState>({ status: 'idle', capture: null, participantStats: [], linkedGameId: null, error: null });
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<number | null>(null);
+  const pendingRequestRef = useRef(new Map<string, { resolve: (value: LcuRetroGame[]) => void; reject: (reason?: unknown) => void }>());
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -55,6 +92,7 @@ export function useLcuBridge() {
       };
 
       ws.onmessage = (event) => {
+        void (async () => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'champSelectUpdate') {
@@ -74,12 +112,51 @@ export function useLcuBridge() {
             setGameStartedAt(Date.now());
             setChampSelectActive(false);
             setLiveGamePlayers(null); // reset; bridge will send fresh data
+            setEog({ status: 'idle', capture: null, participantStats: [], linkedGameId: null, error: null });
           } else if (data.type === 'gameEnd') {
             setGameEndedAt(Date.now());
           } else if (data.type === 'liveGamePlayers') {
             setLiveGamePlayers({ team1: data.team1, team2: data.team2 });
+          } else if (data.type === 'eogCaptureStarted') {
+            setEog((prev) => ({ ...prev, status: 'capturing', error: null }));
+          } else if (data.type === 'eogCaptureSucceeded') {
+            const persisted = await persistEogCapture(data.raw, {
+              capturedAt: data.capturedAt,
+              fingerprint: data.fingerprint,
+              trigger: data.trigger,
+            });
+            setEog({
+              status: 'captured',
+              capture: persisted.capture,
+              participantStats: persisted.participantStats,
+              linkedGameId: persisted.linkedGame?.id ?? persisted.capture.gameId ?? null,
+              error: null,
+            });
+            window.dispatchEvent(new CustomEvent('lol-data-changed', {
+              detail: {
+                source: 'eog',
+                gameId: persisted.linkedGame?.id ?? persisted.capture.gameId ?? null,
+                captureId: persisted.capture.id ?? null,
+              },
+            }));
+          } else if (data.type === 'eogCaptureFailed') {
+            setEog((prev) => ({
+              ...prev,
+              status: 'failed',
+              error: data.error ?? 'EOG 캡처 실패',
+            }));
+          } else if (data.type === 'recentCustomGamesResult' && data.requestId) {
+            const pending = pendingRequestRef.current.get(data.requestId);
+            if (pending) {
+              pendingRequestRef.current.delete(data.requestId);
+              if (data.ok) pending.resolve((data.items ?? []) as LcuRetroGame[]);
+              else pending.reject(new Error(data.error ?? '최근 커스텀 경기 조회 실패'));
+            }
           }
-        } catch {}
+        } catch {
+          // Ignore malformed bridge payloads and keep the socket alive.
+        }
+        })();
       };
 
       ws.onclose = () => {
@@ -108,6 +185,10 @@ export function useLcuBridge() {
     setLastState(null);
     setLobbyState(null);
     setChampSelectActive(false);
+    setGameStartedAt(null);
+    setGameEndedAt(null);
+    setLiveGamePlayers(null);
+    setEog({ status: 'idle', capture: null, participantStats: [], linkedGameId: null, error: null });
   }, []);
 
   useEffect(() => {
@@ -139,5 +220,24 @@ export function useLcuBridge() {
     sendToClient({ type: 'lockInBan', championNumericId });
   }, [sendToClient]);
 
-  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive, gameStartedAt, gameEndedAt, liveGamePlayers, hoverChampion, lockInChampion, hoverBan, lockInBan };
+  const fetchRecentCustomGames = useCallback((limit = 20): Promise<LcuRetroGame[]> => {
+    return new Promise((resolve, reject) => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        reject(new Error('클라이언트 브릿지가 연결되어 있지 않습니다.'));
+        return;
+      }
+      const requestId = `retro-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      pendingRequestRef.current.set(requestId, { resolve, reject });
+      wsRef.current.send(JSON.stringify({ type: 'fetchRecentCustomGames', requestId, limit }));
+      window.setTimeout(() => {
+        const pending = pendingRequestRef.current.get(requestId);
+        if (pending) {
+          pendingRequestRef.current.delete(requestId);
+          pending.reject(new Error('최근 커스텀 경기 조회가 시간 내에 완료되지 않았습니다.'));
+        }
+      }, 20_000);
+    });
+  }, []);
+
+  return { connected, connect, disconnect, lastState, lobbyState, champSelectActive, gameStartedAt, gameEndedAt, liveGamePlayers, eog, hoverChampion, lockInChampion, hoverBan, lockInBan, fetchRecentCustomGames };
 }

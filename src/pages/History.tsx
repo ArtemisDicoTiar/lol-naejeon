@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { EogStatsPanel } from '@/components/session/EogStatsPanel';
-import { db, deleteSession, updateSessionName, type Champion, type Game, type GameEogCapture, type GameParticipantStat, type GamePick, type Player, type Session } from '@/lib/db';
+import { db, deleteSession, GAME_MODE_LABELS, updateGameMode, updateSessionName, type Champion, type Game, type GameEogCapture, type GameMode, type GameParticipantStat, type GamePick, type Player, type Session } from '@/lib/db';
 import { importRetroCustomGames } from '@/lib/history-import';
+import { syncToVercel } from '@/lib/auto-sync';
 import { useIdentityContext, useLcuContext } from '@/App';
+import { resolveParticipantStatsToPicks } from '@/lib/participant-stats';
 
 interface GameWithDetails extends Game {
   picks: GamePick[];
@@ -27,9 +29,10 @@ export function History() {
   const [retroStatus, setRetroStatus] = useState('');
   const [retroLoading, setRetroLoading] = useState(false);
   const [editingGameId, setEditingGameId] = useState<number | null>(null);
+  const [draftPicksByGameId, setDraftPicksByGameId] = useState<Record<number, GamePick[]>>({});
 
-  const loadSessions = async () => {
-    setLoading(true);
+  const loadSessions = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     const [allSessions, allPlayers, allChampions] = await Promise.all([
       db.sessions.toArray(),
       db.players.toArray(),
@@ -46,9 +49,12 @@ export function History() {
         games.map(async (game) => {
           const picks = await db.gamePicks.where('gameId').equals(game.id!).toArray();
           const eogCapture = await db.gameEogCaptures.where('gameId').equals(game.id!).last();
-          const participantStats = eogCapture?.id
+          const rawParticipantStats = eogCapture?.id
             ? await db.gameParticipantStats.where('captureId').equals(eogCapture.id).toArray()
             : [];
+          const participantStats = resolveParticipantStatsToPicks(rawParticipantStats, picks, {
+            preferPickChampion: true,
+          });
           return { ...game, picks, eogCapture: eogCapture ?? null, participantStats };
         }),
       );
@@ -59,17 +65,17 @@ export function History() {
 
     setSessions(sessionsWithGames);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadSessions(); }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [loadSessions]);
   useEffect(() => {
-    const handleDataChanged = () => { void loadSessions(); };
+    const handleDataChanged = () => { void loadSessions(false); };
     window.addEventListener('lol-data-changed', handleDataChanged);
     return () => window.removeEventListener('lol-data-changed', handleDataChanged);
-  }, []);
+  }, [loadSessions]);
 
   const handleDeleteSession = async (sid: number, name: string) => {
     if (!confirm(`"${name}" 세션을 삭제하시겠습니까? 모든 게임 기록도 함께 삭제됩니다.`)) return;
@@ -84,19 +90,132 @@ export function History() {
     await loadSessions();
   };
 
+  const handleToggleGameMode = async (game: GameWithDetails) => {
+    const nextMode: GameMode = (game.mode ?? 'aram') === 'augmented' ? 'aram' : 'augmented';
+    await updateGameMode(game.id!, nextMode);
+    await loadSessions(false);
+    if (isMaster) {
+      await syncToVercel();
+    }
+    window.dispatchEvent(new CustomEvent('lol-data-changed', {
+      detail: { source: 'history-mode-edit', gameId: game.id, mode: nextMode },
+    }));
+  };
+
+  const handleRemapGameEogStats = async (game: GameWithDetails) => {
+    if (!game.eogCapture?.id) return;
+    const [picks, participantRows] = await Promise.all([
+      db.gamePicks.where('gameId').equals(game.id!).toArray(),
+      db.gameParticipantStats.where('captureId').equals(game.eogCapture.id).toArray(),
+    ]);
+    const resolvedRows = resolveParticipantStatsToPicks(participantRows, picks, {
+      preferPickChampion: true,
+    });
+
+    await db.transaction('rw', [db.gameEogCaptures, db.gameParticipantStats], async () => {
+      for (const row of resolvedRows) {
+        if (!row.id) continue;
+        await db.gameParticipantStats.update(row.id, {
+          playerId: row.playerId,
+          championId: row.championId,
+          team: row.team,
+          alias: row.alias,
+        });
+      }
+      await db.gameEogCaptures.update(game.eogCapture!.id!, {
+        mappedParticipants: resolvedRows.filter((row) => typeof row.playerId === 'number').length,
+      });
+    });
+
+    await loadSessions(false);
+    if (isMaster) {
+      await syncToVercel();
+    }
+    window.dispatchEvent(new CustomEvent('lol-data-changed', {
+      detail: { source: 'history-eog-remap', gameId: game.id },
+    }));
+  };
+
   const getPlayer = (id: number) => players.find((player) => player.id === id);
   const getChampion = (id: string) => champions.find((champion) => champion.id === id);
 
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   const sortedChampions = [...champions].sort((a, b) => a.nameKo.localeCompare(b.nameKo, 'ko'));
 
-  const updatePick = async (
+  const startEditingGame = (game: GameWithDetails) => {
+    setEditingGameId(game.id!);
+    setDraftPicksByGameId((prev) => ({
+      ...prev,
+      [game.id!]: game.picks.map((pick) => ({ ...pick })),
+    }));
+  };
+
+  const updateDraftPick = (
+    gameId: number,
     pickId: number,
     changes: Partial<Pick<GamePick, 'playerId' | 'championId'>>,
   ) => {
-    await db.gamePicks.update(pickId, changes);
-    await loadSessions();
-    window.dispatchEvent(new CustomEvent('lol-data-changed', { detail: { source: 'history-edit' } }));
+    setDraftPicksByGameId((prev) => ({
+      ...prev,
+      [gameId]: (prev[gameId] ?? []).map((pick) =>
+        pick.id === pickId ? { ...pick, ...changes } : pick,
+      ),
+    }));
+  };
+
+  const cancelEditingGame = (gameId: number) => {
+    setEditingGameId(null);
+    setDraftPicksByGameId((prev) => {
+      const next = { ...prev };
+      delete next[gameId];
+      return next;
+    });
+  };
+
+  const saveEditingGame = async (gameId: number) => {
+    const draftPicks = draftPicksByGameId[gameId] ?? [];
+    if (draftPicks.length === 0) {
+      cancelEditingGame(gameId);
+      return;
+    }
+    await db.transaction('rw', [db.gamePicks, db.gameParticipantStats], async () => {
+      const currentPicks = await db.gamePicks.where('gameId').equals(gameId).toArray();
+
+      for (const draftPick of draftPicks) {
+        await db.gamePicks.update(draftPick.id!, {
+          playerId: draftPick.playerId,
+          championId: draftPick.championId,
+        });
+      }
+
+      const participantRows = await db.gameParticipantStats.where('gameId').equals(gameId).toArray();
+      const draftById = new Map(draftPicks.map((pick) => [pick.id, pick]));
+      const updatedPicks = currentPicks.map((pick) => draftById.get(pick.id) ?? pick);
+      const resolvedParticipantRows = resolveParticipantStatsToPicks(participantRows, updatedPicks, {
+        preferPickChampion: true,
+      });
+
+      for (const row of resolvedParticipantRows) {
+        if (!row.id) continue;
+        await db.gameParticipantStats.update(row.id, {
+          playerId: row.playerId,
+          championId: row.championId,
+          team: row.team,
+          alias: row.alias,
+        });
+      }
+    });
+    setEditingGameId(null);
+    setDraftPicksByGameId((prev) => {
+      const next = { ...prev };
+      delete next[gameId];
+      return next;
+    });
+    await loadSessions(false);
+    if (isMaster) {
+      await syncToVercel();
+    }
+    window.dispatchEvent(new CustomEvent('lol-data-changed', { detail: { source: 'history-edit', gameId } }));
   };
 
   const handleImportRecentCustomGames = async () => {
@@ -110,7 +229,7 @@ export function History() {
     try {
       const games = await lcu.fetchRecentCustomGames(20);
       const result = await importRetroCustomGames(games);
-      await loadSessions();
+      await loadSessions(false);
       setRetroStatus(`가져오기 완료: ${result.imported}개 추가, ${result.skipped}개 건너뜀`);
     } catch (error) {
       setRetroStatus(`가져오기 실패: ${(error as Error).message}`);
@@ -153,15 +272,33 @@ export function History() {
             </div>
             <div className="space-y-4">
               {session.games.map((game) => {
-                const team1 = game.picks.filter((pick) => pick.team === 1);
-                const team2 = game.picks.filter((pick) => pick.team === 2);
                 const isEditing = editingGameId === game.id;
+                const displayPicks = isEditing
+                  ? (draftPicksByGameId[game.id!] ?? game.picks)
+                  : game.picks;
+                const displayTeam1 = displayPicks.filter((pick) => pick.team === 1);
+                const displayTeam2 = displayPicks.filter((pick) => pick.team === 2);
                 return (
                   <div key={game.id} className="p-3 bg-lol-blue rounded border border-lol-border">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-lol-gold font-medium text-sm">
                           #{game.gameNumber} {game.format}
+                        </span>
+                        <button
+                          disabled={!isMaster}
+                          onClick={() => isMaster ? void handleToggleGameMode(game) : undefined}
+                          title={isMaster ? '클릭해서 모드 전환' : undefined}
+                          className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+                            (game.mode ?? 'aram') === 'augmented'
+                              ? 'border-purple-700/50 bg-purple-900/40 text-purple-300'
+                              : 'border-lol-border bg-lol-blue/40 text-lol-gold-light/70'
+                          } ${isMaster ? 'cursor-pointer hover:border-lol-gold/50' : ''}`}
+                        >
+                          {GAME_MODE_LABELS[game.mode ?? 'aram']}
+                        </button>
+                        <span className="text-[10px] text-lol-gold-light/35">
+                          {new Date(game.playedAt).toLocaleString('ko-KR')}
                         </span>
                         {game.eogCapture && (
                           <span className="text-[10px] px-2 py-0.5 rounded border border-prof-high/30 text-prof-high">
@@ -174,15 +311,34 @@ export function History() {
                           <span className="text-prof-high text-xs">Team {game.winningTeam} 승</span>
                         )}
                         {isMaster && (
-                          <Button size="sm" variant={isEditing ? 'primary' : 'ghost'}
-                            onClick={() => setEditingGameId(isEditing ? null : game.id!)}>
-                            {isEditing ? '완료' : '픽 수정'}
-                          </Button>
+                          <>
+                            {game.eogCapture && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => void handleRemapGameEogStats(game)}
+                              >
+                                통계 재매핑
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant={isEditing ? 'primary' : 'ghost'}
+                              onClick={() => isEditing ? void saveEditingGame(game.id!) : startEditingGame(game)}
+                            >
+                              {isEditing ? '픽 수정 완료' : '픽 수정'}
+                            </Button>
+                            {isEditing && (
+                              <Button size="sm" variant="ghost" onClick={() => cancelEditingGame(game.id!)}>
+                                취소
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3 mb-3">
-                      {[team1, team2].map((team, idx) => (
+                      {[displayTeam1, displayTeam2].map((team, idx) => (
                         <div key={idx} className="space-y-1">
                           <div className="text-xs text-lol-gold/70">Team {idx + 1}</div>
                           {team.map((pick) => {
@@ -193,7 +349,7 @@ export function History() {
                                   {champion && <ChampionIcon champion={champion} size="sm" />}
                                   <select
                                     value={pick.playerId}
-                                    onChange={(e) => updatePick(pick.id!, { playerId: Number(e.target.value) })}
+                                    onChange={(e) => updateDraftPick(game.id!, pick.id!, { playerId: Number(e.target.value) })}
                                     className="bg-lol-dark border border-lol-border rounded px-1 py-0.5 text-[11px] text-lol-gold-light max-w-[90px] cursor-pointer"
                                   >
                                     {sortedPlayers.map((p) => (
@@ -202,7 +358,7 @@ export function History() {
                                   </select>
                                   <select
                                     value={pick.championId}
-                                    onChange={(e) => updatePick(pick.id!, { championId: e.target.value })}
+                                    onChange={(e) => updateDraftPick(game.id!, pick.id!, { championId: e.target.value })}
                                     className="bg-lol-dark border border-lol-border rounded px-1 py-0.5 text-[11px] text-lol-gold-light max-w-[100px] cursor-pointer"
                                   >
                                     {sortedChampions.map((c) => (

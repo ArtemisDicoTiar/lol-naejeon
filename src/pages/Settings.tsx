@@ -95,7 +95,7 @@ export function Settings() {
       {isMaster && (
         <Card title="ARAM 메타 업데이트">
           <p className="text-sm text-lol-gold-light/60 mb-3">
-            외부 통계 사이트에서 최신 ARAM 승률/티어 데이터를 가져옵니다.
+            U.GG에서 최신 ARAM 승률/티어 데이터를 가져옵니다.
             챔피언 동기화 시 자동으로 반영됩니다.
           </p>
           <Button variant="secondary" onClick={async () => {
@@ -162,12 +162,13 @@ export function Settings() {
       )}
 
       {isMaster && (
-        <Card title="카운터 데이터 (LoLalytics)">
+        <Card title="카운터 데이터">
           <p className="text-sm text-lol-gold-light/60 mb-3">
-            LoLalytics ARAM 카운터 데이터를 가져와 Vercel Blob에 저장합니다. 추천 알고리즘과 챔피언 호버 카드에서 활용됩니다.
+            현재 리포에 포함된 ARAM 카운터 스냅샷을 Vercel Blob에 다시 게시합니다.
+            외부 라이브 소스가 불안정할 때 설정/운영 상태를 복구하는 용도입니다.
           </p>
           <Button variant="secondary" onClick={async () => {
-            setMessage('LoLalytics 카운터 업데이트 중...');
+            setMessage('카운터 스냅샷 게시 중...');
             try {
               const res = await fetch('/api/opgg-sync', { method: 'POST' });
               const data = await res.json();
