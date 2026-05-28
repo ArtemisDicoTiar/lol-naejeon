@@ -7,6 +7,9 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useIdentityContext, useLcuContext } from '@/App';
 import { computeFullStats, type FullStats } from '@/lib/stats';
+import { DashboardPresenceBars } from '@/components/dashboard/DashboardPresenceBars';
+import { DashboardFormBoard } from '@/components/dashboard/DashboardFormBoard';
+import { DashboardMvpCandidates } from '@/components/dashboard/DashboardMvpCandidates';
 
 function formatPercent(value: number) {
   return `${value.toFixed(1)}%`;
@@ -88,6 +91,10 @@ export function Dashboard() {
   const completedSessionGames = games.filter((game) => game.winningTeam !== null);
   const team1Wins = completedSessionGames.filter((game) => game.winningTeam === 1).length;
   const team2Wins = completedSessionGames.filter((game) => game.winningTeam === 2).length;
+  const globalSideTotal = stats?.sideStats.total ?? 0;
+  const globalTeam1Wr = globalSideTotal > 0 ? ((stats?.sideStats.team1Wins ?? 0) / globalSideTotal) * 100 : 0;
+  const globalTeam2Wr = globalSideTotal > 0 ? ((stats?.sideStats.team2Wins ?? 0) / globalSideTotal) * 100 : 0;
+  const lcuStatus = lcu.connected ? (lcu.champSelectActive ? '챔셀 감지' : '클라 연결됨') : '클라 미연결';
 
   if (sessionLoading || syncing) {
     return (
@@ -116,8 +123,22 @@ export function Dashboard() {
         <div className="absolute bottom-3 right-5 hidden text-8xl font-black tracking-[-0.12em] text-lol-gold/5 md:block">ARAM</div>
         <div className="relative grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-end">
           <div>
-            <div className="mb-3 inline-flex rounded-full border border-lol-gold/30 bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/60">
-              {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+            <div className="mb-3 flex flex-wrap gap-2">
+              <span className="inline-flex rounded-full border border-lol-gold/30 bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/60">
+                {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+              </span>
+              <span className={`inline-flex rounded-full border px-3 py-1 text-xs ${
+                lcu.connected
+                  ? lcu.champSelectActive
+                    ? 'border-prof-high/40 bg-prof-high/10 text-prof-high'
+                    : 'border-blue-500/40 bg-blue-950/30 text-blue-300'
+                  : 'border-lol-border bg-lol-dark/50 text-lol-gold-light/45'
+              }`}>
+                {lcuStatus}
+              </span>
+              <span className="inline-flex rounded-full border border-lol-border bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/55">
+                {session ? `${session.name} 진행중` : '활성 세션 없음'}
+              </span>
             </div>
             <h1 className="text-4xl font-black tracking-tight text-lol-gold md:text-6xl">
               눈오는 헤네시스
@@ -147,12 +168,26 @@ export function Dashboard() {
               <div className="mt-1 text-3xl font-black text-lol-gold">{players.length}</div>
             </div>
             <div className="rounded-xl border border-blue-500/20 bg-blue-950/20 p-4">
-              <div className="text-xs text-lol-gold-light/45">Team 1</div>
-              <div className="mt-1 text-2xl font-black text-blue-300">{team1Wins}승</div>
+              <div className="text-xs text-lol-gold-light/45">Team 1 누적</div>
+              <div className="mt-1 text-2xl font-black text-blue-300">{formatPercent(globalTeam1Wr)}</div>
             </div>
             <div className="rounded-xl border border-red-500/20 bg-red-950/20 p-4">
-              <div className="text-xs text-lol-gold-light/45">Team 2</div>
-              <div className="mt-1 text-2xl font-black text-red-300">{team2Wins}승</div>
+              <div className="text-xs text-lol-gold-light/45">Team 2 누적</div>
+              <div className="mt-1 text-2xl font-black text-red-300">{formatPercent(globalTeam2Wr)}</div>
+            </div>
+            <div className="col-span-2 rounded-xl border border-lol-gold/15 bg-lol-dark/45 p-4">
+              <div className="mb-2 flex items-center justify-between text-xs text-lol-gold-light/45">
+                <span>누적 진영 밸런스</span>
+                <span>{globalSideTotal}게임</span>
+              </div>
+              <div className="flex h-3 overflow-hidden rounded-full bg-lol-blue">
+                <div className="bg-blue-500/80" style={{ width: `${globalTeam1Wr}%` }} />
+                <div className="bg-red-500/80" style={{ width: `${globalTeam2Wr}%` }} />
+              </div>
+              <div className="mt-2 flex justify-between text-[10px] text-lol-gold-light/35">
+                <span>현재 세션 T1 {team1Wins}승</span>
+                <span>현재 세션 T2 {team2Wins}승</span>
+              </div>
             </div>
           </div>
         </div>
@@ -217,6 +252,14 @@ export function Dashboard() {
                 : '완료된 게임 필요'}
             </div>
           </div>
+        </div>
+      )}
+
+      {stats && (
+        <div className="grid gap-4 xl:grid-cols-3">
+          <DashboardMvpCandidates stats={stats} />
+          <DashboardPresenceBars stats={stats} />
+          <DashboardFormBoard stats={stats} />
         </div>
       )}
 

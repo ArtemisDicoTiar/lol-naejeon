@@ -142,52 +142,65 @@ export function Stats() {
         {modeToggle}
       </div>
 
-      {/* Quick stats */}
+      {/* Summary dashboard */}
       {(() => {
         const sideTotal = stats.sideStats.total || 1;
         const t1Wr = (stats.sideStats.team1Wins / sideTotal) * 100;
         const t2Wr = (stats.sideStats.team2Wins / sideTotal) * 100;
         const t1Better = t1Wr >= t2Wr;
+        const hotChampion = [...stats.champCompare]
+          .sort((a, b) => (b.internalPicks + b.internalBans) - (a.internalPicks + a.internalBans))[0];
         return (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-lol-gold">{stats.wrStats.totalGames}</div>
-                <div className="text-sm text-lol-gold-light/60">총 게임</div>
+          <div className="rounded-2xl border border-lol-gold/20 bg-[linear-gradient(135deg,rgba(200,155,60,0.13),rgba(10,20,40,0.65))] p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.25em] text-lol-gold-light/35">Inhouse Overview</div>
+                <div className="mt-1 text-xl font-bold text-lol-gold">요약 대시보드</div>
               </div>
-            </Card>
-            <Card>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-lol-gold">{stats.players.length}</div>
-                <div className="text-sm text-lol-gold-light/60">플레이어</div>
+              <div className="rounded-full border border-lol-border bg-lol-dark/45 px-3 py-1 text-xs text-lol-gold-light/55">
+                {modeFilter === 'all' ? '전체 모드' : GAME_MODE_LABELS[modeFilter as GameMode]}
               </div>
-            </Card>
-            <Card>
-              <div className="text-center">
-                <div className={`text-3xl font-bold font-mono ${t1Better ? 'text-prof-high' : 'text-blue-400/70'}`}>
-                  {Math.round(t1Wr)}%
-                </div>
-                <div className="text-sm text-lol-gold-light/60">
-                  Team 1 승률
-                </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="rounded-xl border border-lol-border/70 bg-lol-dark/45 p-4">
+                <div className="text-xs text-lol-gold-light/45">총 게임</div>
+                <div className="mt-1 text-3xl font-black text-lol-gold">{stats.wrStats.totalGames}</div>
+              </div>
+              <div className="rounded-xl border border-lol-border/70 bg-lol-dark/45 p-4">
+                <div className="text-xs text-lol-gold-light/45">플레이어</div>
+                <div className="mt-1 text-3xl font-black text-lol-gold">{stats.players.length}</div>
+              </div>
+              <div className="rounded-xl border border-lol-border/70 bg-lol-dark/45 p-4">
+                <div className="text-xs text-lol-gold-light/45">핫 챔피언</div>
+                <div className="mt-1 truncate text-2xl font-black text-lol-gold">{hotChampion?.nameKo ?? '-'}</div>
                 <div className="text-[10px] text-lol-gold-light/40">
-                  {stats.sideStats.team1Wins}W / {stats.sideStats.total - stats.sideStats.team1Wins}L
+                  {hotChampion ? `${hotChampion.internalPicks}픽 · ${hotChampion.internalBans}밴` : '기록 없음'}
                 </div>
               </div>
-            </Card>
-            <Card>
-              <div className="text-center">
-                <div className={`text-3xl font-bold font-mono ${!t1Better ? 'text-prof-high' : 'text-red-400/70'}`}>
-                  {Math.round(t2Wr)}%
+              <div className="rounded-xl border border-lol-border/70 bg-lol-dark/45 p-4">
+                <div className="text-xs text-lol-gold-light/45">EOG 수집</div>
+                <div className="mt-1 text-3xl font-black text-lol-gold">{stats.eogOverview.capturedGames}</div>
+                <div className="text-[10px] text-lol-gold-light/40">{stats.eogOverview.participantRows}명 통계</div>
+              </div>
+            </div>
+            <div className="mt-4 rounded-xl border border-lol-border/60 bg-lol-dark/35 p-3">
+              <div className="mb-2 flex items-center justify-between text-xs">
+                <span className={t1Better ? 'text-blue-300' : 'text-blue-400/70'}>Team 1 {Math.round(t1Wr)}%</span>
+                <span className={!t1Better ? 'text-red-300' : 'text-red-400/70'}>Team 2 {Math.round(t2Wr)}%</span>
+              </div>
+              <div className="flex h-3 overflow-hidden rounded-full bg-lol-blue">
+                <div className="bg-blue-500/85" style={{ width: `${t1Wr}%` }} />
+                <div className="bg-red-500/85" style={{ width: `${t2Wr}%` }} />
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-lol-gold-light/40">
+                <div>
+                  T1 {stats.sideStats.team1Wins}W / {stats.sideStats.total - stats.sideStats.team1Wins}L
                 </div>
-                <div className="text-sm text-lol-gold-light/60">
-                  Team 2 승률
-                </div>
-                <div className="text-[10px] text-lol-gold-light/40">
-                  {stats.sideStats.team2Wins}W / {stats.sideStats.total - stats.sideStats.team2Wins}L
+                <div className="text-right">
+                  T2 {stats.sideStats.team2Wins}W / {stats.sideStats.total - stats.sideStats.team2Wins}L
                 </div>
               </div>
-            </Card>
+            </div>
           </div>
         );
       })()}
@@ -219,11 +232,11 @@ export function Stats() {
             </div>
             <div className="grid md:grid-cols-2 gap-3">
               <div className="rounded border border-lol-border/60 bg-lol-dark/40 p-3">
-                <div className="text-xs text-lol-gold-light/55 mb-2">평균 힐 / 실드 / 죽은 시간</div>
+                <div className="text-xs text-lol-gold-light/55 mb-2">전방/효율 평균</div>
                 <div className="space-y-1 text-sm text-lol-gold-light/75">
-                  <div>힐 {Math.round(stats.eogOverview.avgTotalHeal).toLocaleString('ko-KR')}</div>
-                  <div>실드 {Math.round(stats.eogOverview.avgTotalShielded).toLocaleString('ko-KR')}</div>
-                  <div>죽은 시간 {Math.round(stats.eogOverview.avgTimeSpentDead).toLocaleString('ko-KR')}</div>
+                  <div>전방 기여 {Math.round(stats.eogOverview.avgFrontlineContribution).toLocaleString('ko-KR')}</div>
+                  <div>골드 효율 {stats.eogOverview.avgGoldEfficiency.toFixed(2)}</div>
+                  <div>KDA 관여 {stats.eogOverview.avgKdaParticipation.toFixed(2)}</div>
                 </div>
               </div>
               <div className="rounded border border-lol-border/60 bg-lol-dark/40 p-3">
@@ -289,6 +302,9 @@ export function Stats() {
         </div>
       )}
 
+      {/* Trio Radar */}
+      <TrioRadar stats={stats} />
+
       {/* Player Ranking */}
       <PlayerRanking stats={stats} />
 
@@ -304,9 +320,6 @@ export function Stats() {
 
       {/* EOG-based playstyle radar */}
       <PlayerStyleRadar stats={stats} />
-
-      {/* Trio Radar */}
-      <TrioRadar stats={stats} />
 
       {/* Role Distribution */}
       <RoleDistribution stats={stats} />

@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { EogStatsPanel } from '@/components/session/EogStatsPanel';
+import { SessionTimeline } from '@/components/session/SessionTimeline';
 import { StreakStrip } from '@/components/stats/StreakStrip';
 import { db, GAME_MODE_LABELS, type GameBan, type GameEogCapture, type GameParticipantStat, type GamePick, type Player } from '@/lib/db';
 import { useIdentityContext, useLcuContext } from '@/App';
@@ -152,6 +153,7 @@ export function Session() {
   const getPlayer = (id: number) => players.find((p) => p.id === id);
   const bannedChampions = champions.filter((c) => fierlessBans.includes(c.id));
   const availableCount = champions.length - fierlessBans.length;
+  const bannedPercent = champions.length > 0 ? (fierlessBans.length / champions.length) * 100 : 0;
 
   const handleEndSession = async () => {
     if (!confirm('세션을 종료하시겠습니까? 종료 후에는 게임을 추가할 수 없습니다.')) return;
@@ -225,6 +227,8 @@ export function Session() {
         />
       )}
 
+      <SessionTimeline games={games} />
+
       {lcu.connected && (lcu.eog.status === 'capturing' || lcu.eog.status === 'failed' || lcu.eog.status === 'captured') && (
         <Card title="종료 후 수집 상태">
           <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -264,6 +268,19 @@ export function Session() {
 
       {/* Fierless */}
       <Card title={`피어리스 밴 (${fierlessBans.length}개 사용 / ${availableCount}개 남음)`}>
+        <div className="mb-4 rounded border border-lol-border/70 bg-lol-dark/40 p-3">
+          <div className="mb-2 flex items-center justify-between text-xs text-lol-gold-light/55">
+            <span>사용 불가 챔피언</span>
+            <span>{Math.round(bannedPercent)}%</span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-lol-blue">
+            <div className="h-full rounded-full bg-gradient-to-r from-tier-a to-tier-s" style={{ width: `${bannedPercent}%` }} />
+          </div>
+          <div className="mt-2 flex justify-between text-[10px] text-lol-gold-light/35">
+            <span>누적 밴 {fierlessBans.length}</span>
+            <span>남은 풀 {availableCount}</span>
+          </div>
+        </div>
         {bannedChampions.length === 0 ? (
           <p className="text-lol-gold-light/50 text-center py-4">첫 게임을 시작하세요!</p>
         ) : (
