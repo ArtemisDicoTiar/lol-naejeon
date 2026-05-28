@@ -282,7 +282,7 @@ export function Stats() {
         )}
       </Card>
 
-      <div className="grid items-stretch gap-4 2xl:grid-cols-[minmax(320px,1fr)_minmax(0,2.6fr)]">
+      <div className="grid items-stretch gap-4 2xl:grid-cols-[minmax(380px,1.1fr)_minmax(0,2.4fr)]">
         <div className="space-y-3">
           {stats.playerEogSummary.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -320,11 +320,11 @@ export function Stats() {
             description="선택한 선수들의 평균 딜량, 전방 기여, 힐량, CC, KDA 관여, 골드 효율을 비교합니다."
             series={combatRadarSeries}
             emptyMessage="전투 지표가 수집된 선수가 없습니다."
-            chartHeight={430}
+            chartHeight={500}
           />
         </div>
 
-        <TrioRadar stats={stats} chartHeight={430} />
+        <TrioRadar stats={stats} chartHeight={500} />
       </div>
 
       {/* Player Ranking */}

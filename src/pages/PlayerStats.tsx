@@ -280,9 +280,9 @@ export function PlayerStats() {
         <div className="text-center py-8 text-lol-gold">유저 통계 로딩 중...</div>
       ) : (
         <>
-          <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <Card className="overflow-hidden">
-              <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+              <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-lol-gold/20 bg-lol-dark/45 p-5 text-center">
                   <div
                     className="grid h-40 w-40 place-items-center rounded-full p-2"
@@ -358,7 +358,7 @@ export function PlayerStats() {
               description="현재 필터 기준 전체 평균과 비교합니다."
               series={combatRadarSeries}
               emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
-              chartHeight={300}
+              chartHeight={270}
             />
           </div>
 
