@@ -185,6 +185,23 @@ export interface PlayerEogSummaryEntry {
   avgGoldEfficiency: number;
 }
 
+export interface ChampionEogSummaryEntry {
+  championId: string;
+  games: number;
+  avgKills: number;
+  avgDeaths: number;
+  avgAssists: number;
+  avgDamageDealtToChampions: number;
+  avgDamageTaken: number;
+  avgDamageSelfMitigated: number;
+  avgFrontlineContribution: number;
+  avgTotalHeal: number;
+  avgTimeCCingOthers: number;
+  avgGoldEarned: number;
+  avgKdaParticipation: number;
+  avgGoldEfficiency: number;
+}
+
 export interface EogOverview {
   capturedGames: number;
   participantRows: number;
@@ -218,6 +235,7 @@ export interface FullStats {
   sideStats: { team1Wins: number; team2Wins: number; total: number };
   eogOverview: EogOverview;
   playerEogSummary: PlayerEogSummaryEntry[];
+  championEogSummary: ChampionEogSummaryEntry[];
 }
 
 const ROLE_KO: Record<string, string> = {
@@ -277,6 +295,7 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
   const playerTrend: Record<number, PlayerTrendEntry> = {};
   const playerStreak: Record<number, PlayerStreakEntry> = {};
   const playerEogSummary: PlayerEogSummaryEntry[] = [];
+  const championEogSummary: ChampionEogSummaryEntry[] = [];
 
   const avgOfRows = (rows: GameParticipantStat[], selector: (row: GameParticipantStat) => number) => {
     if (rows.length === 0) return 0;
@@ -596,6 +615,32 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
     avgGoldEfficiency: avgOfRows(allParticipantStats, (row) => row.totalDamageDealtToChampions / Math.max(row.goldEarned, 1)),
   };
 
+  const participantStatsByChampionId = new Map<string, GameParticipantStat[]>();
+  for (const row of allParticipantStats) {
+    if (!row.championId) continue;
+    const rows = participantStatsByChampionId.get(row.championId) ?? [];
+    rows.push(row);
+    participantStatsByChampionId.set(row.championId, rows);
+  }
+  for (const [championId, rows] of participantStatsByChampionId) {
+    championEogSummary.push({
+      championId,
+      games: rows.length,
+      avgKills: avgOfRows(rows, (row) => row.kills),
+      avgDeaths: avgOfRows(rows, (row) => row.deaths),
+      avgAssists: avgOfRows(rows, (row) => row.assists),
+      avgDamageDealtToChampions: avgOfRows(rows, (row) => row.totalDamageDealtToChampions),
+      avgDamageTaken: avgOfRows(rows, (row) => row.totalDamageTaken),
+      avgDamageSelfMitigated: avgOfRows(rows, (row) => row.damageSelfMitigated),
+      avgFrontlineContribution: avgOfRows(rows, (row) => row.totalDamageTaken + row.damageSelfMitigated),
+      avgTotalHeal: avgOfRows(rows, (row) => row.totalHeal),
+      avgTimeCCingOthers: avgOfRows(rows, (row) => row.timeCCingOthers),
+      avgGoldEarned: avgOfRows(rows, (row) => row.goldEarned),
+      avgKdaParticipation: avgOfRows(rows, (row) => (row.kills + row.assists) / Math.max(row.deaths, 1)),
+      avgGoldEfficiency: avgOfRows(rows, (row) => row.totalDamageDealtToChampions / Math.max(row.goldEarned, 1)),
+    });
+  }
+
   return {
     wrStats, players, champions,
     radarData, roleRadarData,
@@ -605,5 +650,6 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
     sideStats: { team1Wins: t1Wins, team2Wins: t2Wins, total: t1Wins + t2Wins },
     eogOverview,
     playerEogSummary: playerEogSummary.sort((a, b) => b.avgDamageDealtToChampions - a.avgDamageDealtToChampions),
+    championEogSummary: championEogSummary.sort((a, b) => b.avgDamageDealtToChampions - a.avgDamageDealtToChampions),
   };
 }

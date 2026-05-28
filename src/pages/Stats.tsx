@@ -8,6 +8,7 @@ import { PlayerTrend } from '@/components/stats/PlayerTrend';
 import { PlayerRadar } from '@/components/stats/PlayerRadar';
 import { PlayerRoleRadar } from '@/components/stats/PlayerRoleRadar';
 import { PlayerStyleRadar } from '@/components/stats/PlayerStyleRadar';
+import { ChampionPowerRanking } from '@/components/stats/ChampionPowerRanking';
 import { ChampionStatsTable } from '@/components/stats/ChampionStats';
 import { ChampionPriority } from '@/components/stats/ChampionPriority';
 import { ChampionPoolBreakdown } from '@/components/stats/ChampionPoolBreakdown';
@@ -288,6 +289,8 @@ export function Stats() {
 
       {/* Role Distribution */}
       <RoleDistribution stats={stats} />
+
+      <ChampionPowerRanking stats={stats} />
 
       {/* Meta Comparison */}
       <MetaComparison stats={stats} />
