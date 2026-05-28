@@ -119,7 +119,6 @@ export function TrioRadar({ stats }: { stats: FullStats }) {
         setTeamAIds((prev) => prev.filter((id) => id !== playerId));
         return;
       }
-      setTeamBIds((other) => other.filter((id) => id !== playerId));
       setTeamAIds((prev) => {
         if (prev.includes(playerId)) return prev;
         return prev.length >= 3 ? [prev[1], prev[2], playerId] : [...prev, playerId];
@@ -130,7 +129,6 @@ export function TrioRadar({ stats }: { stats: FullStats }) {
       setTeamBIds((prev) => prev.filter((id) => id !== playerId));
       return;
     }
-    setTeamAIds((other) => other.filter((id) => id !== playerId));
     setTeamBIds((prev) => {
       if (prev.includes(playerId)) return prev;
       return prev.length >= 3 ? [prev[1], prev[2], playerId] : [...prev, playerId];
@@ -147,20 +145,16 @@ export function TrioRadar({ stats }: { stats: FullStats }) {
         {stats.players.map((player) => {
           const playerId = player.id!;
           const selected = selectedSet.has(playerId);
-          const disabledByOtherTeam = team === 'teamA' ? teamBSet.has(playerId) : teamASet.has(playerId);
           return (
             <button
               key={playerId}
-              disabled={disabledByOtherTeam}
               onClick={() => togglePlayer(team, playerId)}
               className={`px-3 py-1 rounded text-sm border transition-colors ${
-                disabledByOtherTeam
-                  ? 'cursor-not-allowed border-lol-border/40 text-lol-gold-light/20'
-                  : selected
-                    ? team === 'teamA'
-                      ? 'cursor-pointer border-blue-400 bg-blue-950/40 text-blue-300'
-                      : 'cursor-pointer border-red-400 bg-red-950/40 text-red-300'
-                    : 'cursor-pointer border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+                selected
+                  ? team === 'teamA'
+                    ? 'cursor-pointer border-blue-400 bg-blue-950/40 text-blue-300'
+                    : 'cursor-pointer border-red-400 bg-red-950/40 text-red-300'
+                  : 'cursor-pointer border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
               }`}
             >
               {player.name}
