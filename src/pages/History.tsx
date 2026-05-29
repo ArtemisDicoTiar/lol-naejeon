@@ -237,7 +237,12 @@ export function History() {
       const games = await lcu.fetchRecentCustomGames(20);
       const result = await importRetroCustomGames(games);
       await loadSessions(false);
-      setRetroStatus(`가져오기 완료: ${result.imported}개 추가, ${result.skipped}개 건너뜀`);
+      let syncMessage = '';
+      if (isMaster) {
+        const syncResult = await syncToVercel();
+        syncMessage = ` · ${syncResult.message}`;
+      }
+      setRetroStatus(`가져오기 완료: ${result.imported}개 추가, ${result.updated}개 덮어씀, ${result.skipped}개 건너뜀${syncMessage}`);
     } catch (error) {
       setRetroStatus(`가져오기 실패: ${(error as Error).message}`);
     } finally {

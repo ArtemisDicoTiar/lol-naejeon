@@ -1,4 +1,4 @@
-import { db, getActiveSession, type Champion, type GameMode, type GameParticipantStat, type GamePick, type Player, type Session } from './db';
+import { db, getActiveSession, type Champion, type Game, type GameMode, type GameParticipantStat, type GamePick, type Player, type Session } from './db';
 import type { LcuRetroGame } from '@/hooks/useLcuBridge';
 
 interface DataDragonChampion {
@@ -8,9 +8,12 @@ interface DataDragonChampion {
 
 export interface RetroImportResult {
   imported: number;
+  updated: number;
   skipped: number;
   sessionId: number | null;
 }
+
+type RetroSaveResult = 'created' | 'updated' | 'skipped';
 
 function normalizeName(value: string): string {
   // NFC (not NFKD): NFKD decomposes precomposed Hangul (가-힣) into conjoining
@@ -98,32 +101,21 @@ function getParticipantDisplayName(participant: LcuRetroGame['participants'][num
   return participant.alias || participant.summonerName || participant.riotId || `participant-${participant.participantId}`;
 }
 
-async function importSingleRetroGame(
+async function saveSingleRetroGame(
   game: LcuRetroGame,
   session: Session,
   nextGameNumber: number,
   players: Map<string, Player>,
   championMap: Map<number, string>,
-): Promise<boolean> {
-  const existing = await db.games.where('sourceMatchId').equals(game.gameId).first();
-  if (existing) return false;
-
+  existingGame?: Game,
+): Promise<RetroSaveResult> {
   const participants = game.participants.filter((participant) => participant.teamId === 100 || participant.teamId === 200);
-  if (participants.length === 0) return false;
+  if (participants.length === 0) return 'skipped';
 
   const picks: Array<Omit<GamePick, 'id' | 'gameId'>> = [];
   const participantRows: GameParticipantStat[] = [];
-
-  const gameId = await db.games.add({
-    sessionId: session.id!,
-    gameNumber: nextGameNumber,
-    format: inferFormat(participants.length),
-    mode: inferMode(game),
-    playedAt: new Date(game.gameCreation),
-    winningTeam: inferWinningTeam(game.winnerTeamId),
-    notes: '',
-    sourceMatchId: game.gameId,
-  });
+  const gameId = existingGame?.id;
+  let savedGameId = gameId;
 
   for (const participant of participants) {
     const displayName = getParticipantDisplayName(participant);
@@ -137,7 +129,7 @@ async function importSingleRetroGame(
     const stats = participant.stats || {};
     participantRows.push({
       captureId: 0,
-      gameId: gameId as number,
+      gameId: 0,
       playerId,
       team,
       summonerName: participant.summonerName || displayName,
@@ -165,33 +157,146 @@ async function importSingleRetroGame(
     });
   }
 
-  if (picks.length > 0) {
-    await db.gamePicks.bulkAdd(picks.map((pick) => ({ ...pick, gameId: gameId as number })));
-  }
-
   const fingerprint = `history_${game.gameId}`;
-  const captureId = await db.gameEogCaptures.add({
-    gameId: gameId as number,
-    sessionId: session.id!,
-    source: 'lcu_history',
-    status: 'captured',
-    capturedAt: new Date(),
-    fingerprint,
-    rawJson: JSON.stringify(game.raw),
-    trigger: 'history-import',
-    error: null,
-    winnerTeam: inferWinningTeam(game.winnerTeamId),
-    participantCount: participants.length,
-    mappedParticipants: participantRows.length,
+
+  await db.transaction('rw', [db.games, db.gamePicks, db.gameEogCaptures, db.gameParticipantStats], async () => {
+    const metadata = {
+      sessionId: existingGame?.sessionId ?? session.id!,
+      gameNumber: existingGame?.gameNumber ?? nextGameNumber,
+      format: inferFormat(participants.length),
+      mode: inferMode(game),
+      playedAt: new Date(game.gameCreation),
+      winningTeam: inferWinningTeam(game.winnerTeamId),
+      sourceMatchId: game.gameId,
+    };
+
+    if (savedGameId) {
+      await db.games.update(savedGameId, metadata);
+      const previousCaptures = await db.gameEogCaptures.where('gameId').equals(savedGameId).toArray();
+      const previousCaptureIds = previousCaptures.map((capture) => capture.id!).filter(Boolean);
+      if (previousCaptureIds.length > 0) {
+        await db.gameParticipantStats.where('captureId').anyOf(previousCaptureIds).delete();
+      }
+      await db.gameParticipantStats.where('gameId').equals(savedGameId).delete();
+      await db.gameEogCaptures.where('gameId').equals(savedGameId).delete();
+      await db.gamePicks.where('gameId').equals(savedGameId).delete();
+    } else {
+      savedGameId = (await db.games.add({
+        ...metadata,
+        notes: '',
+      })) as number;
+    }
+
+    if (picks.length > 0) {
+      await db.gamePicks.bulkAdd(picks.map((pick) => ({ ...pick, gameId: savedGameId as number })));
+    }
+
+    const captureId = await db.gameEogCaptures.add({
+      gameId: savedGameId as number,
+      sessionId: existingGame?.sessionId ?? session.id!,
+      source: 'lcu_history',
+      status: 'captured',
+      capturedAt: new Date(),
+      fingerprint,
+      rawJson: JSON.stringify(game.raw),
+      trigger: existingGame ? 'history-import-override' : 'history-import',
+      error: null,
+      winnerTeam: inferWinningTeam(game.winnerTeamId),
+      participantCount: participants.length,
+      mappedParticipants: participantRows.length,
+    });
+
+    if (participantRows.length > 0) {
+      await db.gameParticipantStats.bulkAdd(
+        participantRows.map((row) => ({
+          ...row,
+          gameId: savedGameId as number,
+          captureId: captureId as number,
+        })),
+      );
+    }
   });
 
-  if (participantRows.length > 0) {
-    await db.gameParticipantStats.bulkAdd(
-      participantRows.map((row) => ({ ...row, captureId: captureId as number })),
-    );
+  return existingGame ? 'updated' : 'created';
+}
+
+function findUnlinkedSessionGameForRetro(
+  game: LcuRetroGame,
+  sessionGames: Game[],
+  picksByGameId: Map<number, GamePick[]>,
+  playersById: Map<number, Player>,
+  championMap: Map<number, string>,
+  claimedGameIds: Set<number>,
+): Game | undefined {
+  const participants = game.participants.filter((participant) => participant.teamId === 100 || participant.teamId === 200);
+  const retroPairs = new Set<string>();
+  const retroChampions = new Set<string>();
+  for (const participant of participants) {
+    const championId = championMap.get(Number(participant.championId));
+    if (!championId) continue;
+    retroChampions.add(championId);
+    retroPairs.add(`${normalizeName(getParticipantDisplayName(participant))}:${championId}`);
   }
 
-  return true;
+  let best: { game: Game; score: number } | null = null;
+  const retroTime = game.gameCreation || Date.now();
+  const winner = inferWinningTeam(game.winnerTeamId);
+  const mode = inferMode(game);
+
+  for (const candidate of sessionGames) {
+    if (!candidate.id || candidate.sourceMatchId || claimedGameIds.has(candidate.id)) continue;
+    const candidatePicks = picksByGameId.get(candidate.id) ?? [];
+    if (candidatePicks.length === 0) continue;
+
+    let exactPairMatches = 0;
+    let championMatches = 0;
+    for (const pick of candidatePicks) {
+      const playerName = playersById.get(pick.playerId)?.name;
+      if (playerName && retroPairs.has(`${normalizeName(playerName)}:${pick.championId}`)) {
+        exactPairMatches++;
+      }
+      if (retroChampions.has(pick.championId)) {
+        championMatches++;
+      }
+    }
+
+    const timeDeltaMinutes = Math.abs(new Date(candidate.playedAt).getTime() - retroTime) / 60_000;
+    const closeEnough = timeDeltaMinutes <= 180;
+    const enoughExactMatches = exactPairMatches >= Math.min(3, candidatePicks.length);
+    const enoughChampionMatches = championMatches >= Math.min(4, candidatePicks.length);
+    if (!closeEnough || (!enoughExactMatches && !enoughChampionMatches)) continue;
+
+    const score =
+      exactPairMatches * 100 +
+      championMatches * 25 +
+      Math.max(0, 180 - timeDeltaMinutes) +
+      ((candidate.winningTeam !== null && candidate.winningTeam === winner) ? 10 : 0) +
+      (((candidate.mode ?? 'aram') === mode) ? 5 : 0);
+
+    if (!best || score > best.score) {
+      best = { game: candidate, score };
+    }
+  }
+
+  return best?.game;
+}
+
+async function resequenceSessionGames(sessionId: number): Promise<void> {
+  const games = await db.games.where('sessionId').equals(sessionId).toArray();
+  games.sort((a, b) => {
+    const timeDiff = new Date(a.playedAt).getTime() - new Date(b.playedAt).getTime();
+    if (timeDiff !== 0) return timeDiff;
+    return a.gameNumber - b.gameNumber;
+  });
+
+  await db.transaction('rw', [db.games], async () => {
+    for (let index = 0; index < games.length; index++) {
+      const nextNumber = index + 1;
+      if (games[index].gameNumber !== nextNumber) {
+        await db.games.update(games[index].id!, { gameNumber: nextNumber });
+      }
+    }
+  });
 }
 
 export async function importRetroCustomGames(games: LcuRetroGame[]): Promise<RetroImportResult> {
@@ -200,7 +305,7 @@ export async function importRetroCustomGames(games: LcuRetroGame[]): Promise<Ret
     .sort((a, b) => a.gameCreation - b.gameCreation);
 
   if (uniqueGames.length === 0) {
-    return { imported: 0, skipped: 0, sessionId: null };
+    return { imported: 0, updated: 0, skipped: 0, sessionId: null };
   }
 
   const [session, allPlayers, champions] = await Promise.all([
@@ -211,33 +316,62 @@ export async function importRetroCustomGames(games: LcuRetroGame[]): Promise<Ret
 
   const championMap = await buildChampionKeyMap(champions);
   const playerMap = new Map(allPlayers.map((player) => [normalizeName(player.name), player]));
-  const existingGames = await db.games.where('sessionId').equals(session.id!).toArray();
-  let nextGameNumber = existingGames.reduce((max, game) => Math.max(max, game.gameNumber), 0) + 1;
+  const playersById = new Map(allPlayers.map((player) => [player.id!, player]));
+  let sessionGames = await db.games.where('sessionId').equals(session.id!).toArray();
+  const sessionGameIds = sessionGames.map((game) => game.id!).filter(Boolean);
+  const sessionPicks = sessionGameIds.length > 0
+    ? await db.gamePicks.where('gameId').anyOf(sessionGameIds).toArray()
+    : [];
+  const picksByGameId = new Map<number, GamePick[]>();
+  for (const pick of sessionPicks) {
+    const list = picksByGameId.get(pick.gameId) ?? [];
+    list.push(pick);
+    picksByGameId.set(pick.gameId, list);
+  }
+  let nextGameNumber = sessionGames.reduce((max, game) => Math.max(max, game.gameNumber), 0) + 1;
   let imported = 0;
+  let updated = 0;
   let skipped = 0;
+  const changedSessionIds = new Set<number>();
+  const claimedUnlinkedGameIds = new Set<number>();
 
   for (const game of uniqueGames) {
-    const exists = await db.games.where('sourceMatchId').equals(game.gameId).first();
-    if (exists) {
-      const detectedMode = inferMode(game);
-      if ((exists.mode ?? 'aram') !== detectedMode) {
-        await db.games.update(exists.id!, { mode: detectedMode });
-      }
-      skipped++;
-      continue;
+    const existingByMatchId = await db.games.where('sourceMatchId').equals(game.gameId).first();
+    const existingUnlinked = existingByMatchId
+      ? undefined
+      : findUnlinkedSessionGameForRetro(
+        game,
+        sessionGames,
+        picksByGameId,
+        playersById,
+        championMap,
+        claimedUnlinkedGameIds,
+      );
+    if (existingUnlinked?.id) {
+      claimedUnlinkedGameIds.add(existingUnlinked.id);
     }
-    const saved = await importSingleRetroGame(game, session, nextGameNumber, playerMap, championMap);
-    if (saved) {
+
+    const existing = existingByMatchId ?? existingUnlinked;
+    const saved = await saveSingleRetroGame(game, session, nextGameNumber, playerMap, championMap, existing);
+    if (saved === 'created') {
       imported++;
       nextGameNumber++;
+      changedSessionIds.add(session.id!);
+    } else if (saved === 'updated') {
+      updated++;
+      changedSessionIds.add(existing?.sessionId ?? session.id!);
     } else {
       skipped++;
     }
+
+    sessionGames = await db.games.where('sessionId').equals(session.id!).toArray();
   }
 
+  await Promise.all([...changedSessionIds].map((sessionId) => resequenceSessionGames(sessionId)));
+
   window.dispatchEvent(new CustomEvent('lol-data-changed', {
-    detail: { source: 'retro-import', imported, sessionId: session.id },
+    detail: { source: 'retro-import', imported, updated, skipped, sessionId: session.id },
   }));
 
-  return { imported, skipped, sessionId: session.id! };
+  return { imported, updated, skipped, sessionId: session.id! };
 }
