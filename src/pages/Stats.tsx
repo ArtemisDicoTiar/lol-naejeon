@@ -246,7 +246,7 @@ export function Stats() {
           <div>
             <h2 className="text-lg font-bold text-lol-gold">플레이어 능력치 레이더</h2>
             <p className="text-sm text-lol-gold-light/45">
-              이 선택 버튼 하나로 기본 능력치, 역할별 승률, 실제 전투 성향을 같이 비교합니다.
+              이 선택 버튼 하나로 기본 능력치, 역할별 승률, 플레이스타일을 같이 비교합니다.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -271,24 +271,20 @@ export function Stats() {
             })}
           </div>
         </div>
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-3">
           <PlayerRadar stats={stats} compact selectedIds={resolvedSelectedRadarPlayerIds} onTogglePlayer={toggleRadarPlayer} hideSelector />
           <PlayerRoleRadar stats={stats} compact selectedIds={resolvedSelectedRadarPlayerIds} onTogglePlayer={toggleRadarPlayer} hideSelector />
+          <PlayerStyleRadar
+            stats={stats}
+            compact
+            selectedIds={resolvedSelectedRadarPlayerIds}
+            onTogglePlayer={toggleRadarPlayer}
+            hideSelector
+          />
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(300px,0.9fr)_minmax(0,2.7fr)] xl:items-stretch">
-        <PlayerStyleRadar
-          stats={stats}
-          compact
-          chartHeight={300}
-          selectedIds={resolvedSelectedRadarPlayerIds}
-          onTogglePlayer={toggleRadarPlayer}
-          hideSelector
-          className="h-full"
-        />
-        <TrioRadar stats={stats} chartHeight={300} className="h-full" />
-      </div>
+      <TrioRadar stats={stats} chartHeight={430} />
 
       {/* Player Ranking */}
       <PlayerRanking stats={stats} />
