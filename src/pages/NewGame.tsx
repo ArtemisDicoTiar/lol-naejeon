@@ -11,6 +11,7 @@ import { BanPickScreen } from '@/components/session/BanPickScreen';
 import { AugWaitScreen } from '@/components/session/AugWaitScreen';
 import { getPlayerProficiencies, GAME_MODE_LABELS, type ProficiencyLevel, type GameMode } from '@/lib/db';
 import { computeFullStats, type FullStats } from '@/lib/stats';
+import { suppressLcuAutoNavigate } from '@/lib/lcu-navigation';
 
 type Step = 'setup' | 'banpick';
 
@@ -352,7 +353,8 @@ export function NewGame() {
     const t2c = picks.filter(p => p.team === 2).length;
     const gameFormat = (t1c + t2c >= 7) ? '3v4' : '3v3';
     await addGame(gameFormat, picks, bans, mode);
-    navigate('/session', { replace: true });
+    suppressLcuAutoNavigate();
+    navigate('/session', { replace: true, state: { fromBanPickConfirm: true } });
   };
 
   if (!session) {

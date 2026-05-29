@@ -11,6 +11,7 @@ import { computeFullStats, type FullStats } from '@/lib/stats';
 import { DashboardPresenceBars } from '@/components/dashboard/DashboardPresenceBars';
 import { DashboardFormBoard } from '@/components/dashboard/DashboardFormBoard';
 import { DashboardMvpCandidates } from '@/components/dashboard/DashboardMvpCandidates';
+import { isLcuAutoNavigateSuppressed } from '@/lib/lcu-navigation';
 
 function formatPercent(value: number) {
   return `${value.toFixed(1)}%`;
@@ -32,6 +33,7 @@ export function Dashboard() {
   const [creating, setCreating] = useState(false);
   const [stats, setStats] = useState<FullStats | null>(null);
   const autoNavigateRef = useRef(false);
+  const hasPendingGame = games.some((game) => game.winningTeam === null);
 
   // Auto-navigate to new game when LCU detects champion select
   useEffect(() => {
@@ -44,13 +46,16 @@ export function Dashboard() {
       !lcu.gameStartedAt &&
       session &&
       isMaster &&
+      !sessionLoading &&
+      !hasPendingGame &&
+      !isLcuAutoNavigateSuppressed() &&
       !autoNavigateRef.current &&
       location.pathname !== '/session/new-game'
     ) {
       autoNavigateRef.current = true;
       navigate('/session/new-game?fromLcu=true');
     }
-  }, [lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, location.pathname, session, isMaster, navigate]);
+  }, [hasPendingGame, lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, location.pathname, session, sessionLoading, isMaster, navigate]);
 
   useEffect(() => {
     let cancelled = false;

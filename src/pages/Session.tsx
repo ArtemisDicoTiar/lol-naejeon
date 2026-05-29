@@ -15,6 +15,7 @@ import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/l
 import type { Champion } from '@/lib/db';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
 import { getTagLabel, getTagColor } from '@/data/tag-display';
+import { isLcuAutoNavigateSuppressed } from '@/lib/lcu-navigation';
 
 type EditableGamePick = GamePick & { draftId: string };
 
@@ -55,6 +56,7 @@ export function Session() {
     () => games.length > 0 ? games[games.length - 1] : null,
     [games],
   );
+  const hasPendingGame = games.some((game) => game.winningTeam === null);
   const pendingGamePicks = pendingGame ? (gamePicks[pendingGame.id!] ?? []) : [];
 
   // Build a champion-name → champion map for normalising live pick data
@@ -116,13 +118,16 @@ export function Session() {
       !lcu.gameStartedAt &&
       session &&
       isMaster &&
+      !loading &&
+      !hasPendingGame &&
+      !isLcuAutoNavigateSuppressed() &&
       !autoNavigateRef.current &&
       location.pathname !== '/session/new-game'
     ) {
       autoNavigateRef.current = true;
       navigate('/session/new-game?fromLcu=true');
     }
-  }, [lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, location.pathname, session, isMaster, navigate]);
+  }, [hasPendingGame, lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, loading, location.pathname, session, isMaster, navigate]);
 
   const loadAncillaryGameData = useCallback(async () => {
     const rows = await Promise.all(games.map(async (game) => {
