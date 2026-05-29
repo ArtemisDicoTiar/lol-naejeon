@@ -401,7 +401,7 @@ export function NewGame() {
   const unassigned = selectedPlayerIds.filter((id) => !teamAssignments[id]);
 
   return (
-    <div className="space-y-5 max-w-3xl mx-auto">
+    <div className="newgame-compact space-y-4 max-w-2xl mx-auto">
       <PageHeader
         eyebrow="New Match"
         title="새 게임 설정"
@@ -421,7 +421,7 @@ export function NewGame() {
         <div className="flex gap-2">
           {(['aram', 'augmented'] as GameMode[]).map((m) => (
             <button key={m} onClick={() => setMode(m)}
-              className={`flex-1 cursor-pointer p-3 rounded border text-center font-medium transition-colors ${
+              className={`flex-1 cursor-pointer p-2.5 rounded border text-center font-medium transition-colors ${
                 mode === m
                   ? (m === 'augmented'
                     ? 'border-purple-400 bg-purple-900/30 text-purple-300'
@@ -445,7 +445,7 @@ export function NewGame() {
             return (
               <button key={p.id}
                 onClick={() => toggleSittingOut(p.id!)}
-                className={`cursor-pointer p-2.5 rounded border text-center text-sm font-medium transition-colors ${
+                className={`cursor-pointer p-2 rounded border text-center text-xs font-medium transition-colors ${
                   isSitting
                     ? 'border-red-800/50 bg-red-950/20 text-red-400/60 line-through'
                     : 'border-lol-gold/50 bg-lol-gold/10 text-lol-gold'
@@ -469,10 +469,10 @@ export function NewGame() {
           </div>
 
           {balanceRecommendation && (
-            <div className="mb-4 rounded border border-lol-gold/30 bg-lol-gold/10 p-3">
+            <div className="mb-3 rounded border border-lol-gold/30 bg-lol-gold/10 p-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <div className="text-sm font-medium text-lol-gold">추천 조합 적용됨</div>
+                  <div className="text-xs font-medium text-lol-gold">추천 조합 적용됨</div>
                   <div className="text-xs text-lol-gold-light/50">{balanceRecommendation.reason}</div>
                 </div>
                 <div className="flex gap-2 text-xs">
@@ -491,12 +491,12 @@ export function NewGame() {
           )}
 
           {unassigned.length > 0 && (
-            <div className="mb-4 p-3 bg-lol-dark/50 rounded border border-dashed border-lol-gold/30">
-              <div className="text-sm text-lol-gold mb-2">선수를 팀에 배정하세요</div>
+            <div className="mb-3 p-2.5 bg-lol-dark/50 rounded border border-dashed border-lol-gold/30">
+              <div className="text-xs text-lol-gold mb-2">선수를 팀에 배정하세요</div>
               <div className="flex flex-wrap gap-2">
                 {unassigned.map((id) => (
                   <div key={id} className="flex items-center gap-1 bg-lol-gray rounded border border-lol-border p-1">
-                    <span className="text-sm text-lol-gold-light px-2">{getPlayerName(id)}</span>
+                    <span className="text-xs text-lol-gold-light px-2">{getPlayerName(id)}</span>
                     <button onClick={() => assignTeam(id, 1)} className="cursor-pointer px-2 py-1 text-xs rounded bg-blue-900/40 text-blue-300 border border-blue-800/50 hover:bg-blue-900/70">T1</button>
                     <button onClick={() => assignTeam(id, 2)} className="cursor-pointer px-2 py-1 text-xs rounded bg-red-900/40 text-red-300 border border-red-800/50 hover:bg-red-900/70">T2</button>
                   </div>
@@ -505,11 +505,11 @@ export function NewGame() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             {([1, 2] as const).map((teamNum) => {
               const teamPlayerIds = selectedPlayerIds.filter((id) => teamAssignments[id] === teamNum);
               return (
-                <div key={teamNum} className="space-y-2">
+                <div key={teamNum} className="space-y-1.5">
                   <h3 className={`font-medium text-center ${teamPlayerIds.length > 0 ? (teamNum === 1 ? 'text-blue-400' : 'text-red-400') : 'text-lol-gold-light/50'}`}>
                     Team {teamNum} ({teamPlayerIds.length}명)
                   </h3>
@@ -519,7 +519,7 @@ export function NewGame() {
                       : 'border-lol-border border-dashed bg-lol-blue'
                   }`}>
                     {teamPlayerIds.map((id) => (
-                      <div key={id} className="p-2 bg-lol-gray rounded text-sm text-lol-gold-light flex justify-between items-center">
+                      <div key={id} className="p-1.5 bg-lol-gray rounded text-xs text-lol-gold-light flex justify-between items-center">
                         <span>{getPlayerName(id)}</span>
                         <div className="flex gap-1">
                           <button onClick={() => assignTeam(id, teamNum === 1 ? 2 : 1)} className="text-xs text-lol-gold-light/50 hover:text-lol-gold cursor-pointer px-1">&harr;</button>
