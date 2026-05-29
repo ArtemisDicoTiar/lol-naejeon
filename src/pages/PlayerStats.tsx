@@ -99,6 +99,7 @@ export function PlayerStats() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [profile, setProfile] = useState<PlayerProfileStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const selectedPlayerId = Number(searchParams.get('player') ?? '');
   const rawMode = searchParams.get('mode');
@@ -132,11 +133,20 @@ export function PlayerStats() {
     }
 
     setLoading(true);
+    setLoadError(false);
     const filter = modeFilter === 'all' ? undefined : modeFilter;
-    computePlayerProfile(selectedPlayerId, filter).then((nextProfile) => {
-      setProfile(nextProfile);
-      setLoading(false);
-    });
+    computePlayerProfile(selectedPlayerId, filter)
+      .then((nextProfile) => {
+        setProfile(nextProfile);
+      })
+      .catch((error) => {
+        console.error('Failed to load player profile:', error);
+        setProfile(null);
+        setLoadError(true);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [modeFilter, players, selectedPlayerId]);
 
   useEffect(() => {
@@ -277,8 +287,14 @@ export function PlayerStats() {
         </div>
       </div>
 
-      {loading || !profile ? (
+      {loading ? (
         <div className="text-center py-8 text-lol-gold">유저 통계 로딩 중...</div>
+      ) : loadError || !profile ? (
+        <Card>
+          <p className="text-center py-8 text-lol-gold-light/50">
+            유저 통계를 불러오지 못했습니다. 새로고침 후에도 반복되면 기록 데이터를 확인하세요.
+          </p>
+        </Card>
       ) : (
         <>
           <Card className="overflow-hidden">

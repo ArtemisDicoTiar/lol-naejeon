@@ -25,14 +25,23 @@ type ModeFilter = 'all' | GameMode;
 export function Stats() {
   const [stats, setStats] = useState<FullStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [selectedRadarPlayerIds, setSelectedRadarPlayerIds] = useState<number[]>([]);
   const radarSelectionInitializedRef = useRef(false);
 
   const loadStats = useCallback(() => {
     setLoading(true);
+    setLoadError(false);
     const filter = modeFilter === 'all' ? undefined : modeFilter;
-    computeFullStats(filter).then((s) => { setStats(s); setLoading(false); });
+    computeFullStats(filter)
+      .then((s) => { setStats(s); })
+      .catch((error) => {
+        console.error('Failed to load stats:', error);
+        setStats(null);
+        setLoadError(true);
+      })
+      .finally(() => { setLoading(false); });
   }, [modeFilter]);
 
   useEffect(() => {
@@ -85,7 +94,7 @@ export function Stats() {
     </div>
   );
 
-  if (loading || !stats) {
+  if (loading) {
     return (
       <div className="space-y-6">
         <PageHeader
@@ -95,6 +104,23 @@ export function Stats() {
           actions={modeToggle}
         />
         <div className="text-center py-8 text-lol-gold">통계 로딩 중...</div>
+      </div>
+    );
+  }
+
+  if (!stats || loadError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="Analytics"
+          title="통계"
+          description="내전 누적 승률, 챔피언 메타, 플레이어 성향, 3인 조합을 분석합니다."
+          actions={modeToggle}
+        />
+        <EmptyState
+          title="통계를 불러오지 못했습니다."
+          description="데이터가 손상되었거나 일시적으로 IndexedDB 조회가 실패했습니다. 새로고침 후에도 반복되면 설정에서 백업/복원을 확인하세요."
+        />
       </div>
     );
   }

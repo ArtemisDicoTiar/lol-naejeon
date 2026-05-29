@@ -19,6 +19,10 @@ export function useSession() {
 
   const refresh = useCallback(async () => {
     if (!hasLoadedRef.current) setLoading(true);
+    const loadingGuard = window.setTimeout(() => {
+      hasLoadedRef.current = true;
+      setLoading(false);
+    }, 5000);
     try {
       const s = await getActiveSession();
       setSession(s);
@@ -47,7 +51,16 @@ export function useSession() {
         setFierlessBans([]);
         setLastGameTeams(null);
       }
+    } catch (error) {
+      console.error('Failed to load session:', error);
+      if (!hasLoadedRef.current) {
+        setSession(null);
+        setGames([]);
+        setFierlessBans([]);
+        setLastGameTeams(null);
+      }
     } finally {
+      window.clearTimeout(loadingGuard);
       hasLoadedRef.current = true;
       setLoading(false);
     }

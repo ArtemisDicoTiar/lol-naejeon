@@ -7,9 +7,14 @@ export function usePlayers() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const p = await db.players.toArray();
-    setPlayers(p);
-    setLoading(false);
+    try {
+      const p = await db.players.toArray();
+      setPlayers(p);
+    } catch (error) {
+      console.error('Failed to load players:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);

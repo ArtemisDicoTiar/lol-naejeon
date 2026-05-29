@@ -34,38 +34,44 @@ export function History() {
 
   const loadSessions = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
-    const [allSessions, allPlayers, allChampions] = await Promise.all([
-      db.sessions.toArray(),
-      db.players.toArray(),
-      db.champions.toArray(),
-    ]);
-    setPlayers(allPlayers);
-    setChampions(allChampions);
+    try {
+      const [allSessions, allPlayers, allChampions] = await Promise.all([
+        db.sessions.toArray(),
+        db.players.toArray(),
+        db.champions.toArray(),
+      ]);
+      setPlayers(allPlayers);
+      setChampions(allChampions);
 
-    const sessionsWithGames: SessionWithGames[] = [];
-    for (const session of allSessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())) {
-      const games = await db.games.where('sessionId').equals(session.id!).toArray();
-      games.sort((a, b) => a.gameNumber - b.gameNumber);
-      const gamesWithDetails = await Promise.all(
-        games.map(async (game) => {
-          const picks = await db.gamePicks.where('gameId').equals(game.id!).toArray();
-          const eogCapture = await db.gameEogCaptures.where('gameId').equals(game.id!).last();
-          const rawParticipantStats = eogCapture?.id
-            ? await db.gameParticipantStats.where('captureId').equals(eogCapture.id).toArray()
-            : [];
-          const participantStats = resolveParticipantStatsToPicks(rawParticipantStats, picks, {
-            preferPickChampion: true,
-          });
-          return { ...game, picks, eogCapture: eogCapture ?? null, participantStats };
-        }),
-      );
-      if (gamesWithDetails.length > 0) {
-        sessionsWithGames.push({ ...session, games: gamesWithDetails });
+      const sessionsWithGames: SessionWithGames[] = [];
+      for (const session of allSessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())) {
+        const games = await db.games.where('sessionId').equals(session.id!).toArray();
+        games.sort((a, b) => a.gameNumber - b.gameNumber);
+        const gamesWithDetails = await Promise.all(
+          games.map(async (game) => {
+            const picks = await db.gamePicks.where('gameId').equals(game.id!).toArray();
+            const eogCapture = await db.gameEogCaptures.where('gameId').equals(game.id!).last();
+            const rawParticipantStats = eogCapture?.id
+              ? await db.gameParticipantStats.where('captureId').equals(eogCapture.id).toArray()
+              : [];
+            const participantStats = resolveParticipantStatsToPicks(rawParticipantStats, picks, {
+              preferPickChampion: true,
+            });
+            return { ...game, picks, eogCapture: eogCapture ?? null, participantStats };
+          }),
+        );
+        if (gamesWithDetails.length > 0) {
+          sessionsWithGames.push({ ...session, games: gamesWithDetails });
+        }
       }
-    }
 
-    setSessions(sessionsWithGames);
-    setLoading(false);
+      setSessions(sessionsWithGames);
+    } catch (error) {
+      console.error('Failed to load history:', error);
+      if (showLoading) setSessions([]);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

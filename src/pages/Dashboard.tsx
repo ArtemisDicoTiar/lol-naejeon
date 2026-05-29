@@ -27,7 +27,7 @@ export function Dashboard() {
   const lcu = useLcuContext();
   const { session, games, fierlessBans, loading: sessionLoading, createSession } = useSession();
   const { players } = usePlayers();
-  const { champions, syncing } = useChampions();
+  const { champions } = useChampions();
   const [sessionName, setSessionName] = useState('');
   const [creating, setCreating] = useState(false);
   const [stats, setStats] = useState<FullStats | null>(null);
@@ -98,12 +98,10 @@ export function Dashboard() {
   const globalTeam2Wr = globalSideTotal > 0 ? ((stats?.sideStats.team2Wins ?? 0) / globalSideTotal) * 100 : 0;
   const lcuStatus = lcu.connected ? (lcu.champSelectActive ? '챔셀 감지' : '클라 연결됨') : '클라 미연결';
 
-  if (sessionLoading || syncing) {
+  if (sessionLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-lol-gold">
-          {syncing ? '챔피언 데이터 동기화 중...' : '로딩 중...'}
-        </div>
+        <div className="text-lol-gold">로딩 중...</div>
       </div>
     );
   }
