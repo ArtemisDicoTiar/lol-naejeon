@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { db, type Player, type ProficiencyLevel, getPlayerProficiencies, setProficiency } from '@/lib/db';
 import { useChampions } from '@/hooks/useChampions';
-import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { EmptyState, FilterBar, PageHeader, StatusPill } from '@/components/ui/Page';
 import { ProficiencyBadge, TierBadge, RoleBadge } from '@/components/ui/Badge';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ARAM_ROLE_LABELS, type AramRole, type AramTier } from '@/data/aram-champion-meta';
@@ -122,25 +122,40 @@ export function PlayerDetail() {
   }, [estimates, proficiencies]);
 
   if (!player) {
-    return <div className="text-center py-8 text-lol-gold-light/60">선수를 찾을 수 없습니다.</div>;
+    return (
+      <EmptyState
+        title="선수를 찾을 수 없습니다."
+        action={<Link to="/players"><Button>선수 목록으로</Button></Link>}
+      />
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Link to="/players" className="text-lol-gold hover:text-lol-gold-light">&larr;</Link>
-          <h1 className="text-2xl font-bold text-lol-gold">{player.name} 숙련도</h1>
-        </div>
-        {pendingEstimateCount > 0 && (
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Player Proficiency"
+        title={`${player.name} 숙련도`}
+        description="수동 숙련도와 게임 기록 기반 자동 추정값을 같이 관리합니다."
+        meta={(
+          <>
+            <StatusPill tone="gold">{champions.length}개 챔피언</StatusPill>
+            {pendingEstimateCount > 0 && <StatusPill tone="blue">자동 추정 {pendingEstimateCount}개</StatusPill>}
+          </>
+        )}
+        actions={(
+          <>
+            <Link to="/players"><Button variant="ghost">선수 목록</Button></Link>
+            {pendingEstimateCount > 0 && (
           <Button variant="secondary" size="sm" onClick={applyAllEstimates}>
             자동 추정 {pendingEstimateCount}개 일괄 적용
           </Button>
+            )}
+          </>
         )}
-      </div>
+      />
 
       {applyMsg && (
-        <div className="p-2 bg-lol-gray rounded border border-lol-border text-sm text-lol-gold">{applyMsg}</div>
+        <StatusPill tone="gold" className="rounded-lg px-3 py-2">{applyMsg}</StatusPill>
       )}
 
       <div className="text-xs text-lol-gold-light/40">
@@ -148,7 +163,7 @@ export function PlayerDetail() {
       </div>
 
       {/* Stats Summary */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {LEVELS.map((level) => (
           <button
             key={level}
@@ -164,42 +179,40 @@ export function PlayerDetail() {
       </div>
 
       {/* Filters */}
-      <Card>
-        <div className="flex flex-wrap gap-3">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="챔피언 검색..."
-            className="bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
-          />
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value as AramRole | '')}
-            className="bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light cursor-pointer"
-          >
-            <option value="">전체 역할</option>
-            {Object.entries(ARAM_ROLE_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-          <select
-            value={tierFilter}
-            onChange={(e) => setTierFilter(e.target.value as AramTier | '')}
-            className="bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light cursor-pointer"
-          >
-            <option value="">전체 티어</option>
-            {(['S', 'A', 'B', 'C', 'D'] as AramTier[]).map((t) => (
-              <option key={t} value={t}>{t} 티어</option>
-            ))}
-          </select>
-          {(search || roleFilter || tierFilter || profFilter) && (
-            <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setRoleFilter(''); setTierFilter(''); setProfFilter(''); }}>
-              필터 초기화
-            </Button>
-          )}
-        </div>
-      </Card>
+      <FilterBar summary={`${filteredChampions.length}개 표시`}>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="챔피언 검색..."
+          className="min-w-[180px] rounded border border-lol-border bg-lol-blue px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
+        />
+        <select
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value as AramRole | '')}
+          className="rounded border border-lol-border bg-lol-blue px-3 py-1.5 text-sm text-lol-gold-light cursor-pointer"
+        >
+          <option value="">전체 역할</option>
+          {Object.entries(ARAM_ROLE_LABELS).map(([key, label]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
+        <select
+          value={tierFilter}
+          onChange={(e) => setTierFilter(e.target.value as AramTier | '')}
+          className="rounded border border-lol-border bg-lol-blue px-3 py-1.5 text-sm text-lol-gold-light cursor-pointer"
+        >
+          <option value="">전체 티어</option>
+          {(['S', 'A', 'B', 'C', 'D'] as AramTier[]).map((t) => (
+            <option key={t} value={t}>{t} 티어</option>
+          ))}
+        </select>
+        {(search || roleFilter || tierFilter || profFilter) && (
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setRoleFilter(''); setTierFilter(''); setProfFilter(''); }}>
+            필터 초기화
+          </Button>
+        )}
+      </FilterBar>
 
       {/* Champion Grid */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
@@ -234,9 +247,7 @@ export function PlayerDetail() {
       </div>
 
       {filteredChampions.length === 0 && (
-        <p className="text-center text-lol-gold-light/50 py-8">
-          필터 조건에 맞는 챔피언이 없습니다.
-        </p>
+        <EmptyState title="필터 조건에 맞는 챔피언이 없습니다." />
       )}
     </div>
   );

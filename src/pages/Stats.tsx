@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { computeFullStats, type FullStats } from '@/lib/stats';
 import { GAME_MODE_LABELS, type GameMode } from '@/lib/db';
 import { Card } from '@/components/ui/Card';
+import { EmptyState, PageHeader, StatusPill } from '@/components/ui/Page';
 import { PlayerRanking } from '@/components/stats/PlayerRanking';
 import { PlayerStreak } from '@/components/stats/PlayerStreak';
 import { PlayerTrend } from '@/components/stats/PlayerTrend';
@@ -87,10 +88,12 @@ export function Stats() {
   if (loading || !stats) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
-          {modeToggle}
-        </div>
+        <PageHeader
+          eyebrow="Analytics"
+          title="통계"
+          description="내전 누적 승률, 챔피언 메타, 플레이어 성향, 3인 조합을 분석합니다."
+          actions={modeToggle}
+        />
         <div className="text-center py-8 text-lol-gold">통계 로딩 중...</div>
       </div>
     );
@@ -99,27 +102,37 @@ export function Stats() {
   if (stats.wrStats.totalGames === 0) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
-          {modeToggle}
-        </div>
-        <Card>
-          <p className="text-center py-8 text-lol-gold-light/50">
-            {modeFilter === 'all'
-              ? '게임 기록이 없습니다. 내전을 진행한 후 통계를 확인하세요.'
-              : `${GAME_MODE_LABELS[modeFilter as GameMode]} 모드 기록이 없습니다.`}
-          </p>
-        </Card>
+        <PageHeader
+          eyebrow="Analytics"
+          title="통계"
+          description="내전 누적 승률, 챔피언 메타, 플레이어 성향, 3인 조합을 분석합니다."
+          actions={modeToggle}
+        />
+        <EmptyState
+          title={modeFilter === 'all' ? '게임 기록이 없습니다.' : `${GAME_MODE_LABELS[modeFilter as GameMode]} 모드 기록이 없습니다.`}
+          description="내전을 진행한 후 통계를 확인하세요."
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
-        {modeToggle}
-      </div>
+      <PageHeader
+        eyebrow="Analytics"
+        title="통계"
+        description="내전 누적 승률, 챔피언 메타, 플레이어 성향, 3인 조합을 분석합니다."
+        meta={(
+          <>
+            <StatusPill tone="gold">{stats.wrStats.totalGames}게임</StatusPill>
+            <StatusPill tone="blue">{stats.players.length}명</StatusPill>
+            <StatusPill tone={modeFilter === 'augmented' ? 'purple' : 'muted'}>
+              {modeFilter === 'all' ? '전체 모드' : GAME_MODE_LABELS[modeFilter as GameMode]}
+            </StatusPill>
+          </>
+        )}
+        actions={modeToggle}
+      />
 
       {/* Summary dashboard */}
       {(() => {

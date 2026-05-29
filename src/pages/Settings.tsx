@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ActionGroup, PageHeader, StatusPill } from '@/components/ui/Page';
 import { exportData, importData, downloadJson } from '@/lib/backup';
 import { importRecords, IMPORT_EXAMPLE, type ImportData } from '@/lib/import-records';
 import { syncToVercel } from '@/lib/auto-sync';
@@ -72,152 +73,155 @@ export function Settings() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-lol-gold">설정</h1>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Operations"
+        title="설정"
+        description="데이터 동기화, 백업/복원, 메타 업데이트, 운영용 덤프 작업을 관리합니다."
+        meta={<StatusPill tone={isMaster ? 'green' : 'muted'}>{isMaster ? '마스터 권한' : '일반 사용자'}</StatusPill>}
+      />
 
       {/* Vercel Auto-Sync (Master only) */}
       {isMaster && (
-        <Card title="데이터 동기화">
-          <p className="text-sm text-lol-gold-light/60 mb-3">
-            세션 종료 시 자동으로 데이터가 서버에 저장됩니다.
-            다른 유저가 새로고침하면 최신 데이터를 볼 수 있습니다.
-          </p>
-          <Button variant="secondary" onClick={async () => {
-            setMessage('동기화 중...');
-            const result = await syncToVercel();
-            setMessage(result.message);
-          }}>
-            수동 동기화
-          </Button>
-        </Card>
-      )}
-
-      {isMaster && (
-        <Card title="ARAM 메타 업데이트">
-          <p className="text-sm text-lol-gold-light/60 mb-3">
-            U.GG에서 최신 ARAM 승률/티어 데이터를 가져옵니다.
-            챔피언 동기화 시 자동으로 반영됩니다.
-          </p>
-          <Button variant="secondary" onClick={async () => {
-            setMessage('ARAM 메타 업데이트 중...');
-            try {
-              const res = await fetch('/api/aram-meta-update', { method: 'POST' });
-              const data = await res.json();
-              if (data.success) {
-                setMessage(data.message);
-              } else {
-                setMessage(`업데이트 실패: ${data.error}`);
-              }
-            } catch (e) {
-              setMessage(`업데이트 실패: ${(e as Error).message}`);
-            }
-          }}>
-            ARAM 메타 업데이트
-          </Button>
-        </Card>
-      )}
-
-      {isMaster && (
-        <Card title="CSV 주간 덤프">
-          <p className="text-sm text-lol-gold-light/60 mb-3">
-            세션 기록을 CSV로 변환해 GitHub 리포에 push합니다. 매주 일요일 자정 자동 실행되며, 아래 버튼으로 수동 트리거할 수 있습니다.
-          </p>
-          <div className="flex gap-2">
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Card title="데이터 동기화">
+            <p className="text-sm text-lol-gold-light/60 mb-3">
+              세션 종료 시 자동으로 데이터가 서버에 저장됩니다.
+              다른 유저가 새로고침하면 최신 데이터를 볼 수 있습니다.
+            </p>
             <Button variant="secondary" onClick={async () => {
-              setMessage('CSV 덤프 중...');
+              setMessage('동기화 중...');
+              const result = await syncToVercel();
+              setMessage(result.message);
+            }}>
+              수동 동기화
+            </Button>
+          </Card>
+
+          <Card title="ARAM 메타 업데이트">
+            <p className="text-sm text-lol-gold-light/60 mb-3">
+              U.GG에서 최신 ARAM 승률/티어 데이터를 가져옵니다.
+              챔피언 동기화 시 자동으로 반영됩니다.
+            </p>
+            <Button variant="secondary" onClick={async () => {
+              setMessage('ARAM 메타 업데이트 중...');
               try {
-                const res = await fetch('/api/dump-csv');
+                const res = await fetch('/api/aram-meta-update', { method: 'POST' });
                 const data = await res.json();
                 if (data.success) {
-                  setMessage(`CSV 덤프 완료: ${data.rows}행${data.url ? `\n${data.url}` : ''}`);
+                  setMessage(data.message);
                 } else {
-                  setMessage(`덤프 실패: ${data.error}`);
+                  setMessage(`업데이트 실패: ${data.error}`);
                 }
               } catch (e) {
-                setMessage(`덤프 실패: ${(e as Error).message}`);
+                setMessage(`업데이트 실패: ${(e as Error).message}`);
               }
             }}>
-              지금 덤프하기
+              ARAM 메타 업데이트
             </Button>
-            <Button variant="ghost" onClick={async () => {
+          </Card>
+
+          <Card title="CSV 주간 덤프">
+            <p className="text-sm text-lol-gold-light/60 mb-3">
+              세션 기록을 CSV로 변환해 GitHub 리포에 push합니다. 매주 일요일 자정 자동 실행되며, 아래 버튼으로 수동 트리거할 수 있습니다.
+            </p>
+            <ActionGroup>
+              <Button variant="secondary" onClick={async () => {
+                setMessage('CSV 덤프 중...');
+                try {
+                  const res = await fetch('/api/dump-csv');
+                  const data = await res.json();
+                  if (data.success) {
+                    setMessage(`CSV 덤프 완료: ${data.rows}행${data.url ? `\n${data.url}` : ''}`);
+                  } else {
+                    setMessage(`덤프 실패: ${data.error}`);
+                  }
+                } catch (e) {
+                  setMessage(`덤프 실패: ${(e as Error).message}`);
+                }
+              }}>
+                지금 덤프하기
+              </Button>
+              <Button variant="ghost" onClick={async () => {
+                try {
+                  const res = await fetch('/api/dump-csv?dryRun=true');
+                  const csv = await res.text();
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `lol_dataset_${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  setMessage('CSV 미리보기 다운로드 완료');
+                } catch (e) {
+                  setMessage(`미리보기 실패: ${(e as Error).message}`);
+                }
+              }}>
+                CSV 미리보기 다운로드
+              </Button>
+            </ActionGroup>
+          </Card>
+
+          <Card title="카운터 데이터">
+            <p className="text-sm text-lol-gold-light/60 mb-3">
+              현재 리포에 포함된 ARAM 카운터 스냅샷을 Vercel Blob에 다시 게시합니다.
+              외부 라이브 소스가 불안정할 때 설정/운영 상태를 복구하는 용도입니다.
+            </p>
+            <Button variant="secondary" onClick={async () => {
+              setMessage('카운터 스냅샷 게시 중...');
               try {
-                const res = await fetch('/api/dump-csv?dryRun=true');
-                const csv = await res.text();
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `lol_dataset_${new Date().toISOString().slice(0, 10)}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-                setMessage('CSV 미리보기 다운로드 완료');
+                const res = await fetch('/api/opgg-sync', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                  setMessage(data.message);
+                } else {
+                  setMessage(`업데이트 실패: ${data.error}`);
+                }
               } catch (e) {
-                setMessage(`미리보기 실패: ${(e as Error).message}`);
+                setMessage(`업데이트 실패: ${(e as Error).message}`);
               }
             }}>
-              CSV 미리보기 다운로드
+              카운터 데이터 업데이트
             </Button>
-          </div>
-        </Card>
+          </Card>
+        </div>
       )}
 
-      {isMaster && (
-        <Card title="카운터 데이터">
-          <p className="text-sm text-lol-gold-light/60 mb-3">
-            현재 리포에 포함된 ARAM 카운터 스냅샷을 Vercel Blob에 다시 게시합니다.
-            외부 라이브 소스가 불안정할 때 설정/운영 상태를 복구하는 용도입니다.
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card title="데이터 백업/복원">
+          <p className="text-sm text-lol-gold-light/60 mb-4">
+            데이터는 브라우저에 저장됩니다. 정기적으로 백업하세요.
           </p>
-          <Button variant="secondary" onClick={async () => {
-            setMessage('카운터 스냅샷 게시 중...');
-            try {
-              const res = await fetch('/api/opgg-sync', { method: 'POST' });
-              const data = await res.json();
-              if (data.success) {
-                setMessage(data.message);
-              } else {
-                setMessage(`업데이트 실패: ${data.error}`);
-              }
-            } catch (e) {
-              setMessage(`업데이트 실패: ${(e as Error).message}`);
-            }
-          }}>
-            카운터 데이터 업데이트
-          </Button>
+          <ActionGroup>
+            <Button onClick={handleExport}>데이터 내보내기 (JSON)</Button>
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+              데이터 가져오기
+            </Button>
+            <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
+          </ActionGroup>
         </Card>
-      )}
 
-      <Card title="데이터 백업/복원">
-        <p className="text-sm text-lol-gold-light/60 mb-4">
-          데이터는 브라우저에 저장됩니다. 정기적으로 백업하세요.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={handleExport}>데이터 내보내기 (JSON)</Button>
-          <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
-            데이터 가져오기
-          </Button>
-          <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
-        </div>
-      </Card>
+        <Card title="내전 기록 가져오기">
+          <p className="text-sm text-lol-gold-light/60 mb-2">
+            과거 내전 기록을 정해진 포맷의 JSON 파일로 임포트합니다. 기존 데이터에 추가됩니다 (덮어쓰기 아님).
+          </p>
+          <p className="text-xs text-lol-gold-light/40 mb-4">
+            플레이어 이름으로 매칭하며, 없는 플레이어는 자동 생성됩니다. 챔피언은 영문 ID 사용 (예: Lucian, MissFortune).
+          </p>
+          <ActionGroup>
+            <Button variant="secondary" onClick={() => recordInputRef.current?.click()}>
+              내전 기록 JSON 가져오기
+            </Button>
+            <Button variant="ghost" onClick={handleDownloadExample}>
+              예시 포맷 다운로드
+            </Button>
+            <input ref={recordInputRef} type="file" accept=".json" onChange={handleRecordImport} className="hidden" />
+          </ActionGroup>
+        </Card>
+      </div>
 
-      <Card title="내전 기록 가져오기">
-        <p className="text-sm text-lol-gold-light/60 mb-2">
-          과거 내전 기록을 정해진 포맷의 JSON 파일로 임포트합니다. 기존 데이터에 추가됩니다 (덮어쓰기 아님).
-        </p>
-        <p className="text-xs text-lol-gold-light/40 mb-4">
-          플레이어 이름으로 매칭하며, 없는 플레이어는 자동 생성됩니다. 챔피언은 영문 ID 사용 (예: Lucian, MissFortune).
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={() => recordInputRef.current?.click()}>
-            내전 기록 JSON 가져오기
-          </Button>
-          <Button variant="ghost" onClick={handleDownloadExample}>
-            예시 포맷 다운로드
-          </Button>
-          <input ref={recordInputRef} type="file" accept=".json" onChange={handleRecordImport} className="hidden" />
-        </div>
-      </Card>
-
-      <Card title="데이터 초기화">
+      <Card title="데이터 초기화" className="border-red-900/45">
         <p className="text-sm text-lol-gold-light/60 mb-4">
           모든 선수, 숙련도, 게임 기록을 삭제합니다.
         </p>
@@ -225,9 +229,9 @@ export function Settings() {
       </Card>
 
       {message && (
-        <div className="p-3 bg-lol-gray rounded border border-lol-border">
-          <p className="text-sm text-lol-gold whitespace-pre-line">{message}</p>
-        </div>
+        <StatusPill tone="gold" className="whitespace-pre-line rounded-lg px-3 py-2">
+          {message}
+        </StatusPill>
       )}
     </div>
   );

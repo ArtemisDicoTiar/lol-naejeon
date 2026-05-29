@@ -6,6 +6,7 @@ import { useChampions } from '@/hooks/useChampions';
 import { useLcuContext } from '@/App';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { EmptyState, PageHeader, StatusPill } from '@/components/ui/Page';
 import { BanPickScreen } from '@/components/session/BanPickScreen';
 import { AugWaitScreen } from '@/components/session/AugWaitScreen';
 import { getPlayerProficiencies, GAME_MODE_LABELS, type ProficiencyLevel, type GameMode } from '@/lib/db';
@@ -356,10 +357,11 @@ export function NewGame() {
 
   if (!session) {
     return (
-      <div className="text-center py-16 text-lol-gold-light/60">
-        <p>활성 세션이 없습니다.</p>
-        <Button className="mt-4" onClick={() => navigate('/')}>대시보드로</Button>
-      </div>
+      <EmptyState
+        title="활성 세션이 없습니다."
+        description="새 게임을 만들려면 먼저 세션을 시작해야 합니다."
+        action={<Button onClick={() => navigate('/')}>대시보드로</Button>}
+      />
     );
   }
 
@@ -399,11 +401,20 @@ export function NewGame() {
   const unassigned = selectedPlayerIds.filter((id) => !teamAssignments[id]);
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <div className="flex items-center gap-4">
-        <button onClick={() => navigate('/session')} className="text-lol-gold hover:text-lol-gold-light cursor-pointer">&larr;</button>
-        <h1 className="text-2xl font-bold text-lol-gold">새 게임 설정</h1>
-      </div>
+    <div className="space-y-5 max-w-3xl mx-auto">
+      <PageHeader
+        eyebrow="New Match"
+        title="새 게임 설정"
+        description="참가자, 게임 모드, 팀 편성을 정한 뒤 밴픽으로 넘어갑니다."
+        meta={(
+          <>
+            <StatusPill tone="gold">{selectedPlayerIds.length}명 참여</StatusPill>
+            <StatusPill tone={mode === 'augmented' ? 'purple' : 'blue'}>{GAME_MODE_LABELS[mode]}</StatusPill>
+            {fromLcu && <StatusPill tone="green">클라 감지</StatusPill>}
+          </>
+        )}
+        actions={<Button variant="ghost" onClick={() => navigate('/session')}>세션으로</Button>}
+      />
 
       {/* Game mode: 칼바람 / 증바람 */}
       <Card title="게임 모드">
@@ -494,7 +505,7 @@ export function NewGame() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-2 gap-3">
             {([1, 2] as const).map((teamNum) => {
               const teamPlayerIds = selectedPlayerIds.filter((id) => teamAssignments[id] === teamNum);
               return (

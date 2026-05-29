@@ -4,6 +4,7 @@ import { useSession } from '@/hooks/useSession';
 import { useChampions } from '@/hooks/useChampions';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ActionGroup, EmptyState, PageHeader, StatTile, StatusPill } from '@/components/ui/Page';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { EogStatsPanel } from '@/components/session/EogStatsPanel';
 import { SessionTimeline } from '@/components/session/SessionTimeline';
@@ -154,6 +155,8 @@ export function Session() {
   const bannedChampions = champions.filter((c) => fierlessBans.includes(c.id));
   const availableCount = champions.length - fierlessBans.length;
   const bannedPercent = champions.length > 0 ? (fierlessBans.length / champions.length) * 100 : 0;
+  const completedGames = games.filter((game) => game.winningTeam !== null).length;
+  const pendingGames = games.length - completedGames;
 
   const handleEndSession = async () => {
     if (!confirm('세션을 종료하시겠습니까? 종료 후에는 게임을 추가할 수 없습니다.')) return;
@@ -166,34 +169,50 @@ export function Session() {
 
   if (!session) {
     return (
-      <div className="text-center py-16 space-y-4">
-        <p className="text-lol-gold-light/60">활성 세션이 없습니다.</p>
-        <Link to="/"><Button>대시보드로 이동</Button></Link>
-      </div>
+      <EmptyState
+        title="활성 세션이 없습니다."
+        description="대시보드에서 새 세션을 시작하면 현재 세션 현황을 볼 수 있습니다."
+        action={<Link to="/"><Button>대시보드로 이동</Button></Link>}
+      />
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-lol-gold">{session.name}</h1>
-          <span className="text-sm text-lol-gold-light/50">
-            {new Date(session.createdAt).toLocaleString('ko-KR')} 시작
-          </span>
-        </div>
-        <div className="flex gap-2">
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Current Session"
+        title={session.name}
+        description={`${new Date(session.createdAt).toLocaleString('ko-KR')} 시작 · 게임 진행, 피어리스 풀, 종료 후 통계를 한 화면에서 관리합니다.`}
+        meta={(
+          <>
+            <StatusPill tone={lcu.connected ? 'blue' : 'muted'}>
+              {lcu.connected ? '클라 연결됨' : '클라 미연결'}
+            </StatusPill>
+            {pendingGames > 0 && <StatusPill tone="yellow">결과 대기 {pendingGames}</StatusPill>}
+            <StatusPill tone="gold">완료 {completedGames}</StatusPill>
+          </>
+        )}
+        actions={(
+          <ActionGroup>
           <Link to="/session/new-game">
             <Button>새 게임</Button>
           </Link>
           <Button variant="danger" onClick={handleEndSession}>세션 종료</Button>
-        </div>
+          </ActionGroup>
+        )}
+      />
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatTile label="전체 게임" value={games.length} />
+        <StatTile label="완료 게임" value={completedGames} tone="green" />
+        <StatTile label="피어리스 밴" value={fierlessBans.length} tone="red" />
+        <StatTile label="남은 풀" value={availableCount} tone="blue" />
       </div>
 
       {/* Team carry-over */}
       {lastGameTeams && (
         <Card title="다음 게임">
-          <div className="flex items-center gap-4 mb-3">
+          <div className="flex items-center gap-3 mb-3">
             <div className="flex-1 p-2 bg-blue-950/20 rounded border border-blue-900/30">
               <div className="text-xs text-blue-400 mb-1">Team 1</div>
               <div className="text-sm text-lol-gold-light">
@@ -207,14 +226,14 @@ export function Session() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
+          <ActionGroup>
             <Link to="/session/new-game?keepTeams=true">
               <Button size="sm">팀 유지하고 새 게임</Button>
             </Link>
             <Link to="/session/new-game">
               <Button variant="secondary" size="sm">팀 변경하고 새 게임</Button>
             </Link>
-          </div>
+          </ActionGroup>
         </Card>
       )}
 
@@ -232,15 +251,9 @@ export function Session() {
       {lcu.connected && (lcu.eog.status === 'capturing' || lcu.eog.status === 'failed' || lcu.eog.status === 'captured') && (
         <Card title="종료 후 수집 상태">
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className={`px-2 py-1 rounded border ${
-              lcu.eog.status === 'captured'
-                ? 'border-prof-high/40 text-prof-high'
-                : lcu.eog.status === 'failed'
-                  ? 'border-red-700/40 text-red-300'
-                  : 'border-lol-gold/40 text-lol-gold'
-            }`}>
+            <StatusPill tone={lcu.eog.status === 'captured' ? 'green' : lcu.eog.status === 'failed' ? 'red' : 'gold'}>
               {lcu.eog.status === 'captured' ? 'EOG 수집 완료' : lcu.eog.status === 'failed' ? 'EOG 수집 실패' : 'EOG 수집 중'}
-            </span>
+            </StatusPill>
             {lcu.eog.capture && (
               <span className="text-lol-gold-light/60">
                 {lcu.eog.capture.participantCount}명 캡처 · {lcu.eog.capture.mappedParticipants}명 매핑
@@ -373,7 +386,11 @@ export function Session() {
       {/* Games */}
       <Card title={`게임 기록 (${games.length}개)`}>
         {games.length === 0 ? (
-          <p className="text-lol-gold-light/50 text-center py-4">진행된 게임이 없습니다.</p>
+          <EmptyState
+            title="진행된 게임이 없습니다."
+            description="새 게임을 시작하면 밴픽, 결과, EOG 통계가 이곳에 쌓입니다."
+            action={<Link to="/session/new-game"><Button>새 게임 시작</Button></Link>}
+          />
         ) : (
           <div className="space-y-4">
             {games.map((game, idx) => {

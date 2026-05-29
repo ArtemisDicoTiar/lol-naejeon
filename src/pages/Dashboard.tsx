@@ -5,6 +5,7 @@ import { usePlayers } from '@/hooks/usePlayers';
 import { useChampions } from '@/hooks/useChampions';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { EmptyState, StatTile, StatusPill } from '@/components/ui/Page';
 import { useIdentityContext, useLcuContext } from '@/App';
 import { computeFullStats, type FullStats } from '@/lib/stats';
 import { DashboardPresenceBars } from '@/components/dashboard/DashboardPresenceBars';
@@ -124,21 +125,15 @@ export function Dashboard() {
         <div className="relative grid gap-4 lg:grid-cols-[1.4fr_1fr] lg:items-end">
           <div>
             <div className="mb-3 flex flex-wrap gap-2">
-              <span className="inline-flex rounded-full border border-lol-gold/30 bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/60">
+              <StatusPill tone="gold">
                 {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
-              </span>
-              <span className={`inline-flex rounded-full border px-3 py-1 text-xs ${
-                lcu.connected
-                  ? lcu.champSelectActive
-                    ? 'border-prof-high/40 bg-prof-high/10 text-prof-high'
-                    : 'border-blue-500/40 bg-blue-950/30 text-blue-300'
-                  : 'border-lol-border bg-lol-dark/50 text-lol-gold-light/45'
-              }`}>
+              </StatusPill>
+              <StatusPill tone={lcu.connected ? (lcu.champSelectActive ? 'green' : 'blue') : 'muted'}>
                 {lcuStatus}
-              </span>
-              <span className="inline-flex rounded-full border border-lol-border bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/55">
+              </StatusPill>
+              <StatusPill>
                 {session ? `${session.name} 진행중` : '활성 세션 없음'}
-              </span>
+              </StatusPill>
             </div>
             <h1 className="text-3xl font-black tracking-tight text-lol-gold md:text-4xl">
               눈오는 헤네시스
@@ -159,22 +154,10 @@ export function Dashboard() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="rounded-lg border border-lol-gold/20 bg-lol-dark/45 p-3">
-              <div className="text-xs text-lol-gold-light/45">누적 게임</div>
-              <div className="mt-1 text-2xl font-black text-lol-gold">{stats?.wrStats.totalGames ?? 0}</div>
-            </div>
-            <div className="rounded-lg border border-lol-gold/20 bg-lol-dark/45 p-3">
-              <div className="text-xs text-lol-gold-light/45">등록 선수</div>
-              <div className="mt-1 text-2xl font-black text-lol-gold">{players.length}</div>
-            </div>
-            <div className="rounded-lg border border-blue-500/20 bg-blue-950/20 p-3">
-              <div className="text-xs text-lol-gold-light/45">Team 1 누적</div>
-              <div className="mt-1 text-xl font-black text-blue-300">{formatPercent(globalTeam1Wr)}</div>
-            </div>
-            <div className="rounded-lg border border-red-500/20 bg-red-950/20 p-3">
-              <div className="text-xs text-lol-gold-light/45">Team 2 누적</div>
-              <div className="mt-1 text-xl font-black text-red-300">{formatPercent(globalTeam2Wr)}</div>
-            </div>
+            <StatTile label="누적 게임" value={stats?.wrStats.totalGames ?? 0} />
+            <StatTile label="등록 선수" value={players.length} />
+            <StatTile label="Team 1 누적" value={formatPercent(globalTeam1Wr)} tone="blue" />
+            <StatTile label="Team 2 누적" value={formatPercent(globalTeam2Wr)} tone="red" />
             <div className="col-span-2 rounded-lg border border-lol-gold/15 bg-lol-dark/45 p-3">
               <div className="mb-2 flex items-center justify-between text-xs text-lol-gold-light/45">
                 <span>누적 진영 밸런스</span>
@@ -195,7 +178,7 @@ export function Dashboard() {
 
       {dashboardHighlights && (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+          <div className="rounded-lg border border-lol-border bg-lol-gray p-3">
             <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">Winrate Boss</div>
             <div className="mt-2 text-lg font-bold text-lol-gold">
               {dashboardHighlights.topWinrate ? playerName.get(dashboardHighlights.topWinrate.playerId) ?? '알 수 없음' : '기록 없음'}
@@ -206,7 +189,7 @@ export function Dashboard() {
                 : '3게임 이상 기록 필요'}
             </div>
           </div>
-          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+          <div className="rounded-lg border border-lol-border bg-lol-gray p-3">
             <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">Damage King</div>
             <div className="mt-2 text-lg font-bold text-lol-gold">
               {dashboardHighlights.damageKing ? playerName.get(dashboardHighlights.damageKing.playerId) ?? '알 수 없음' : '수집 대기'}
@@ -217,7 +200,7 @@ export function Dashboard() {
                 : 'EOG 세부통계 필요'}
             </div>
           </div>
-          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+          <div className="rounded-lg border border-lol-border bg-lol-gray p-3">
             <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">핫 챔피언</div>
             <div className="mt-2 text-lg font-bold text-lol-gold">
               {dashboardHighlights.hotChampion?.nameKo ?? '기록 없음'}
@@ -228,7 +211,7 @@ export function Dashboard() {
                 : '픽/밴 기록 필요'}
             </div>
           </div>
-          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+          <div className="rounded-lg border border-lol-border bg-lol-gray p-3">
             <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">최고 3인 조합</div>
             <div className="mt-2 truncate text-lg font-bold text-lol-gold">
               {dashboardHighlights.bestTrio
@@ -241,7 +224,7 @@ export function Dashboard() {
                 : '같은 팀 3게임 이상 필요'}
             </div>
           </div>
-          <div className="rounded-xl border border-lol-border bg-lol-gray p-4">
+          <div className="rounded-lg border border-lol-border bg-lol-gray p-3">
             <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">현재 흐름</div>
             <div className={`mt-2 text-lg font-bold ${dashboardHighlights.currentStreak?.type === 'W' ? 'text-prof-high' : dashboardHighlights.currentStreak?.type === 'L' ? 'text-prof-low' : 'text-lol-gold'}`}>
               {dashboardHighlights.currentStreak ? playerName.get(dashboardHighlights.currentStreak.playerId) ?? '알 수 없음' : '기록 없음'}
@@ -293,32 +276,10 @@ export function Dashboard() {
       {session && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-lol-gold">{players.length}</div>
-                <div className="text-sm text-lol-gold-light/60 mt-1">등록 선수</div>
-              </div>
-            </Card>
-            <Card>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-lol-gold">{games.length}</div>
-                <div className="text-sm text-lol-gold-light/60 mt-1">세션 게임</div>
-              </div>
-            </Card>
-            <Card>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-tier-s">{fierlessBans.length}</div>
-                <div className="text-sm text-lol-gold-light/60 mt-1">피어리스 밴</div>
-              </div>
-            </Card>
-            <Card>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-prof-high">
-                  {Math.max(0, champions.length - fierlessBans.length)}
-                </div>
-                <div className="text-sm text-lol-gold-light/60 mt-1">남은 챔피언</div>
-              </div>
-            </Card>
+            <StatTile label="등록 선수" value={players.length} />
+            <StatTile label="세션 게임" value={games.length} />
+            <StatTile label="피어리스 밴" value={fierlessBans.length} tone="red" />
+            <StatTile label="남은 챔피언" value={Math.max(0, champions.length - fierlessBans.length)} tone="green" />
           </div>
 
           <Card title={`세션: ${session.name}`}>
@@ -360,12 +321,11 @@ export function Dashboard() {
       )}
 
       {players.length === 0 && (
-        <Card>
-          <div className="text-center py-8">
-            <p className="text-lol-gold-light/60 mb-4">아직 등록된 선수가 없습니다.</p>
-            <Link to="/players"><Button>선수 등록하기</Button></Link>
-          </div>
-        </Card>
+        <EmptyState
+          title="아직 등록된 선수가 없습니다."
+          description="먼저 내전에 참여할 사람을 등록하면 세션과 통계를 사용할 수 있습니다."
+          action={<Link to="/players"><Button>선수 등록하기</Button></Link>}
+        />
       )}
     </div>
   );

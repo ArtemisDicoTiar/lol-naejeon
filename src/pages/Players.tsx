@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { usePlayers } from '@/hooks/usePlayers';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ActionGroup, EmptyState, PageHeader, StatusPill } from '@/components/ui/Page';
 import { db } from '@/lib/db';
 import { useEffect } from 'react';
 
@@ -47,17 +48,22 @@ export function Players() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-lol-gold">선수 관리</h1>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Roster"
+        title="선수 관리"
+        description="내전 참여자와 챔피언 숙련도 등록 상태를 관리합니다."
+        meta={<StatusPill tone="gold">{players.length}명 등록</StatusPill>}
+      />
 
       <Card title="선수 등록">
-        <form onSubmit={handleAdd} className="flex gap-3">
+        <form onSubmit={handleAdd} className="flex flex-col gap-2 sm:flex-row">
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="닉네임 입력"
-            className="flex-1 bg-lol-blue border border-lol-border rounded px-3 py-2 text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
+            className="flex-1 bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
           />
           <Button type="submit" disabled={!name.trim()}>
             등록
@@ -68,23 +74,24 @@ export function Players() {
 
       <Card title={`등록된 선수 (${players.length}명)`}>
         {players.length === 0 ? (
-          <p className="text-lol-gold-light/50 text-center py-4">
-            등록된 선수가 없습니다.
-          </p>
+          <EmptyState
+            title="등록된 선수가 없습니다."
+            description="닉네임을 추가하면 세션 생성과 통계 집계에 사용할 수 있습니다."
+          />
         ) : (
-          <div className="space-y-2">
+          <div className="grid gap-2 md:grid-cols-2">
             {players.map((player) => (
               <div
                 key={player.id}
-                className="flex items-center justify-between p-3 bg-lol-blue rounded border border-lol-border"
+                className="flex items-center justify-between gap-3 rounded-lg border border-lol-border bg-lol-blue p-3"
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-lol-gold font-medium">{player.name}</span>
-                  <span className="text-xs text-lol-gold-light/50">
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-lol-gold">{player.name}</div>
+                  <div className="text-xs text-lol-gold-light/50">
                     {profCounts[player.id!] ?? 0}개 챔피언 등록
-                  </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <ActionGroup className="shrink-0">
                   <Link to={`/players/${player.id}`}>
                     <Button variant="secondary" size="sm">
                       숙련도 편집
@@ -97,7 +104,7 @@ export function Players() {
                   >
                     삭제
                   </Button>
-                </div>
+                </ActionGroup>
               </div>
             ))}
           </div>

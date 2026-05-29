@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { CombatRadar } from '@/components/stats/CombatRadar';
 import { Card } from '@/components/ui/Card';
+import { StatusPill } from '@/components/ui/Page';
 import { GAME_MODE_LABELS, type Champion, type GameMode } from '@/lib/db';
 import { computePlayerProfile, type PlayerProfileStats } from '@/lib/player-profile';
 import { usePlayers } from '@/hooks/usePlayers';
@@ -223,12 +224,12 @@ export function PlayerStats() {
         <div className="relative flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="mb-3 flex flex-wrap gap-2">
-              <span className="rounded-full border border-lol-gold/30 bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/60">
+              <StatusPill tone="gold">
                 Player Dossier
-              </span>
-              <span className="rounded-full border border-lol-border bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/55">
+              </StatusPill>
+              <StatusPill>
                 {modeLabel}
-              </span>
+              </StatusPill>
             </div>
             <h1 className="text-3xl font-black tracking-tight text-lol-gold md:text-4xl">
               {profile?.player.name ?? '유저 통계'}

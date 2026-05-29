@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ActionGroup, EmptyState, PageHeader, StatusPill } from '@/components/ui/Page';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { EogStatsPanel } from '@/components/session/EogStatsPanel';
 import { db, deleteSession, GAME_MODE_LABELS, updateGameMode, updateSessionName, type Champion, type Game, type GameEogCapture, type GameMode, type GameParticipantStat, type GamePick, type Player, type Session } from '@/lib/db';
@@ -241,36 +242,46 @@ export function History() {
   if (loading) return <div className="text-center py-8 text-lol-gold">로딩 중...</div>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-lol-gold">게임 기록</h1>
-        {isMaster && (
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Match Archive"
+        title="게임 기록"
+        description="세션별 경기, 픽/밴, 종료 후 세부 통계, 과거 커스텀 경기 가져오기를 관리합니다."
+        meta={(
+          <>
+            <StatusPill tone="gold">{sessions.length}개 세션</StatusPill>
+            <StatusPill tone="blue">{sessions.reduce((sum, session) => sum + session.games.length, 0)}게임</StatusPill>
+            {lcu.connected ? <StatusPill tone="green">클라 연결됨</StatusPill> : <StatusPill>클라 미연결</StatusPill>}
+          </>
+        )}
+        actions={isMaster ? (
           <Button variant="secondary" onClick={handleImportRecentCustomGames} disabled={retroLoading}>
             {retroLoading ? '가져오는 중...' : '최근 커스텀 가져오기'}
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {retroStatus && (
-        <div className="rounded border border-lol-border bg-lol-gray px-4 py-3 text-sm text-lol-gold-light/85">
+        <div className="rounded-lg border border-lol-border bg-lol-gray px-3 py-2 text-sm text-lol-gold-light/85">
           {retroStatus}
         </div>
       )}
 
       {sessions.length === 0 ? (
-        <Card>
-          <p className="text-center py-8 text-lol-gold-light/50">
-            아직 기록된 게임이 없습니다.
-          </p>
-        </Card>
+        <EmptyState
+          title="아직 기록된 게임이 없습니다."
+          description="세션을 진행하거나 클라이언트 연결 후 최근 커스텀 경기를 가져오면 기록이 쌓입니다."
+        />
       ) : (
         sessions.map((session) => (
           <Card key={session.id} title={`${session.name} (${session.games.length}게임)`}>
-            <div className="flex gap-2 mb-3">
+            <ActionGroup className="mb-3">
+              <StatusPill tone="gold">{new Date(session.createdAt).toLocaleDateString('ko-KR')}</StatusPill>
+              <StatusPill tone="blue">{session.games.filter((game) => game.winningTeam !== null).length}완료</StatusPill>
               <Button size="sm" variant="ghost" onClick={() => handleRenameSession(session.id!, session.name)}>이름 수정</Button>
               <Button size="sm" variant="danger" onClick={() => handleDeleteSession(session.id!, session.name)}>세션 삭제</Button>
-            </div>
-            <div className="space-y-4">
+            </ActionGroup>
+            <div className="space-y-3">
               {session.games.map((game) => {
                 const isEditing = editingGameId === game.id;
                 const displayPicks = isEditing
@@ -279,9 +290,9 @@ export function History() {
                 const displayTeam1 = displayPicks.filter((pick) => pick.team === 1);
                 const displayTeam2 = displayPicks.filter((pick) => pick.team === 2);
                 return (
-                  <div key={game.id} className="p-3 bg-lol-blue rounded border border-lol-border">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
+                  <div key={game.id} className="rounded-lg border border-lol-border bg-lol-blue p-3">
+                    <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-lol-gold font-medium text-sm">
                           #{game.gameNumber} {game.format}
                         </span>
@@ -300,15 +311,11 @@ export function History() {
                         <span className="text-[10px] text-lol-gold-light/35">
                           {new Date(game.playedAt).toLocaleString('ko-KR')}
                         </span>
-                        {game.eogCapture && (
-                          <span className="text-[10px] px-2 py-0.5 rounded border border-prof-high/30 text-prof-high">
-                            EOG
-                          </span>
-                        )}
+                        {game.eogCapture && <StatusPill tone="green" className="px-2 py-0.5 text-[10px]">EOG</StatusPill>}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <ActionGroup>
                         {game.winningTeam && (
-                          <span className="text-prof-high text-xs">Team {game.winningTeam} 승</span>
+                          <StatusPill tone="green">Team {game.winningTeam} 승</StatusPill>
                         )}
                         {isMaster && (
                           <>
@@ -335,7 +342,7 @@ export function History() {
                             )}
                           </>
                         )}
-                      </div>
+                      </ActionGroup>
                     </div>
                     <div className="grid grid-cols-2 gap-3 mb-3">
                       {[displayTeam1, displayTeam2].map((team, idx) => (

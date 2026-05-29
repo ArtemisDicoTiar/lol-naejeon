@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useChampions } from '@/hooks/useChampions';
-import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { TierBadge, RoleBadge } from '@/components/ui/Badge';
+import { EmptyState, FilterBar, PageHeader, StatusPill } from '@/components/ui/Page';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ARAM_ROLE_LABELS, type AramRole, type AramTier } from '@/data/aram-champion-meta';
 
@@ -35,13 +35,20 @@ export function Champions() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-lol-gold">챔피언 목록</h1>
-        <Button variant="secondary" onClick={handleSync} disabled={syncing}>
-          {syncing ? '동기화 중...' : '데이터 동기화'}
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Champion Index"
+        title="챔피언 목록"
+        description="내전에서 사용하는 챔피언 풀, ARAM 역할, 티어, 승률 정보를 확인합니다."
+        meta={(
+          <>
+            <StatusPill tone="gold">{champions.length}개 챔피언</StatusPill>
+            {roleFilter && <StatusPill tone="blue">{ARAM_ROLE_LABELS[roleFilter]}</StatusPill>}
+            {tierFilter && <StatusPill tone="purple">{tierFilter} 티어</StatusPill>}
+          </>
+        )}
+        actions={<Button variant="secondary" onClick={handleSync} disabled={syncing}>{syncing ? '동기화 중...' : '데이터 동기화'}</Button>}
+      />
 
       {/* Role Stats */}
       <div className="flex flex-wrap gap-2">
@@ -61,34 +68,35 @@ export function Champions() {
       </div>
 
       {/* Filters */}
-      <Card>
-        <div className="flex flex-wrap gap-3">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="챔피언 검색..."
-            className="bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold flex-1 min-w-[200px]"
-          />
-          <select
-            value={tierFilter}
-            onChange={(e) => setTierFilter(e.target.value as AramTier | '')}
-            className="bg-lol-blue border border-lol-border rounded px-3 py-1.5 text-sm text-lol-gold-light cursor-pointer"
-          >
-            <option value="">전체 티어</option>
-            {(['S', 'A', 'B', 'C', 'D'] as AramTier[]).map((t) => (
-              <option key={t} value={t}>{t} 티어</option>
-            ))}
-          </select>
-          <span className="text-sm text-lol-gold-light/50 self-center">
-            {filtered.length}개 챔피언
-          </span>
-        </div>
-      </Card>
+      <FilterBar summary={`${filtered.length}개 챔피언`}>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="챔피언 검색..."
+          className="min-w-[200px] flex-1 rounded border border-lol-border bg-lol-blue px-3 py-1.5 text-sm text-lol-gold-light placeholder:text-lol-gold-light/30 focus:border-lol-gold focus:outline-none"
+        />
+        <select
+          value={tierFilter}
+          onChange={(e) => setTierFilter(e.target.value as AramTier | '')}
+          className="rounded border border-lol-border bg-lol-blue px-3 py-1.5 text-sm text-lol-gold-light cursor-pointer"
+        >
+          <option value="">전체 티어</option>
+          {(['S', 'A', 'B', 'C', 'D'] as AramTier[]).map((t) => (
+            <option key={t} value={t}>{t} 티어</option>
+          ))}
+        </select>
+      </FilterBar>
 
       {/* Champion Grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-        {filtered.map((champ) => (
+      {filtered.length === 0 ? (
+        <EmptyState
+          title="조건에 맞는 챔피언이 없습니다."
+          description="검색어 또는 필터를 줄여서 다시 확인하세요."
+        />
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+          {filtered.map((champ) => (
           <div
             key={champ.id}
             className="flex flex-col items-center gap-1.5 p-2 bg-lol-gray rounded border border-lol-border hover:border-lol-gold/50 transition-colors"
@@ -105,8 +113,9 @@ export function Champions() {
               {champ.damageType} | {champ.aramWinrate}%
             </span>
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
