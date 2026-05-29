@@ -21,6 +21,10 @@ import { TrioPlayerSynergy } from '@/components/stats/TrioPlayerSynergy';
 import { TrioChampionSynergy } from '@/components/stats/TrioChampionSynergy';
 
 type ModeFilter = 'all' | GameMode;
+type LoadOptions = {
+  background?: boolean;
+  clearCache?: boolean;
+};
 
 export function Stats() {
   const [stats, setStats] = useState<FullStats | null>(null);
@@ -29,19 +33,39 @@ export function Stats() {
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [selectedRadarPlayerIds, setSelectedRadarPlayerIds] = useState<number[]>([]);
   const radarSelectionInitializedRef = useRef(false);
+  const statsCacheRef = useRef(new Map<ModeFilter, FullStats>());
+  const loadRequestIdRef = useRef(0);
 
-  const loadStats = useCallback(() => {
-    setLoading(true);
+  const loadStats = useCallback((options: LoadOptions = {}) => {
+    const requestId = ++loadRequestIdRef.current;
+    if (options.clearCache) statsCacheRef.current.clear();
+    const cached = options.clearCache ? undefined : statsCacheRef.current.get(modeFilter);
+    if (cached) {
+      setStats(cached);
+      setLoading(false);
+    } else if (!options.background) {
+      setLoading(true);
+    }
     setLoadError(false);
     const filter = modeFilter === 'all' ? undefined : modeFilter;
     computeFullStats(filter)
-      .then((s) => { setStats(s); })
-      .catch((error) => {
-        console.error('Failed to load stats:', error);
-        setStats(null);
-        setLoadError(true);
+      .then((s) => {
+        if (requestId !== loadRequestIdRef.current) return;
+        statsCacheRef.current.set(modeFilter, s);
+        setStats(s);
       })
-      .finally(() => { setLoading(false); });
+      .catch((error) => {
+        if (requestId !== loadRequestIdRef.current) return;
+        console.error('Failed to load stats:', error);
+        if (!options.background) {
+          setStats(null);
+          setLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (requestId !== loadRequestIdRef.current) return;
+        setLoading(false);
+      });
   }, [modeFilter]);
 
   useEffect(() => {
@@ -50,7 +74,7 @@ export function Stats() {
   }, [loadStats]);
 
   useEffect(() => {
-    const handleDataChanged = () => { loadStats(); };
+    const handleDataChanged = () => { loadStats({ background: true, clearCache: true }); };
     window.addEventListener('lol-data-changed', handleDataChanged);
     return () => window.removeEventListener('lol-data-changed', handleDataChanged);
   }, [loadStats]);

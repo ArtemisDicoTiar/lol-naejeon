@@ -33,10 +33,16 @@ export function computeStatsFromData(
 ): WinrateStats {
   const playerChampMap = new Map<string, { wins: number; losses: number }>();
   const champMap = new Map<string, { wins: number; losses: number }>();
+  const picksByGameId = new Map<number | undefined, MinimalPick[]>();
+  for (const pick of picks) {
+    const gamePicks = picksByGameId.get(pick.gameId) ?? [];
+    gamePicks.push(pick);
+    picksByGameId.set(pick.gameId, gamePicks);
+  }
 
   for (const game of games) {
     if (game.winningTeam === null) continue;
-    const gamePicks = picks.filter((p) => p.gameId === game.id);
+    const gamePicks = picksByGameId.get(game.id) ?? [];
     for (const pick of gamePicks) {
       const won = pick.team === game.winningTeam;
       const key = `${pick.playerId}:${pick.championId}`;
@@ -93,7 +99,7 @@ export function computeStatsFromData(
 
   const playerOverallMap = new Map<number, { wins: number; losses: number; picks: number; champStats: Map<string, { wins: number; losses: number; picks: number }> }>();
   for (const game of games) {
-    const gp = picks.filter((p) => p.gameId === game.id);
+    const gp = picksByGameId.get(game.id) ?? [];
     for (const pick of gp) {
       const po = playerOverallMap.get(pick.playerId) ?? { wins: 0, losses: 0, picks: 0, champStats: new Map() };
       po.picks++;

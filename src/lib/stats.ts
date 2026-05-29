@@ -1,5 +1,6 @@
-import { db, type Champion, type Game, type GameMode, type GameParticipantStat, type GamePick, type Player, getPlayerProficiencies, getActiveSession } from './db';
-import { computeWinrateStats, type WinrateStats } from './recommendation/winrate';
+import { db, type Champion, type Game, type GameMode, type GameParticipantStat, type GamePick, type Player, getActiveSession } from './db';
+import type { WinrateStats } from './recommendation/winrate';
+import { computeStatsFromData } from './recommendation/winrate-pure';
 import { aramChampionMeta } from '@/data/aram-champion-meta';
 import { resolveParticipantStatsToPicks } from './participant-stats';
 
@@ -20,11 +21,15 @@ export function computePlayerStreaksFromData(
   picks: GamePick[],
 ): Record<number, PlayerStreakEntry> {
   const completed = games.filter((g) => g.winningTeam !== null && g.id !== undefined);
+  const pickByGameAndPlayer = new Map<string, GamePick>();
+  for (const pick of picks) {
+    pickByGameAndPlayer.set(`${pick.gameId}:${pick.playerId}`, pick);
+  }
   const out: Record<number, PlayerStreakEntry> = {};
   for (const pid of playerIds) {
     const buckets = new Map<string, { wins: number; losses: number }>();
     for (const g of completed) {
-      const myPick = picks.find((p) => p.gameId === g.id && p.playerId === pid);
+      const myPick = pickByGameAndPlayer.get(`${g.id}:${pid}`);
       if (!myPick) continue;
       const key = dayKey(new Date(g.playedAt));
       const b = buckets.get(key) ?? { wins: 0, losses: 0 };
@@ -68,12 +73,16 @@ export function computeSessionStreaksFromData(
   const sessionGames = games
     .filter((g) => g.winningTeam !== null && g.id !== undefined && g.sessionId === sessionId)
     .sort((a, b) => b.gameNumber - a.gameNumber); // newest gameNumber first
+  const pickByGameAndPlayer = new Map<string, GamePick>();
+  for (const pick of picks) {
+    pickByGameAndPlayer.set(`${pick.gameId}:${pick.playerId}`, pick);
+  }
   const out: Record<number, PlayerStreakEntry> = {};
   for (const pid of playerIds) {
     let type: 'W' | 'L' | null = null;
     let count = 0;
     for (const g of sessionGames) {
-      const myPick = picks.find((p) => p.gameId === g.id && p.playerId === pid);
+      const myPick = pickByGameAndPlayer.get(`${g.id}:${pid}`);
       if (!myPick) continue;
       const result: 'W' | 'L' = myPick.team === g.winningTeam ? 'W' : 'L';
       if (type === null) { type = result; count = 1; continue; }
@@ -249,13 +258,14 @@ const RECENT_GAMES_WINDOW = 5;
 const ROLE_WINRATE_PRIOR_GAMES = 4;
 
 export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats> {
-  const [wrStats, players, champions, allGamesRaw, allPicksRaw, allParticipantStatsRaw] = await Promise.all([
-    computeWinrateStats(modeFilter),
+  const [players, champions, allGamesRaw, allPicksRaw, allBansRaw, allParticipantStatsRaw, allProficiencies] = await Promise.all([
     db.players.toArray(),
     db.champions.toArray(),
     db.games.toArray(),
     db.gamePicks.toArray(),
+    db.gameBans.toArray(),
     db.gameParticipantStats.toArray(),
+    db.proficiencies.toArray(),
   ]);
   // Apply same mode filter to games/picks so downstream calcs (radar, role
   // dist, head-to-head, trio synergy, etc.) only see the requested mode.
@@ -266,14 +276,23 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
   const allPicks = gameIdSet
     ? allPicksRaw.filter((p) => gameIdSet.has(p.gameId))
     : allPicksRaw;
+  const allBans = gameIdSet
+    ? allBansRaw.filter((b) => gameIdSet.has(b.gameId))
+    : allBansRaw;
+  const wrStats = computeStatsFromData(allGames, allPicks, allBans);
+  const gameMap = new Map(allGames.map((game) => [game.id, game]));
   const filteredParticipantStats = gameIdSet
     ? allParticipantStatsRaw.filter((row) => row.gameId && gameIdSet.has(row.gameId))
     : allParticipantStatsRaw.filter((row) => row.gameId);
   const picksByGameId = new Map<number, GamePick[]>();
+  const picksByPlayerId = new Map<number, GamePick[]>();
   for (const pick of allPicks) {
-    const list = picksByGameId.get(pick.gameId) ?? [];
-    list.push(pick);
-    picksByGameId.set(pick.gameId, list);
+    const gamePicks = picksByGameId.get(pick.gameId) ?? [];
+    gamePicks.push(pick);
+    picksByGameId.set(pick.gameId, gamePicks);
+    const playerPicks = picksByPlayerId.get(pick.playerId) ?? [];
+    playerPicks.push(pick);
+    picksByPlayerId.set(pick.playerId, playerPicks);
   }
   const participantStatsByGameId = new Map<number, GameParticipantStat[]>();
   for (const row of filteredParticipantStats) {
@@ -285,6 +304,19 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
   const allParticipantStats = [...participantStatsByGameId.entries()].flatMap(([gameId, rows]) =>
     resolveParticipantStatsToPicks(rows, picksByGameId.get(gameId) ?? []),
   );
+  const participantStatsByPlayerId = new Map<number, GameParticipantStat[]>();
+  for (const row of allParticipantStats) {
+    if (!row.playerId) continue;
+    const rows = participantStatsByPlayerId.get(row.playerId) ?? [];
+    rows.push(row);
+    participantStatsByPlayerId.set(row.playerId, rows);
+  }
+  const proficienciesByPlayerId = new Map<number, Map<string, string>>();
+  for (const proficiency of allProficiencies) {
+    const map = proficienciesByPlayerId.get(proficiency.playerId) ?? new Map<string, string>();
+    map.set(proficiency.championId, proficiency.level);
+    proficienciesByPlayerId.set(proficiency.playerId, map);
+  }
 
   const champMap = new Map(champions.map((c) => [c.id, c]));
 
@@ -304,7 +336,7 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
 
   const globalRoleWins: Record<string, { picks: number; wins: number }> = {};
   for (const pick of allPicks) {
-    const game = allGames.find((g) => g.id === pick.gameId);
+    const game = gameMap.get(pick.gameId);
     const champ = champMap.get(pick.championId);
     if (!game || game.winningTeam === null || !champ || !VISIBLE_ROLE_KEYS.has(champ.aramRole)) continue;
     const role = champ.aramRole;
@@ -332,9 +364,9 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
   for (const player of players) {
     const pid = player.id!;
     const pStats = wrStats.playerOverallStats[pid];
-    const playerPicks = allPicks.filter((p) => p.playerId === pid);
-    const playerParticipantStats = allParticipantStats.filter((row) => row.playerId === pid);
-    const profMap = await getPlayerProficiencies(pid);
+    const playerPicks = picksByPlayerId.get(pid) ?? [];
+    const playerParticipantStats = participantStatsByPlayerId.get(pid) ?? [];
+    const profMap = proficienciesByPlayerId.get(pid) ?? new Map<string, string>();
 
     const winrate = pStats?.winrate ?? 0;
 
@@ -343,7 +375,7 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
     for (const pick of playerPicks) {
       const champ = champMap.get(pick.championId);
       if (!champ) continue;
-      const game = allGames.find((g) => g.id === pick.gameId);
+      const game = gameMap.get(pick.gameId);
       if (!game || game.winningTeam === null) continue;
       const role = champ.aramRole;
       if (!roleWins[role]) roleWins[role] = { picks: 0, wins: 0 };
@@ -365,7 +397,7 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
     // Champion pool breadth (kept for separate display)
     const uniqueChampMap = new Map<string, { picks: number; wins: number; losses: number }>();
     for (const pick of playerPicks) {
-      const game = allGames.find((g) => g.id === pick.gameId);
+      const game = gameMap.get(pick.gameId);
       if (!game) continue;
       const rec = uniqueChampMap.get(pick.championId) ?? { picks: 0, wins: 0, losses: 0 };
       rec.picks++;
@@ -386,7 +418,7 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
     for (const pick of playerPicks) {
       const prof = profMap.get(pick.championId);
       if (prof === 'S' || prof === '상' || prof === '중') {
-        const game = allGames.find((g) => g.id === pick.gameId);
+        const game = gameMap.get(pick.gameId);
         if (game?.winningTeam !== null) {
           carryTotal++;
           if (pick.team === game!.winningTeam) carryWins++;
@@ -414,7 +446,7 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
     let recentWins = 0, recentLosses = 0;
     for (const g of gamesByRecent) {
       if (recentWins + recentLosses >= RECENT_GAMES_WINDOW) break;
-      const myPick = allPicks.find((p) => p.gameId === g.id && p.playerId === pid);
+      const myPick = (picksByGameId.get(g.id!) ?? []).find((p) => p.playerId === pid);
       if (!myPick) continue;
       if (myPick.team === g.winningTeam) recentWins++; else recentLosses++;
     }
@@ -480,67 +512,81 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
     if (game.winningTeam === null || game.id === undefined) continue;
     gameResultMap.set(game.id, game.winningTeam);
     const map = new Map<number, number>();
-    for (const p of allPicks) {
-      if (p.gameId === game.id) map.set(p.playerId, p.team);
-    }
+    for (const p of picksByGameId.get(game.id) ?? []) map.set(p.playerId, p.team);
     gameTeamMap.set(game.id, map);
   }
 
-  const headToHead: HeadToHeadEntry[] = [];
-  for (let i = 0; i < players.length; i++) {
-    for (let j = i + 1; j < players.length; j++) {
-      const p1 = players[i].id!, p2 = players[j].id!;
-      let sameW = 0, sameL = 0;
-      for (const [gameId, teamMap] of gameTeamMap) {
-        const t1 = teamMap.get(p1);
-        const t2 = teamMap.get(p2);
-        if (t1 == null || t2 == null) continue;
-        if (t1 !== t2) continue;
-        const winner = gameResultMap.get(gameId)!;
-        if (t1 === winner) sameW++; else sameL++;
+  const pairStats = new Map<string, { player1Id: number; player2Id: number; wins: number; losses: number }>();
+  const trioStats = new Map<string, { playerIds: [number, number, number]; wins: number; losses: number }>();
+  const MIN_TRIO_GAMES = 3;
+
+  for (const [gameId, teamMap] of gameTeamMap) {
+    const winner = gameResultMap.get(gameId)!;
+    const teamPlayers = new Map<number, number[]>();
+    for (const [playerId, team] of teamMap) {
+      const list = teamPlayers.get(team) ?? [];
+      list.push(playerId);
+      teamPlayers.set(team, list);
+    }
+
+    for (const [team, playerIds] of teamPlayers) {
+      const sortedIds = [...playerIds].sort((a, b) => a - b);
+      const won = team === winner;
+
+      for (let i = 0; i < sortedIds.length; i++) {
+        for (let j = i + 1; j < sortedIds.length; j++) {
+          const player1Id = sortedIds[i];
+          const player2Id = sortedIds[j];
+          const key = `${player1Id}:${player2Id}`;
+          const rec = pairStats.get(key) ?? { player1Id, player2Id, wins: 0, losses: 0 };
+          if (won) rec.wins++; else rec.losses++;
+          pairStats.set(key, rec);
+        }
       }
-      const total = sameW + sameL;
-      if (total > 0) {
-        headToHead.push({ player1Id: p1, player2Id: p2, sameTeamWins: sameW, sameTeamLosses: sameL, sameTeamWinrate: (sameW / total) * 100 });
+
+      for (let i = 0; i < sortedIds.length; i++) {
+        for (let j = i + 1; j < sortedIds.length; j++) {
+          for (let k = j + 1; k < sortedIds.length; k++) {
+            const playerIds = [sortedIds[i], sortedIds[j], sortedIds[k]] as [number, number, number];
+            const key = playerIds.join(':');
+            const rec = trioStats.get(key) ?? { playerIds, wins: 0, losses: 0 };
+            if (won) rec.wins++; else rec.losses++;
+            trioStats.set(key, rec);
+          }
+        }
       }
     }
   }
 
-  // 3-player synergy: any trio of our players who played together on the same team
-  const trioPlayerSynergy: TrioPlayerSynergyEntry[] = [];
-  const MIN_TRIO_GAMES = 3;
-  for (let i = 0; i < players.length; i++) {
-    for (let j = i + 1; j < players.length; j++) {
-      for (let k = j + 1; k < players.length; k++) {
-        const p1 = players[i].id!, p2 = players[j].id!, p3 = players[k].id!;
-        let wins = 0, losses = 0;
-        for (const [gameId, teamMap] of gameTeamMap) {
-          const t1 = teamMap.get(p1);
-          const t2 = teamMap.get(p2);
-          const t3 = teamMap.get(p3);
-          if (t1 == null || t2 == null || t3 == null) continue;
-          if (t1 !== t2 || t2 !== t3) continue;
-          if (t1 === gameResultMap.get(gameId)!) wins++; else losses++;
-        }
-        const total = wins + losses;
-        if (total >= MIN_TRIO_GAMES) {
-          trioPlayerSynergy.push({
-            playerIds: [p1, p2, p3],
-            sameTeamWins: wins,
-            sameTeamLosses: losses,
-            winrate: (wins / total) * 100,
-          });
-        }
-      }
-    }
-  }
+  const headToHead: HeadToHeadEntry[] = [...pairStats.values()].map((rec) => {
+    const total = rec.wins + rec.losses;
+    return {
+      player1Id: rec.player1Id,
+      player2Id: rec.player2Id,
+      sameTeamWins: rec.wins,
+      sameTeamLosses: rec.losses,
+      sameTeamWinrate: total > 0 ? (rec.wins / total) * 100 : 0,
+    };
+  });
+
+  const trioPlayerSynergy: TrioPlayerSynergyEntry[] = [...trioStats.values()]
+    .filter((rec) => rec.wins + rec.losses >= MIN_TRIO_GAMES)
+    .map((rec) => {
+      const total = rec.wins + rec.losses;
+      return {
+        playerIds: rec.playerIds,
+        sameTeamWins: rec.wins,
+        sameTeamLosses: rec.losses,
+        winrate: total > 0 ? (rec.wins / total) * 100 : 0,
+      };
+    });
   trioPlayerSynergy.sort((a, b) => b.winrate - a.winrate);
 
   // --- Role Distribution ---
   const computeRoleDist = (filter: (game: typeof allGames[0], pick: typeof allPicks[0]) => boolean) => {
     const dist: Record<string, { count: number; wins: number }> = {};
     for (const pick of allPicks) {
-      const game = allGames.find((g) => g.id === pick.gameId);
+      const game = gameMap.get(pick.gameId);
       if (!game || game.winningTeam === null) continue;
       if (!filter(game, pick)) continue;
       const champ = champMap.get(pick.championId);
