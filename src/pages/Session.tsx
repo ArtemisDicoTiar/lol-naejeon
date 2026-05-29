@@ -37,7 +37,18 @@ export function Session() {
   const autoNavigateRef = useRef(false);
 
   useEffect(() => { db.players.toArray().then(setPlayers); }, []);
-  useEffect(() => { computeWinrateStats().then(setWrStats); }, [games]);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void computeWinrateStats().then((next) => {
+        if (!cancelled) setWrStats(next);
+      });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [games]);
 
   // Pending game = last game without winningTeam (in progress)
   const pendingGame = useMemo(
@@ -114,18 +125,29 @@ export function Session() {
   }, [lcu.champSelectActive, lcu.connected, lcu.gameStartedAt, location.pathname, session, isMaster, navigate]);
 
   const loadAncillaryGameData = useCallback(async () => {
+    const rows = await Promise.all(games.map(async (game) => {
+      const [picks, bans, capture] = await Promise.all([
+        db.gamePicks.where('gameId').equals(game.id!).toArray(),
+        db.gameBans.where('gameId').equals(game.id!).toArray(),
+        db.gameEogCaptures.where('gameId').equals(game.id!).last(),
+      ]);
+      const participantStats = capture
+        ? await db.gameParticipantStats.where('captureId').equals(capture.id!).toArray()
+        : [];
+      return { gameId: game.id!, picks, bans, capture, participantStats };
+    }));
+
     const picks: Record<number, GamePick[]> = {};
     const bans: Record<number, GameBan[]> = {};
     const eogMap: Record<number, GameEogCapture> = {};
     const eogStatsMap: Record<number, GameParticipantStat[]> = {};
 
-    for (const game of games) {
-      picks[game.id!] = await db.gamePicks.where('gameId').equals(game.id!).toArray();
-      bans[game.id!] = await db.gameBans.where('gameId').equals(game.id!).toArray();
-      const capture = await db.gameEogCaptures.where('gameId').equals(game.id!).last();
-      if (capture) {
-        eogMap[game.id!] = capture;
-        eogStatsMap[game.id!] = await db.gameParticipantStats.where('captureId').equals(capture.id!).toArray();
+    for (const row of rows) {
+      picks[row.gameId] = row.picks;
+      bans[row.gameId] = row.bans;
+      if (row.capture) {
+        eogMap[row.gameId] = row.capture;
+        eogStatsMap[row.gameId] = row.participantStats;
       }
     }
 

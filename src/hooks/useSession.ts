@@ -15,9 +15,10 @@ export function useSession() {
   const [fierlessBans, setFierlessBans] = useState<string[]>([]);
   const [lastGameTeams, setLastGameTeams] = useState<LastGameTeams | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       const s = await getActiveSession();
       setSession(s);
@@ -47,6 +48,7 @@ export function useSession() {
         setLastGameTeams(null);
       }
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
     }
   }, []);

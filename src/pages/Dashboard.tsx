@@ -58,11 +58,12 @@ export function Dashboard() {
       const next = await computeFullStats();
       if (!cancelled) setStats(next);
     };
-    void loadStats();
-    const handleDataChanged = () => { void loadStats(); };
+    const timer = window.setTimeout(() => { void loadStats(); }, 0);
+    const handleDataChanged = () => { window.setTimeout(() => { void loadStats(); }, 0); };
     window.addEventListener('lol-data-changed', handleDataChanged);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
       window.removeEventListener('lol-data-changed', handleDataChanged);
     };
   }, []);

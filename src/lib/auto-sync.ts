@@ -25,11 +25,15 @@ export async function syncToVercel(): Promise<{ success: boolean; message: strin
 
 // Load shared data from Vercel Blob
 export async function loadFromVercel(): Promise<any | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3500);
   try {
-    const res = await fetch('/api/get-data');
+    const res = await fetch('/api/get-data', { signal: controller.signal });
     if (!res.ok) return null;
     return await res.json();
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
