@@ -3,7 +3,6 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ActionGroup, EmptyState, PageHeader, StatusPill } from '@/components/ui/Page';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
-import { EogStatsPanel } from '@/components/session/EogStatsPanel';
 import { db, deleteSession, GAME_MODE_LABELS, updateGameMode, updateSessionName, type Champion, type Game, type GameEogCapture, type GameMode, type GameParticipantStat, type GamePick, type Player, type Session } from '@/lib/db';
 import { importRetroCustomGames } from '@/lib/history-import';
 import { syncToVercel } from '@/lib/auto-sync';
@@ -290,15 +289,35 @@ export function History() {
           description="세션을 진행하거나 클라이언트 연결 후 최근 커스텀 경기를 가져오면 기록이 쌓입니다."
         />
       ) : (
-        sessions.map((session) => (
-          <Card key={session.id} title={`${session.name} (${session.games.length}게임)`}>
-            <ActionGroup className="mb-3">
-              <StatusPill tone="gold">{new Date(session.createdAt).toLocaleDateString('ko-KR')}</StatusPill>
-              <StatusPill tone="blue">{session.games.filter((game) => game.winningTeam !== null).length}완료</StatusPill>
-              <Button size="sm" variant="ghost" onClick={() => handleRenameSession(session.id!, session.name)}>이름 수정</Button>
-              <Button size="sm" variant="danger" onClick={() => handleDeleteSession(session.id!, session.name)}>세션 삭제</Button>
-            </ActionGroup>
-            <div className="space-y-3">
+        sessions.map((session) => {
+          const completedCount = session.games.filter((game) => game.winningTeam !== null).length;
+          const team1Wins = session.games.filter((game) => game.winningTeam === 1).length;
+          const team2Wins = session.games.filter((game) => game.winningTeam === 2).length;
+          const scoreTotal = Math.max(team1Wins + team2Wins, 1);
+          return (
+          <Card key={session.id} title={session.name}>
+            <div className="mb-3 rounded-xl border border-lol-border/70 bg-lol-dark/35 p-3">
+              <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill tone="gold">◷ {new Date(session.createdAt).toLocaleDateString('ko-KR')}</StatusPill>
+                  <StatusPill tone="blue">⚔ {session.games.length}게임</StatusPill>
+                  <StatusPill tone="green">✓ {completedCount}완료</StatusPill>
+                </div>
+                <ActionGroup>
+                  <Button size="sm" variant="ghost" onClick={() => handleRenameSession(session.id!, session.name)}>이름 수정</Button>
+                  <Button size="sm" variant="danger" onClick={() => handleDeleteSession(session.id!, session.name)}>세션 삭제</Button>
+                </ActionGroup>
+              </div>
+              <div className="flex h-2.5 overflow-hidden rounded-full bg-lol-blue">
+                <div className="bg-blue-500/85" style={{ width: `${(team1Wins / scoreTotal) * 100}%` }} />
+                <div className="bg-red-500/85" style={{ width: `${(team2Wins / scoreTotal) * 100}%` }} />
+              </div>
+              <div className="mt-1 flex justify-between text-[11px]">
+                <span className="text-blue-300">T1 {team1Wins}승</span>
+                <span className="text-red-300">T2 {team2Wins}승</span>
+              </div>
+            </div>
+            <div className="space-y-2">
               {session.games.map((game) => {
                 const isEditing = editingGameId === game.id;
                 const displayPicks = isEditing
@@ -307,32 +326,42 @@ export function History() {
                 const displayTeam1 = displayPicks.filter((pick) => pick.team === 1);
                 const displayTeam2 = displayPicks.filter((pick) => pick.team === 2);
                 return (
-                  <div key={game.id} className="rounded-lg border border-lol-border bg-lol-blue p-3">
-                    <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-lol-gold font-medium text-sm">
-                          #{game.gameNumber} {game.format}
+                  <div key={game.id} className="overflow-hidden rounded-xl border border-lol-border/80 bg-[linear-gradient(135deg,rgba(10,20,40,0.92),rgba(1,10,19,0.68))]">
+                    <div className="flex flex-col gap-2 border-b border-lol-border/55 bg-lol-dark/25 p-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full border text-xs font-black ${
+                          game.winningTeam === 1
+                            ? 'border-blue-500/45 bg-blue-950/35 text-blue-200'
+                            : game.winningTeam === 2
+                              ? 'border-red-500/45 bg-red-950/35 text-red-200'
+                              : 'border-yellow-500/35 bg-yellow-950/25 text-yellow-200'
+                        }`}>
+                          {game.winningTeam ? `T${game.winningTeam}` : '…'}
+                        </span>
+                        <span className="text-sm font-bold text-lol-gold">#{game.gameNumber}</span>
+                        <span title="포맷" className="rounded border border-lol-border/60 bg-lol-dark/45 px-2 py-0.5 text-[11px] text-lol-gold-light/65">
+                          ⚔ {game.format}
                         </span>
                         <button
                           disabled={!isMaster}
                           onClick={() => isMaster ? void handleToggleGameMode(game) : undefined}
                           title={isMaster ? '클릭해서 모드 전환' : undefined}
-                          className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+                          className={`rounded border px-2 py-0.5 text-[11px] transition-colors ${
                             (game.mode ?? 'aram') === 'augmented'
                               ? 'border-purple-700/50 bg-purple-900/40 text-purple-300'
                               : 'border-lol-border bg-lol-blue/40 text-lol-gold-light/70'
                           } ${isMaster ? 'cursor-pointer hover:border-lol-gold/50' : ''}`}
                         >
-                          {GAME_MODE_LABELS[game.mode ?? 'aram']}
+                          {(game.mode ?? 'aram') === 'augmented' ? '✦' : '❄'} {GAME_MODE_LABELS[game.mode ?? 'aram']}
                         </button>
-                        <span className="text-[10px] text-lol-gold-light/35">
-                          {new Date(game.playedAt).toLocaleString('ko-KR')}
+                        <span className="truncate text-[11px] text-lol-gold-light/35">
+                          ◷ {new Date(game.playedAt).toLocaleString('ko-KR')}
                         </span>
-                        {game.eogCapture && <StatusPill tone="green" className="px-2 py-0.5 text-[10px]">EOG</StatusPill>}
+                        {game.eogCapture && <StatusPill tone="green" className="px-2 py-0.5 text-[10px]">📊 EOG</StatusPill>}
                       </div>
                       <ActionGroup>
                         {game.winningTeam && (
-                          <StatusPill tone="green">Team {game.winningTeam} 승</StatusPill>
+                          <StatusPill tone={game.winningTeam === 1 ? 'blue' : 'red'}>🏆 Team {game.winningTeam}</StatusPill>
                         )}
                         {isMaster && (
                           <>
@@ -361,74 +390,223 @@ export function History() {
                         )}
                       </ActionGroup>
                     </div>
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      {[displayTeam1, displayTeam2].map((team, idx) => (
-                        <div key={idx} className="space-y-1">
-                          <div className="text-xs text-lol-gold/70">Team {idx + 1}</div>
-                          {team.map((pick) => {
-                            const champion = getChampion(pick.championId);
-                            if (isEditing) {
-                              return (
-                                <div key={pick.id} className="flex items-center gap-1">
-                                  {champion && <ChampionIcon champion={champion} size="sm" />}
-                                  <select
-                                    value={pick.playerId}
-                                    onChange={(e) => updateDraftPick(game.id!, pick.id!, { playerId: Number(e.target.value) })}
-                                    className="bg-lol-dark border border-lol-border rounded px-1 py-0.5 text-[11px] text-lol-gold-light max-w-[90px] cursor-pointer"
-                                  >
-                                    {sortedPlayers.map((p) => (
-                                      <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                  </select>
-                                  <select
-                                    value={pick.championId}
-                                    onChange={(e) => updateDraftPick(game.id!, pick.id!, { championId: e.target.value })}
-                                    className="bg-lol-dark border border-lol-border rounded px-1 py-0.5 text-[11px] text-lol-gold-light max-w-[100px] cursor-pointer"
-                                  >
-                                    {sortedChampions.map((c) => (
-                                      <option key={c.id} value={c.id}>{c.nameKo}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              );
-                            }
-                            return (
-                              <div key={pick.id} className="flex items-center gap-1.5">
-                                {champion && <ChampionIcon champion={champion} size="sm" />}
-                                <span className="text-xs text-lol-gold-light/80">
-                                  {getPlayer(pick.playerId)?.name} - {champion?.nameKo}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
+                    <div className="space-y-3 p-3">
+                      <HistoryPickGrid
+                        gameId={game.id!}
+                        team1={displayTeam1}
+                        team2={displayTeam2}
+                        winningTeam={game.winningTeam}
+                        isEditing={isEditing}
+                        sortedPlayers={sortedPlayers}
+                        sortedChampions={sortedChampions}
+                        getPlayer={getPlayer}
+                        getChampion={getChampion}
+                        onUpdatePick={updateDraftPick}
+                      />
                     {game.eogCapture && game.participantStats.length > 0 && (
-                      <div className="pt-3 border-t border-lol-border/50">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="text-xs text-lol-gold-light/60">
-                            종료 후 통계 · {new Date(game.eogCapture.capturedAt).toLocaleString('ko-KR')}
+                      <div className="rounded-xl border border-lol-border/60 bg-lol-dark/30 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="text-xs font-semibold text-lol-gold-light/70">
+                            📊 {new Date(game.eogCapture.capturedAt).toLocaleTimeString('ko-KR')}
                           </div>
                           <div className="text-[10px] text-lol-gold-light/45">
-                            {game.eogCapture.mappedParticipants}/{game.eogCapture.participantCount}명 매핑
+                            매핑 {game.eogCapture.mappedParticipants}/{game.eogCapture.participantCount}
                           </div>
                         </div>
-                        <EogStatsPanel
+                        <HistoryEogSummary
                           participantStats={game.participantStats}
-                          players={players}
-                          champions={champions}
+                          getPlayer={getPlayer}
+                          getChampion={getChampion}
                           winnerTeam={game.eogCapture.winnerTeam}
                         />
                       </div>
                     )}
+                    </div>
                   </div>
                 );
               })}
             </div>
           </Card>
-        ))
+          );
+        })
       )}
+    </div>
+  );
+}
+
+function formatHistoryNumber(value: number) {
+  if (value >= 10000) return `${(value / 10000).toFixed(value >= 100000 ? 0 : 1)}만`;
+  return Math.round(value).toLocaleString('ko-KR');
+}
+
+function HistoryPickGrid({
+  gameId,
+  team1,
+  team2,
+  winningTeam,
+  isEditing,
+  sortedPlayers,
+  sortedChampions,
+  getPlayer,
+  getChampion,
+  onUpdatePick,
+}: {
+  gameId: number;
+  team1: GamePick[];
+  team2: GamePick[];
+  winningTeam: number | null;
+  isEditing: boolean;
+  sortedPlayers: Player[];
+  sortedChampions: Champion[];
+  getPlayer: (id: number) => Player | undefined;
+  getChampion: (id: string) => Champion | undefined;
+  onUpdatePick: (
+    gameId: number,
+    pickId: number,
+    changes: Partial<Pick<GamePick, 'playerId' | 'championId'>>,
+  ) => void;
+}) {
+  const renderTeam = (team: GamePick[], teamNum: 1 | 2) => (
+    <div className={`rounded-xl border p-2.5 ${
+      teamNum === 1 ? 'border-blue-700/25 bg-blue-950/12' : 'border-red-700/25 bg-red-950/12'
+    } ${winningTeam === teamNum ? 'ring-1 ring-prof-high/35' : ''}`}>
+      <div className="mb-2 flex items-center justify-between">
+        <span className={`text-xs font-bold ${teamNum === 1 ? 'text-blue-300' : 'text-red-300'}`}>● T{teamNum}</span>
+        {winningTeam === teamNum && <span className="text-[10px] text-prof-high">WIN</span>}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {team.map((pick) => {
+          const champion = getChampion(pick.championId);
+          const player = getPlayer(pick.playerId);
+          if (isEditing) {
+            return (
+              <div key={pick.id} className="flex min-w-[220px] flex-1 items-center gap-1 rounded-lg border border-lol-border/55 bg-lol-dark/45 p-1.5">
+                {champion && <ChampionIcon champion={champion} size="sm" />}
+                <select
+                  value={pick.playerId}
+                  onChange={(event) => onUpdatePick(gameId, pick.id!, { playerId: Number(event.target.value) })}
+                  className="min-w-0 flex-1 cursor-pointer rounded border border-lol-border bg-lol-dark px-1 py-0.5 text-[11px] text-lol-gold-light"
+                >
+                  {sortedPlayers.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={pick.championId}
+                  onChange={(event) => onUpdatePick(gameId, pick.id!, { championId: event.target.value })}
+                  className="min-w-0 flex-1 cursor-pointer rounded border border-lol-border bg-lol-dark px-1 py-0.5 text-[11px] text-lol-gold-light"
+                >
+                  {sortedChampions.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>{candidate.nameKo}</option>
+                  ))}
+                </select>
+              </div>
+            );
+          }
+          return (
+            <div
+              key={pick.id}
+              title={`${player?.name ?? '?'} · ${champion?.nameKo ?? pick.championId}`}
+              className="flex items-center gap-1.5 rounded-lg border border-lol-border/45 bg-lol-dark/35 px-1.5 py-1"
+            >
+              {champion
+                ? <img src={champion.imageUrl} className="h-7 w-7 rounded object-cover" />
+                : <div className="h-7 w-7 rounded border border-dashed border-lol-border/60" />}
+              <span className="max-w-24 truncate text-[11px] text-lol-gold-light/75">
+                {player?.name ?? '?'}
+              </span>
+            </div>
+          );
+        })}
+        {team.length === 0 && <div className="text-xs text-lol-gold-light/35">픽 없음</div>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="grid gap-2 lg:grid-cols-2">
+      {renderTeam(team1, 1)}
+      {renderTeam(team2, 2)}
+    </div>
+  );
+}
+
+function HistoryEogSummary({
+  participantStats,
+  getPlayer,
+  getChampion,
+  winnerTeam,
+}: {
+  participantStats: GameParticipantStat[];
+  getPlayer: (id: number) => Player | undefined;
+  getChampion: (id: string) => Champion | undefined;
+  winnerTeam?: number | null;
+}) {
+  const teamDamage = [1, 2].map((team) =>
+    participantStats
+      .filter((row) => row.team === team)
+      .reduce((sum, row) => sum + row.totalDamageDealtToChampions, 0),
+  );
+  const maxTeamDamage = Math.max(...teamDamage, 1);
+  const topDamage = [...participantStats]
+    .sort((a, b) => b.totalDamageDealtToChampions - a.totalDamageDealtToChampions)
+    .slice(0, 4);
+  const maxPlayerDamage = Math.max(...topDamage.map((row) => row.totalDamageDealtToChampions), 1);
+
+  return (
+    <div className="grid gap-3 xl:grid-cols-[0.75fr_1.25fr]">
+      <div className="rounded-lg border border-lol-border/55 bg-lol-dark/35 p-2.5">
+        <div className="mb-2 text-xs text-lol-gold-light/50">⚔ 팀 딜량</div>
+        {[1, 2].map((team) => (
+          <div key={team} className="mb-2 last:mb-0">
+            <div className="mb-1 flex justify-between text-[11px] text-lol-gold-light/55">
+              <span className={team === 1 ? 'text-blue-300' : 'text-red-300'}>
+                T{team}{winnerTeam === team ? ' WIN' : ''}
+              </span>
+              <span>{formatHistoryNumber(teamDamage[team - 1])}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-lol-blue">
+              <div
+                className={`h-full rounded-full ${team === 1 ? 'bg-blue-500/80' : 'bg-red-500/80'}`}
+                style={{ width: `${(teamDamage[team - 1] / maxTeamDamage) * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-lg border border-lol-border/55 bg-lol-dark/35 p-2.5">
+        <div className="mb-2 text-xs text-lol-gold-light/50">★ 딜량 TOP</div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {topDamage.map((row, index) => {
+            const champion = row.championId ? getChampion(row.championId) : undefined;
+            const player = row.playerId ? getPlayer(row.playerId) : undefined;
+            return (
+              <div key={row.id ?? `${row.summonerName}-${index}`} className="rounded-lg border border-lol-border/45 bg-lol-dark/45 p-2">
+                <div className="mb-1 flex items-center gap-2">
+                  {champion && <img src={champion.imageUrl} className="h-7 w-7 rounded object-cover" />}
+                  <div className="min-w-0">
+                    <div className="truncate text-xs text-lol-gold-light/80">
+                      {index + 1}. {player?.name ?? row.alias ?? row.summonerName}
+                    </div>
+                    <div className="text-[10px] text-lol-gold-light/40">
+                      {champion?.nameKo ?? row.championId ?? '챔피언 미상'} · {row.kills}/{row.deaths}/{row.assists}
+                    </div>
+                  </div>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-lol-blue">
+                  <div
+                    className="h-full rounded-full bg-lol-gold/85"
+                    style={{ width: `${(row.totalDamageDealtToChampions / maxPlayerDamage) * 100}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-right text-[10px] text-lol-gold/80">
+                  {formatHistoryNumber(row.totalDamageDealtToChampions)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

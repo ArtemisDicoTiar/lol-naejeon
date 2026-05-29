@@ -690,136 +690,54 @@ export function Session() {
                       getPlayer={getPlayer}
                     />
                   ) : (
-                    <div className="p-3">
-                  {bans.length > 0 && (
-                    <div className="mb-3 grid gap-2 md:grid-cols-2">
-                      {([1, 2] as const).map((t) => {
-                        const teamBanList = bans.filter((b) => b.team === t);
-                        if (teamBanList.length === 0) return null;
-                        return (
-                          <div key={t} className="flex items-center gap-1.5 rounded-lg border border-red-700/20 bg-red-950/10 px-2 py-1.5">
-                            <span className="mr-1 text-[10px] font-semibold text-red-300/80">T{t} 밴</span>
-                            {teamBanList.map((b) => {
-                              const champ = getChampion(b.championId);
-                              return champ ? <ChampionIcon key={b.id} champion={champ} size="sm" disabled /> : null;
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {isLatest && wrStats && displayPicks.length > 0 && (
-                    <ActiveGameStats
-                      team1={team1}
-                      team2={team2}
-                      wrStats={wrStats}
-                      getChampion={getChampion}
-                      getPlayer={getPlayer}
-                    />
-                  )}
-                  {eogCapture && eogStats.length > 0 && (
-                    <div className="mb-3 pb-3 border-b border-lol-border/50">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-xs text-lol-gold-light/60">
-                          종료 후 통계 · {new Date(eogCapture.capturedAt).toLocaleTimeString('ko-KR')}
-                        </div>
-                        <div className="text-[10px] text-lol-gold-light/45">
-                          {eogCapture.mappedParticipants}/{eogCapture.participantCount}명 매핑
-                        </div>
-                      </div>
-                      <EogStatsPanel
-                        participantStats={eogStats}
-                        players={players}
-                        champions={champions}
-                        winnerTeam={eogCapture.winnerTeam}
-                      />
-                    </div>
-                  )}
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    {[{ team: team1, num: 1 }, { team: team2, num: 2 }].map(({ team, num }) => (
-                      <div key={num} className={`rounded-xl border p-3 ${
-                        num === 1
-                          ? 'border-blue-700/30 bg-blue-950/15'
-                          : 'border-red-700/30 bg-red-950/15'
-                      } ${game.winningTeam === num ? 'ring-1 ring-prof-high/35 shadow-[0_0_24px_rgba(10,200,120,0.08)]' : ''}`}>
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <div className={`h-2.5 w-2.5 rounded-full ${num === 1 ? 'bg-blue-400' : 'bg-red-400'}`} />
-                            <div className="text-sm font-bold text-lol-gold">Team {num}</div>
-                            <span className="rounded-full border border-lol-border/60 bg-lol-dark/45 px-2 py-0.5 text-[10px] text-lol-gold-light/45">
-                              {team.length}명
-                            </span>
-                            {game.winningTeam === num && <StatusPill tone="green" className="px-2 py-0.5 text-[10px]">Winner</StatusPill>}
-                          </div>
-                          {isEditingPicks && (
-                            <button
-                              onClick={() => addDraftPick(game.id!, num as 1 | 2)}
-                              className="cursor-pointer rounded border border-lol-border/70 px-2 py-0.5 text-[10px] text-lol-gold-light/60 hover:border-lol-gold/60 hover:text-lol-gold"
-                            >
-                              픽 추가
-                            </button>
-                          )}
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                          {team.map((pick) => {
-                            const champ = getChampion(pick.championId);
-                            const player = getPlayer(pick.playerId);
-                            if (isEditingPicks) {
-                              return (
-                                <div key={pick.draftId} className="flex items-center gap-1 rounded-lg border border-lol-border/55 bg-lol-dark/45 p-1.5">
-                                  {champ && <ChampionIcon champion={champ} size="sm" />}
-                                  <select
-                                    value={pick.playerId}
-                                    onChange={(event) => updateDraftPick(game.id!, pick.draftId, { playerId: Number(event.target.value) })}
-                                    className="min-w-0 flex-1 cursor-pointer rounded border border-lol-border bg-lol-dark px-1 py-0.5 text-[11px] text-lol-gold-light"
-                                  >
-                                    {sortedPlayers.map((candidate) => (
-                                      <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
-                                    ))}
-                                  </select>
-                                  <select
-                                    value={pick.championId}
-                                    onChange={(event) => updateDraftPick(game.id!, pick.draftId, { championId: event.target.value })}
-                                    className="min-w-0 flex-1 cursor-pointer rounded border border-lol-border bg-lol-dark px-1 py-0.5 text-[11px] text-lol-gold-light"
-                                  >
-                                    {sortedChampions.map((candidate) => (
-                                      <option key={candidate.id} value={candidate.id}>{candidate.nameKo}</option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    onClick={() => removeDraftPick(game.id!, pick.draftId)}
-                                    className="cursor-pointer px-1 text-xs text-red-400/60 hover:text-red-300"
-                                    title="픽 삭제"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              );
-                            }
-                            return (
-                              <div key={pick.draftId} className="group relative overflow-hidden rounded-lg border border-lol-border/55 bg-[linear-gradient(135deg,rgba(30,35,40,0.72),rgba(1,10,19,0.45))] p-2 transition-colors hover:border-lol-gold/35">
-                                <div className="flex items-center gap-2">
-                                  {champ
-                                    ? <img src={champ.imageUrl} className="h-10 w-10 rounded-lg border border-lol-border/60 object-cover" />
-                                    : <div className="h-10 w-10 rounded-lg border border-dashed border-lol-border/60" />}
-                                  <div className="min-w-0">
-                                    <div className="truncate text-sm font-semibold text-lol-gold-light">{player?.name ?? '알 수 없음'}</div>
-                                    <div className="truncate text-xs text-lol-gold/75">{champ?.nameKo ?? pick.championId}</div>
-                                  </div>
-                                </div>
+                    <div className="space-y-3 p-3">
+                      {bans.length > 0 && <CompactBanStrip bans={bans} getChampion={getChampion} />}
+                      {isLatest && wrStats && displayPicks.length > 0 && (
+                        <ActiveGameStats
+                          team1={team1}
+                          team2={team2}
+                          wrStats={wrStats}
+                          getChampion={getChampion}
+                          getPlayer={getPlayer}
+                        />
+                      )}
+                      <div className={`grid gap-3 ${eogCapture && eogStats.length > 0 ? 'xl:grid-cols-[0.82fr_1.18fr]' : ''}`}>
+                        <GamePickPanel
+                          gameId={game.id!}
+                          team1={team1}
+                          team2={team2}
+                          winningTeam={game.winningTeam}
+                          isEditingPicks={isEditingPicks}
+                          sortedPlayers={sortedPlayers}
+                          sortedChampions={sortedChampions}
+                          getChampion={getChampion}
+                          getPlayer={getPlayer}
+                          onAddPick={addDraftPick}
+                          onUpdatePick={updateDraftPick}
+                          onRemovePick={removeDraftPick}
+                        />
+                        {eogCapture && eogStats.length > 0 && (
+                          <div className="rounded-xl border border-lol-border/65 bg-lol-dark/30 p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <div className="text-xs font-semibold text-lol-gold-light/70">
+                                EOG · {new Date(eogCapture.capturedAt).toLocaleTimeString('ko-KR')}
                               </div>
-                            );
-                          })}
-                          {team.length === 0 && (
-                            <div className="rounded border border-dashed border-lol-border/50 px-2 py-3 text-center text-xs text-lol-gold-light/35">
-                              {isEditingPicks ? '픽 추가로 기록을 채우세요.' : '기록된 픽 없음'}
+                              <div className="text-[10px] text-lol-gold-light/45">
+                                {eogCapture.mappedParticipants}/{eogCapture.participantCount}
+                              </div>
                             </div>
-                          )}
-                        </div>
+                            <div className="max-h-[360px] overflow-y-auto pr-1">
+                              <EogStatsPanel
+                                participantStats={eogStats}
+                                players={players}
+                                champions={champions}
+                                winnerTeam={eogCapture.winnerTeam}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                  </div>
+                    </div>
                   )}
                 </div>
               );
@@ -1038,6 +956,148 @@ function CompactGameSummary({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CompactBanStrip({
+  bans,
+  getChampion,
+}: {
+  bans: GameBan[];
+  getChampion: (id: string) => Champion | undefined;
+}) {
+  return (
+    <div className="grid gap-2 md:grid-cols-2">
+      {([1, 2] as const).map((team) => {
+        const teamBans = bans.filter((ban) => ban.team === team);
+        if (teamBans.length === 0) return null;
+        return (
+          <div key={team} className="flex min-w-0 items-center gap-2 rounded-xl border border-red-700/20 bg-red-950/10 px-2 py-1.5">
+            <span className="shrink-0 text-[10px] font-semibold text-red-300/80">🚫 T{team}</span>
+            <div className="flex min-w-0 flex-wrap gap-1.5">
+              {teamBans.map((ban) => {
+                const champion = getChampion(ban.championId);
+                return champion ? <ChampionIcon key={ban.id ?? ban.championId} champion={champion} size="sm" disabled /> : null;
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function GamePickPanel({
+  gameId,
+  team1,
+  team2,
+  winningTeam,
+  isEditingPicks,
+  sortedPlayers,
+  sortedChampions,
+  getChampion,
+  getPlayer,
+  onAddPick,
+  onUpdatePick,
+  onRemovePick,
+}: {
+  gameId: number;
+  team1: EditableGamePick[];
+  team2: EditableGamePick[];
+  winningTeam: number | null;
+  isEditingPicks: boolean;
+  sortedPlayers: Player[];
+  sortedChampions: Champion[];
+  getChampion: (id: string) => Champion | undefined;
+  getPlayer: (id: number) => Player | undefined;
+  onAddPick: (gameId: number, team: 1 | 2) => void;
+  onUpdatePick: (
+    gameId: number,
+    draftId: string,
+    changes: Partial<Pick<GamePick, 'playerId' | 'championId' | 'team'>>,
+  ) => void;
+  onRemovePick: (gameId: number, draftId: string) => void;
+}) {
+  const renderTeam = (team: EditableGamePick[], teamNum: 1 | 2) => (
+    <div className={`rounded-xl border p-2.5 ${
+      teamNum === 1 ? 'border-blue-700/25 bg-blue-950/12' : 'border-red-700/25 bg-red-950/12'
+    } ${winningTeam === teamNum ? 'ring-1 ring-prof-high/35' : ''}`}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className={teamNum === 1 ? 'text-blue-300' : 'text-red-300'}>●</span>
+          <span className="text-xs font-bold text-lol-gold">T{teamNum}</span>
+          {winningTeam === teamNum && <span className="text-[10px] text-prof-high">WIN</span>}
+        </div>
+        {isEditingPicks && (
+          <button
+            onClick={() => onAddPick(gameId, teamNum)}
+            className="cursor-pointer rounded border border-lol-border/70 px-2 py-0.5 text-[10px] text-lol-gold-light/60 hover:border-lol-gold/60 hover:text-lol-gold"
+          >
+            + 픽
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {team.map((pick) => {
+          const champion = getChampion(pick.championId);
+          const player = getPlayer(pick.playerId);
+          if (isEditingPicks) {
+            return (
+              <div key={pick.draftId} className="flex min-w-[220px] flex-1 items-center gap-1 rounded-lg border border-lol-border/55 bg-lol-dark/45 p-1.5">
+                {champion && <ChampionIcon champion={champion} size="sm" />}
+                <select
+                  value={pick.playerId}
+                  onChange={(event) => onUpdatePick(gameId, pick.draftId, { playerId: Number(event.target.value) })}
+                  className="min-w-0 flex-1 cursor-pointer rounded border border-lol-border bg-lol-dark px-1 py-0.5 text-[11px] text-lol-gold-light"
+                >
+                  {sortedPlayers.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={pick.championId}
+                  onChange={(event) => onUpdatePick(gameId, pick.draftId, { championId: event.target.value })}
+                  className="min-w-0 flex-1 cursor-pointer rounded border border-lol-border bg-lol-dark px-1 py-0.5 text-[11px] text-lol-gold-light"
+                >
+                  {sortedChampions.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>{candidate.nameKo}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => onRemovePick(gameId, pick.draftId)}
+                  className="cursor-pointer px-1 text-xs text-red-400/60 hover:text-red-300"
+                  title="픽 삭제"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          }
+          return (
+            <div key={pick.draftId} className="flex items-center gap-1.5 rounded-lg border border-lol-border/45 bg-lol-dark/35 px-1.5 py-1">
+              {champion
+                ? <img src={champion.imageUrl} className="h-7 w-7 rounded object-cover" />
+                : <div className="h-7 w-7 rounded border border-dashed border-lol-border/60" />}
+              <div className="max-w-28 truncate text-[11px] text-lol-gold-light/75">
+                {player?.name ?? '?'}
+              </div>
+            </div>
+          );
+        })}
+        {team.length === 0 && (
+          <div className="rounded border border-dashed border-lol-border/50 px-2 py-3 text-center text-xs text-lol-gold-light/35">
+            {isEditingPicks ? '픽 추가로 기록을 채우세요.' : '픽 기록 없음'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="grid gap-2">
+      {renderTeam(team1, 1)}
+      {renderTeam(team2, 2)}
     </div>
   );
 }
