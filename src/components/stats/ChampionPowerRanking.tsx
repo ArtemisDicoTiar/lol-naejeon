@@ -32,6 +32,13 @@ interface ChampionPowerRow {
   reasons: string[];
 }
 
+interface ChampionSynergySummary {
+  winrate: number;
+  games: number;
+  bestPartnerId?: string;
+  bestPartnerWinrate: number;
+}
+
 const TIER_SCORE: Record<string, number> = {
   S: 100,
   A: 82,
@@ -72,34 +79,38 @@ function formatNumber(value: number) {
   return Math.round(value).toLocaleString('ko-KR');
 }
 
-function summarizeSynergy(championId: string, data: SynergyCounterData | null) {
-  if (!data) {
-    return { winrate: 50, games: 0, bestPartnerId: undefined as string | undefined, bestPartnerWinrate: 0 };
-  }
+function buildSynergySummaryByChampion(data: SynergyCounterData | null): Map<string, ChampionSynergySummary> {
+  const totals = new Map<string, { weightedWinrate: number; games: number; bestPartnerId?: string; bestPartnerWinrate: number }>();
+  if (!data) return new Map();
 
-  let weightedWinrate = 0;
-  let games = 0;
-  let bestPartnerId: string | undefined;
-  let bestPartnerWinrate = 0;
+  const applyEntry = (championId: string, partnerId: string | undefined, winrate: number, total: number) => {
+    const current = totals.get(championId) ?? { weightedWinrate: 0, games: 0, bestPartnerWinrate: 0 };
+    current.weightedWinrate += winrate * total;
+    current.games += total;
+    if (partnerId && total >= 30 && winrate > current.bestPartnerWinrate) {
+      current.bestPartnerId = partnerId;
+      current.bestPartnerWinrate = winrate;
+    }
+    totals.set(championId, current);
+  };
 
   for (const [key, entry] of Object.entries(data.synergies)) {
     const ids = key.split('+');
-    if (!ids.includes(championId)) continue;
-    const partnerId = ids.find((id) => id !== championId);
-    weightedWinrate += entry.winrate * entry.total;
-    games += entry.total;
-    if (partnerId && entry.total >= 30 && entry.winrate > bestPartnerWinrate) {
-      bestPartnerId = partnerId;
-      bestPartnerWinrate = entry.winrate;
-    }
+    if (ids.length !== 2) continue;
+    applyEntry(ids[0], ids[1], entry.winrate, entry.total);
+    applyEntry(ids[1], ids[0], entry.winrate, entry.total);
   }
 
-  return {
-    winrate: games > 0 ? weightedWinrate / games : 50,
-    games,
-    bestPartnerId,
-    bestPartnerWinrate,
-  };
+  const summaries = new Map<string, ChampionSynergySummary>();
+  for (const [championId, row] of totals) {
+    summaries.set(championId, {
+      winrate: row.games > 0 ? row.weightedWinrate / row.games : 50,
+      games: row.games,
+      bestPartnerId: row.bestPartnerId,
+      bestPartnerWinrate: row.bestPartnerWinrate,
+    });
+  }
+  return summaries;
 }
 
 function buildReasons(row: Omit<ChampionPowerRow, 'reasons'>) {
@@ -117,11 +128,17 @@ function buildReasons(row: Omit<ChampionPowerRow, 'reasons'>) {
 function buildChampionRows(stats: FullStats, data: SynergyCounterData | null): ChampionPowerRow[] {
   const eogByChampionId = new Map(stats.championEogSummary.map((entry) => [entry.championId, entry]));
   const maxDamage = Math.max(...stats.championEogSummary.map((entry) => entry.avgDamageDealtToChampions), 1);
+  const synergySummaryByChampion = buildSynergySummaryByChampion(data);
 
   return stats.champions.map((champion) => {
     const internal = stats.wrStats.champOverallStats[champion.id];
     const eog = eogByChampionId.get(champion.id);
-    const synergy = summarizeSynergy(champion.id, data);
+    const synergy = synergySummaryByChampion.get(champion.id) ?? {
+      winrate: 50,
+      games: 0,
+      bestPartnerId: undefined,
+      bestPartnerWinrate: 0,
+    };
     const counter = data?.counters[champion.id];
     const strongRows = counter?.strongAgainst ?? [];
     const weakRows = counter?.weakAgainst ?? [];

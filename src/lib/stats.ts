@@ -257,6 +257,69 @@ const VISIBLE_ROLE_KEYS = new Set<string>(ROLE_KEYS);
 const RECENT_GAMES_WINDOW = 5;
 const ROLE_WINRATE_PRIOR_GAMES = 4;
 
+interface EogAggregate {
+  games: number;
+  totalDamageDealtToChampions: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  totalDamageTaken: number;
+  damageSelfMitigated: number;
+  frontlineContribution: number;
+  totalHeal: number;
+  totalShielded: number;
+  timeCCingOthers: number;
+  timeSpentDead: number;
+  goldEarned: number;
+  kdaParticipation: number;
+  goldEfficiency: number;
+}
+
+type EogMetric = Exclude<keyof EogAggregate, 'games'>;
+
+function createEogAggregate(): EogAggregate {
+  return {
+    games: 0,
+    totalDamageDealtToChampions: 0,
+    kills: 0,
+    deaths: 0,
+    assists: 0,
+    totalDamageTaken: 0,
+    damageSelfMitigated: 0,
+    frontlineContribution: 0,
+    totalHeal: 0,
+    totalShielded: 0,
+    timeCCingOthers: 0,
+    timeSpentDead: 0,
+    goldEarned: 0,
+    kdaParticipation: 0,
+    goldEfficiency: 0,
+  };
+}
+
+function addEogRow(aggregate: EogAggregate, row: GameParticipantStat) {
+  aggregate.games++;
+  aggregate.totalDamageDealtToChampions += row.totalDamageDealtToChampions;
+  aggregate.kills += row.kills;
+  aggregate.deaths += row.deaths;
+  aggregate.assists += row.assists;
+  aggregate.totalDamageTaken += row.totalDamageTaken;
+  aggregate.damageSelfMitigated += row.damageSelfMitigated;
+  aggregate.frontlineContribution += row.totalDamageTaken + row.damageSelfMitigated;
+  aggregate.totalHeal += row.totalHeal;
+  aggregate.totalShielded += row.totalDamageShieldedOnTeammates;
+  aggregate.timeCCingOthers += row.timeCCingOthers;
+  aggregate.timeSpentDead += row.totalTimeSpentDead;
+  aggregate.goldEarned += row.goldEarned;
+  aggregate.kdaParticipation += (row.kills + row.assists) / Math.max(row.deaths, 1);
+  aggregate.goldEfficiency += row.totalDamageDealtToChampions / Math.max(row.goldEarned, 1);
+}
+
+function avgEog(aggregate: EogAggregate | undefined, metric: EogMetric) {
+  if (!aggregate || aggregate.games === 0) return 0;
+  return aggregate[metric] / aggregate.games;
+}
+
 export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats> {
   const [players, champions, allGamesRaw, allPicksRaw, allBansRaw, allParticipantStatsRaw, allProficiencies] = await Promise.all([
     db.players.toArray(),
@@ -304,12 +367,23 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
   const allParticipantStats = [...participantStatsByGameId.entries()].flatMap(([gameId, rows]) =>
     resolveParticipantStatsToPicks(rows, picksByGameId.get(gameId) ?? []),
   );
-  const participantStatsByPlayerId = new Map<number, GameParticipantStat[]>();
+  const capturedEogGameIds = new Set<number>();
+  const allEogAggregate = createEogAggregate();
+  const playerEogAggregateByPlayerId = new Map<number, EogAggregate>();
+  const championEogAggregateByChampionId = new Map<string, EogAggregate>();
   for (const row of allParticipantStats) {
-    if (!row.playerId) continue;
-    const rows = participantStatsByPlayerId.get(row.playerId) ?? [];
-    rows.push(row);
-    participantStatsByPlayerId.set(row.playerId, rows);
+    if (typeof row.gameId === 'number') capturedEogGameIds.add(row.gameId);
+    addEogRow(allEogAggregate, row);
+    if (typeof row.playerId === 'number') {
+      const aggregate = playerEogAggregateByPlayerId.get(row.playerId) ?? createEogAggregate();
+      addEogRow(aggregate, row);
+      playerEogAggregateByPlayerId.set(row.playerId, aggregate);
+    }
+    if (row.championId) {
+      const aggregate = championEogAggregateByChampionId.get(row.championId) ?? createEogAggregate();
+      addEogRow(aggregate, row);
+      championEogAggregateByChampionId.set(row.championId, aggregate);
+    }
   }
   const proficienciesByPlayerId = new Map<number, Map<string, string>>();
   for (const proficiency of allProficiencies) {
@@ -328,11 +402,6 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
   const playerStreak: Record<number, PlayerStreakEntry> = {};
   const playerEogSummary: PlayerEogSummaryEntry[] = [];
   const championEogSummary: ChampionEogSummaryEntry[] = [];
-
-  const avgOfRows = (rows: GameParticipantStat[], selector: (row: GameParticipantStat) => number) => {
-    if (rows.length === 0) return 0;
-    return rows.reduce((sum, row) => sum + selector(row), 0) / rows.length;
-  };
 
   const globalRoleWins: Record<string, { picks: number; wins: number }> = {};
   for (const pick of allPicks) {
@@ -365,7 +434,7 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
     const pid = player.id!;
     const pStats = wrStats.playerOverallStats[pid];
     const playerPicks = picksByPlayerId.get(pid) ?? [];
-    const playerParticipantStats = participantStatsByPlayerId.get(pid) ?? [];
+    const playerEogAggregate = playerEogAggregateByPlayerId.get(pid);
     const profMap = proficienciesByPlayerId.get(pid) ?? new Map<string, string>();
 
     const winrate = pStats?.winrate ?? 0;
@@ -459,26 +528,25 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
       delta: recentGames > 0 ? recentWr - winrate : 0,
     };
 
-    if (playerParticipantStats.length > 0) {
-      const totalDamage = playerParticipantStats.reduce((sum, row) => sum + row.totalDamageDealtToChampions, 0);
+    if (playerEogAggregate && playerEogAggregate.games > 0) {
       playerEogSummary.push({
         playerId: pid,
-        games: playerParticipantStats.length,
-        totalDamageDealtToChampions: totalDamage,
-        avgKills: avgOfRows(playerParticipantStats, (row) => row.kills),
-        avgDeaths: avgOfRows(playerParticipantStats, (row) => row.deaths),
-        avgAssists: avgOfRows(playerParticipantStats, (row) => row.assists),
-        avgDamageDealtToChampions: totalDamage / playerParticipantStats.length,
-        avgDamageTaken: avgOfRows(playerParticipantStats, (row) => row.totalDamageTaken),
-        avgDamageSelfMitigated: avgOfRows(playerParticipantStats, (row) => row.damageSelfMitigated),
-        avgFrontlineContribution: avgOfRows(playerParticipantStats, (row) => row.totalDamageTaken + row.damageSelfMitigated),
-        avgTotalHeal: avgOfRows(playerParticipantStats, (row) => row.totalHeal),
-        avgTotalShielded: avgOfRows(playerParticipantStats, (row) => row.totalDamageShieldedOnTeammates),
-        avgTimeCCingOthers: avgOfRows(playerParticipantStats, (row) => row.timeCCingOthers),
-        avgTimeSpentDead: avgOfRows(playerParticipantStats, (row) => row.totalTimeSpentDead),
-        avgGoldEarned: avgOfRows(playerParticipantStats, (row) => row.goldEarned),
-        avgKdaParticipation: avgOfRows(playerParticipantStats, (row) => (row.kills + row.assists) / Math.max(row.deaths, 1)),
-        avgGoldEfficiency: avgOfRows(playerParticipantStats, (row) => row.totalDamageDealtToChampions / Math.max(row.goldEarned, 1)),
+        games: playerEogAggregate.games,
+        totalDamageDealtToChampions: playerEogAggregate.totalDamageDealtToChampions,
+        avgKills: avgEog(playerEogAggregate, 'kills'),
+        avgDeaths: avgEog(playerEogAggregate, 'deaths'),
+        avgAssists: avgEog(playerEogAggregate, 'assists'),
+        avgDamageDealtToChampions: avgEog(playerEogAggregate, 'totalDamageDealtToChampions'),
+        avgDamageTaken: avgEog(playerEogAggregate, 'totalDamageTaken'),
+        avgDamageSelfMitigated: avgEog(playerEogAggregate, 'damageSelfMitigated'),
+        avgFrontlineContribution: avgEog(playerEogAggregate, 'frontlineContribution'),
+        avgTotalHeal: avgEog(playerEogAggregate, 'totalHeal'),
+        avgTotalShielded: avgEog(playerEogAggregate, 'totalShielded'),
+        avgTimeCCingOthers: avgEog(playerEogAggregate, 'timeCCingOthers'),
+        avgTimeSpentDead: avgEog(playerEogAggregate, 'timeSpentDead'),
+        avgGoldEarned: avgEog(playerEogAggregate, 'goldEarned'),
+        avgKdaParticipation: avgEog(playerEogAggregate, 'kdaParticipation'),
+        avgGoldEfficiency: avgEog(playerEogAggregate, 'goldEfficiency'),
       });
     }
 
@@ -646,44 +714,37 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
   }
 
   const eogOverview: EogOverview = {
-    capturedGames: new Set(allParticipantStats.map((row) => row.gameId).filter((value): value is number => typeof value === 'number')).size,
+    capturedGames: capturedEogGameIds.size,
     participantRows: allParticipantStats.length,
-    avgDamageDealtToChampions: avgOfRows(allParticipantStats, (row) => row.totalDamageDealtToChampions),
-    avgDamageTaken: avgOfRows(allParticipantStats, (row) => row.totalDamageTaken),
-    avgDamageSelfMitigated: avgOfRows(allParticipantStats, (row) => row.damageSelfMitigated),
-    avgFrontlineContribution: avgOfRows(allParticipantStats, (row) => row.totalDamageTaken + row.damageSelfMitigated),
-    avgTotalHeal: avgOfRows(allParticipantStats, (row) => row.totalHeal),
-    avgTotalShielded: avgOfRows(allParticipantStats, (row) => row.totalDamageShieldedOnTeammates),
-    avgTimeCCingOthers: avgOfRows(allParticipantStats, (row) => row.timeCCingOthers),
-    avgTimeSpentDead: avgOfRows(allParticipantStats, (row) => row.totalTimeSpentDead),
-    avgGoldEarned: avgOfRows(allParticipantStats, (row) => row.goldEarned),
-    avgKdaParticipation: avgOfRows(allParticipantStats, (row) => (row.kills + row.assists) / Math.max(row.deaths, 1)),
-    avgGoldEfficiency: avgOfRows(allParticipantStats, (row) => row.totalDamageDealtToChampions / Math.max(row.goldEarned, 1)),
+    avgDamageDealtToChampions: avgEog(allEogAggregate, 'totalDamageDealtToChampions'),
+    avgDamageTaken: avgEog(allEogAggregate, 'totalDamageTaken'),
+    avgDamageSelfMitigated: avgEog(allEogAggregate, 'damageSelfMitigated'),
+    avgFrontlineContribution: avgEog(allEogAggregate, 'frontlineContribution'),
+    avgTotalHeal: avgEog(allEogAggregate, 'totalHeal'),
+    avgTotalShielded: avgEog(allEogAggregate, 'totalShielded'),
+    avgTimeCCingOthers: avgEog(allEogAggregate, 'timeCCingOthers'),
+    avgTimeSpentDead: avgEog(allEogAggregate, 'timeSpentDead'),
+    avgGoldEarned: avgEog(allEogAggregate, 'goldEarned'),
+    avgKdaParticipation: avgEog(allEogAggregate, 'kdaParticipation'),
+    avgGoldEfficiency: avgEog(allEogAggregate, 'goldEfficiency'),
   };
 
-  const participantStatsByChampionId = new Map<string, GameParticipantStat[]>();
-  for (const row of allParticipantStats) {
-    if (!row.championId) continue;
-    const rows = participantStatsByChampionId.get(row.championId) ?? [];
-    rows.push(row);
-    participantStatsByChampionId.set(row.championId, rows);
-  }
-  for (const [championId, rows] of participantStatsByChampionId) {
+  for (const [championId, aggregate] of championEogAggregateByChampionId) {
     championEogSummary.push({
       championId,
-      games: rows.length,
-      avgKills: avgOfRows(rows, (row) => row.kills),
-      avgDeaths: avgOfRows(rows, (row) => row.deaths),
-      avgAssists: avgOfRows(rows, (row) => row.assists),
-      avgDamageDealtToChampions: avgOfRows(rows, (row) => row.totalDamageDealtToChampions),
-      avgDamageTaken: avgOfRows(rows, (row) => row.totalDamageTaken),
-      avgDamageSelfMitigated: avgOfRows(rows, (row) => row.damageSelfMitigated),
-      avgFrontlineContribution: avgOfRows(rows, (row) => row.totalDamageTaken + row.damageSelfMitigated),
-      avgTotalHeal: avgOfRows(rows, (row) => row.totalHeal),
-      avgTimeCCingOthers: avgOfRows(rows, (row) => row.timeCCingOthers),
-      avgGoldEarned: avgOfRows(rows, (row) => row.goldEarned),
-      avgKdaParticipation: avgOfRows(rows, (row) => (row.kills + row.assists) / Math.max(row.deaths, 1)),
-      avgGoldEfficiency: avgOfRows(rows, (row) => row.totalDamageDealtToChampions / Math.max(row.goldEarned, 1)),
+      games: aggregate.games,
+      avgKills: avgEog(aggregate, 'kills'),
+      avgDeaths: avgEog(aggregate, 'deaths'),
+      avgAssists: avgEog(aggregate, 'assists'),
+      avgDamageDealtToChampions: avgEog(aggregate, 'totalDamageDealtToChampions'),
+      avgDamageTaken: avgEog(aggregate, 'totalDamageTaken'),
+      avgDamageSelfMitigated: avgEog(aggregate, 'damageSelfMitigated'),
+      avgFrontlineContribution: avgEog(aggregate, 'frontlineContribution'),
+      avgTotalHeal: avgEog(aggregate, 'totalHeal'),
+      avgTimeCCingOthers: avgEog(aggregate, 'timeCCingOthers'),
+      avgGoldEarned: avgEog(aggregate, 'goldEarned'),
+      avgKdaParticipation: avgEog(aggregate, 'kdaParticipation'),
+      avgGoldEfficiency: avgEog(aggregate, 'goldEfficiency'),
     });
   }
 

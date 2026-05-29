@@ -30,6 +30,8 @@ export function Stats() {
   const [stats, setStats] = useState<FullStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [slowLoad, setSlowLoad] = useState(false);
+  const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [selectedRadarPlayerIds, setSelectedRadarPlayerIds] = useState<number[]>([]);
   const radarSelectionInitializedRef = useRef(false);
@@ -38,8 +40,15 @@ export function Stats() {
 
   const loadStats = useCallback((options: LoadOptions = {}) => {
     const requestId = ++loadRequestIdRef.current;
+    const slowTimer = window.setTimeout(() => {
+      if (!options.background && requestId === loadRequestIdRef.current) setSlowLoad(true);
+    }, 2500);
     if (options.clearCache) statsCacheRef.current.clear();
     const cached = options.clearCache ? undefined : statsCacheRef.current.get(modeFilter);
+    if (!options.background) {
+      setShowDetailedStats(false);
+      setSlowLoad(false);
+    }
     if (cached) {
       setStats(cached);
       setLoading(false);
@@ -63,8 +72,10 @@ export function Stats() {
         }
       })
       .finally(() => {
+        window.clearTimeout(slowTimer);
         if (requestId !== loadRequestIdRef.current) return;
         setLoading(false);
+        if (!options.background) setSlowLoad(false);
       });
   }, [modeFilter]);
 
@@ -84,6 +95,14 @@ export function Stats() {
     setSelectedRadarPlayerIds(stats.players.slice(0, 2).map((player) => player.id!));
     radarSelectionInitializedRef.current = true;
   }, [stats]);
+
+  useEffect(() => {
+    if (!stats || loading) return;
+    const timer = window.setTimeout(() => {
+      setShowDetailedStats(true);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [loading, modeFilter, stats]);
 
   const resolvedSelectedRadarPlayerIds = useMemo(() => {
     if (!stats) return [];
@@ -127,7 +146,16 @@ export function Stats() {
           description="내전 누적 승률, 챔피언 메타, 플레이어 성향, 3인 조합을 분석합니다."
           actions={modeToggle}
         />
-        <div className="text-center py-8 text-lol-gold">통계 로딩 중...</div>
+        <Card title="통계 계산 중">
+          <div className="py-5 text-center">
+            <div className="text-lol-gold">통계 로딩 중...</div>
+            {slowLoad && (
+              <div className="mt-2 text-sm text-lol-gold-light/45">
+                데이터가 많아 계산이 길어지고 있습니다. 완료되면 기본 지표부터 먼저 표시합니다.
+              </div>
+            )}
+          </div>
+        </Card>
       </div>
     );
   }
@@ -347,38 +375,48 @@ export function Stats() {
         </div>
       </div>
 
-      <TrioRadar stats={stats} chartHeight={390} />
-
       {/* Player Ranking */}
       <PlayerRanking stats={stats} />
 
-      {/* Streak + Trend */}
-      <PlayerStreak stats={stats} />
-      <PlayerTrend stats={stats} />
+      {showDetailedStats ? (
+        <>
+          <TrioRadar stats={stats} chartHeight={390} />
 
-      {/* Role Distribution */}
-      <RoleDistribution stats={stats} />
+          {/* Streak + Trend */}
+          <PlayerStreak stats={stats} />
+          <PlayerTrend stats={stats} />
 
-      <ChampionPowerRanking stats={stats} />
+          {/* Role Distribution */}
+          <RoleDistribution stats={stats} />
 
-      {/* Meta Comparison */}
-      <MetaComparison stats={stats} />
+          <ChampionPowerRanking stats={stats} />
 
-      {/* Ban/Pick Priority */}
-      <ChampionPriority stats={stats} />
+          {/* Meta Comparison */}
+          <MetaComparison stats={stats} />
 
-      {/* Champion Stats Table */}
-      <ChampionStatsTable stats={stats} />
+          {/* Ban/Pick Priority */}
+          <ChampionPriority stats={stats} />
 
-      {/* Champion Pool Breakdown */}
-      <ChampionPoolBreakdown stats={stats} />
+          {/* Champion Stats Table */}
+          <ChampionStatsTable stats={stats} />
 
-      {/* Head to Head */}
-      <HeadToHead stats={stats} />
+          {/* Champion Pool Breakdown */}
+          <ChampionPoolBreakdown stats={stats} />
 
-      {/* Trio synergies (players + champions) */}
-      <TrioPlayerSynergy stats={stats} />
-      <TrioChampionSynergy stats={stats} />
+          {/* Head to Head */}
+          <HeadToHead stats={stats} />
+
+          {/* Trio synergies (players + champions) */}
+          <TrioPlayerSynergy stats={stats} />
+          <TrioChampionSynergy stats={stats} />
+        </>
+      ) : (
+        <Card title="상세 통계 준비 중">
+          <p className="py-4 text-center text-sm text-lol-gold-light/45">
+            기본 지표를 먼저 표시했습니다. 조합, 챔피언 메타, 상대전적 차트는 잠시 후 이어서 렌더링됩니다.
+          </p>
+        </Card>
+      )}
     </div>
   );
 }
