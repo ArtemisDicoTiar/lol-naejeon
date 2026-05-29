@@ -4,12 +4,11 @@ import { useSession } from '@/hooks/useSession';
 import { useChampions } from '@/hooks/useChampions';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { ActionGroup, EmptyState, PageHeader, StatTile, StatusPill } from '@/components/ui/Page';
+import { ActionGroup, EmptyState, PageHeader, StatusPill } from '@/components/ui/Page';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { EogStatsPanel } from '@/components/session/EogStatsPanel';
-import { SessionTimeline } from '@/components/session/SessionTimeline';
 import { StreakStrip } from '@/components/stats/StreakStrip';
-import { db, GAME_MODE_LABELS, type GameBan, type GameEogCapture, type GameParticipantStat, type GamePick, type Player } from '@/lib/db';
+import { db, GAME_MODE_LABELS, type Game, type GameBan, type GameEogCapture, type GameParticipantStat, type GamePick, type Player } from '@/lib/db';
 import { useIdentityContext, useLcuContext } from '@/App';
 import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/lib/recommendation/winrate';
 import type { Champion } from '@/lib/db';
@@ -35,6 +34,7 @@ export function Session() {
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
   const [editingGameId, setEditingGameId] = useState<number | null>(null);
   const [draftPicksByGameId, setDraftPicksByGameId] = useState<Record<number, EditableGamePick[]>>({});
+  const [expandedGameIds, setExpandedGameIds] = useState<Set<number>>(() => new Set());
   const autoNavigateRef = useRef(false);
 
   useEffect(() => { db.players.toArray().then(setPlayers); }, []);
@@ -221,6 +221,15 @@ export function Session() {
     return { total: rows.length, mapped, matched, needsFix };
   }, [correctedPicks, pendingGamePicks]);
 
+  const toggleGameExpanded = (gameId: number) => {
+    setExpandedGameIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(gameId)) next.delete(gameId);
+      else next.add(gameId);
+      return next;
+    });
+  };
+
   const handleEndSession = async () => {
     if (!confirm('세션을 종료하시겠습니까? 종료 후에는 게임을 추가할 수 없습니다.')) return;
     const syncMsg = await endSession(isMaster);
@@ -355,12 +364,13 @@ export function Session() {
         )}
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="전체 게임" value={games.length} />
-        <StatTile label="완료 게임" value={completedGames} tone="green" />
-        <StatTile label="피어리스 밴" value={fierlessBans.length} tone="red" />
-        <StatTile label="남은 풀" value={availableCount} tone="blue" />
-      </div>
+      <SessionOverviewPanel
+        games={games}
+        fearlessBans={fierlessBans.length}
+        availableCount={availableCount}
+        championCount={champions.length}
+        eogCount={Object.keys(gameEogMap).length}
+      />
 
       {/* Team carry-over */}
       {lastGameTeams && (
@@ -398,8 +408,6 @@ export function Session() {
           key={`streak-${games.length}`}
         />
       )}
-
-      <SessionTimeline games={games} />
 
       {lcu.connected && (lcu.eog.status === 'capturing' || lcu.eog.status === 'failed' || lcu.eog.status === 'captured') && (
         <Card title="종료 후 수집 상태">
@@ -450,7 +458,7 @@ export function Session() {
         {bannedChampions.length === 0 ? (
           <p className="text-lol-gold-light/50 text-center py-4">첫 게임을 시작하세요!</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex max-h-24 flex-wrap gap-2 overflow-y-auto pr-1">
             {bannedChampions.map((c) => <ChampionIcon key={c.id} champion={c} size="sm" disabled showName />)}
           </div>
         )}
@@ -602,6 +610,7 @@ export function Session() {
               const team1 = displayPicks.filter((p) => p.team === 1);
               const team2 = displayPicks.filter((p) => p.team === 2);
               const isLatest = game.winningTeam === null || (!hasPendingGame && game.id === latestGameId);
+              const isExpanded = game.winningTeam === null || isEditingPicks || expandedGameIds.has(game.id!);
               return (
                 <div key={game.id} className={`relative overflow-hidden rounded-xl border bg-[linear-gradient(135deg,rgba(10,20,40,0.92),rgba(1,10,19,0.72))] shadow-[0_14px_38px_rgba(0,0,0,0.22)] ${
                   game.winningTeam === null ? 'border-lol-gold/60 shadow-lol-gold/10' : 'border-lol-border/80'
@@ -658,12 +667,30 @@ export function Session() {
                           취소
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => toggleGameExpanded(game.id!)}
+                        disabled={game.winningTeam === null || isEditingPicks}
+                      >
+                        {isExpanded ? '접기' : '상세'}
+                      </Button>
                       <Button size="sm" variant="danger" onClick={() => {
                         if (confirm(`Game #${game.gameNumber}을 삭제하시겠습니까?`)) removeGame(game.id!);
                       }}>삭제</Button>
                     </div>
                   </div>
-                  <div className="p-3">
+                  {!isExpanded ? (
+                    <CompactGameSummary
+                      team1={team1}
+                      team2={team2}
+                      eogStats={eogStats}
+                      winnerTeam={game.winningTeam}
+                      getChampion={getChampion}
+                      getPlayer={getPlayer}
+                    />
+                  ) : (
+                    <div className="p-3">
                   {bans.length > 0 && (
                     <div className="mb-3 grid gap-2 md:grid-cols-2">
                       {([1, 2] as const).map((t) => {
@@ -793,12 +820,224 @@ export function Session() {
                     ))}
                   </div>
                   </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function formatShortNumber(value: number) {
+  if (value >= 10000) return `${(value / 10000).toFixed(value >= 100000 ? 0 : 1)}만`;
+  return Math.round(value).toLocaleString('ko-KR');
+}
+
+function SessionOverviewPanel({
+  games,
+  fearlessBans,
+  availableCount,
+  championCount,
+  eogCount,
+}: {
+  games: Game[];
+  fearlessBans: number;
+  availableCount: number;
+  championCount: number;
+  eogCount: number;
+}) {
+  const completed = games.filter((game) => game.winningTeam !== null);
+  const pending = games.length - completed.length;
+  const team1Wins = completed.filter((game) => game.winningTeam === 1).length;
+  const team2Wins = completed.filter((game) => game.winningTeam === 2).length;
+  const scoreTotal = Math.max(team1Wins + team2Wins, 1);
+  const t1Percent = (team1Wins / scoreTotal) * 100;
+  const t2Percent = (team2Wins / scoreTotal) * 100;
+  const aramCount = games.filter((game) => (game.mode ?? 'aram') === 'aram').length;
+  const augmentedCount = games.length - aramCount;
+  const modeTotal = Math.max(games.length, 1);
+  const banPercent = championCount > 0 ? (fearlessBans / championCount) * 100 : 0;
+  const timelineGames = [...games].sort((a, b) => a.gameNumber - b.gameNumber).slice(-18);
+
+  return (
+    <Card title="세션 압축 요약">
+      <div className="grid gap-3 xl:grid-cols-[1.25fr_0.75fr]">
+        <div className="rounded-xl border border-lol-border/70 bg-lol-dark/35 p-3">
+          <div className="mb-2 flex items-center justify-between text-xs text-lol-gold-light/50">
+            <span>스코어 흐름</span>
+            <span>{completed.length}완료 · {pending}대기</span>
+          </div>
+          <div className="flex h-5 overflow-hidden rounded-full bg-lol-blue">
+            <div className="bg-blue-500/85" style={{ width: `${t1Percent}%` }} />
+            <div className="bg-red-500/85" style={{ width: `${t2Percent}%` }} />
+          </div>
+          <div className="mt-2 flex justify-between text-xs">
+            <span className="text-blue-300">Team 1 {team1Wins}승</span>
+            <span className="text-red-300">Team 2 {team2Wins}승</span>
+          </div>
+
+          <div className="mt-4 overflow-x-auto pb-1">
+            <div className="flex min-w-max gap-1.5">
+              {timelineGames.map((game) => (
+                <div
+                  key={game.id ?? game.gameNumber}
+                  className={`w-11 rounded-lg border px-1.5 py-1 text-center ${
+                    game.winningTeam === 1
+                      ? 'border-blue-500/45 bg-blue-950/35 text-blue-200'
+                      : game.winningTeam === 2
+                        ? 'border-red-500/45 bg-red-950/35 text-red-200'
+                        : 'border-lol-gold/35 bg-lol-gold/12 text-lol-gold'
+                  }`}
+                  title={`Game #${game.gameNumber} · ${GAME_MODE_LABELS[game.mode ?? 'aram']}`}
+                >
+                  <div className="text-[10px] font-bold">G{game.gameNumber}</div>
+                  <div className="text-[10px] opacity-80">{game.winningTeam ? `T${game.winningTeam}` : '진행'}</div>
+                </div>
+              ))}
+              {timelineGames.length === 0 && (
+                <div className="text-xs text-lol-gold-light/40">아직 진행된 게임이 없습니다.</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+          <div className="rounded-xl border border-lol-border/70 bg-lol-dark/35 p-3">
+            <div className="mb-1 flex justify-between text-xs text-lol-gold-light/50">
+              <span>피어리스 풀</span>
+              <span>{Math.round(banPercent)}%</span>
+            </div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-lol-blue">
+              <div className="h-full rounded-full bg-gradient-to-r from-red-500/75 to-lol-gold" style={{ width: `${banPercent}%` }} />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-center text-xs">
+              <div className="rounded border border-red-700/25 bg-red-950/12 py-1 text-red-200">{fearlessBans} 사용</div>
+              <div className="rounded border border-blue-700/25 bg-blue-950/12 py-1 text-blue-200">{availableCount} 남음</div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-lol-border/70 bg-lol-dark/35 p-3">
+            <div className="mb-1 flex justify-between text-xs text-lol-gold-light/50">
+              <span>모드 / 통계</span>
+              <span>EOG {eogCount}</span>
+            </div>
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-lol-blue">
+              <div className="bg-lol-gold/80" style={{ width: `${(aramCount / modeTotal) * 100}%` }} />
+              <div className="bg-purple-500/80" style={{ width: `${(augmentedCount / modeTotal) * 100}%` }} />
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="rounded border border-lol-gold/20 bg-lol-gold/8 py-1 text-lol-gold">{aramCount} 칼바람</div>
+              <div className="rounded border border-purple-500/25 bg-purple-950/20 py-1 text-purple-200">{augmentedCount} 증바람</div>
+              <div className="rounded border border-prof-high/25 bg-prof-high/8 py-1 text-prof-high">{eogCount} 수집</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function CompactGameSummary({
+  team1,
+  team2,
+  eogStats,
+  winnerTeam,
+  getChampion,
+  getPlayer,
+}: {
+  team1: GamePick[];
+  team2: GamePick[];
+  eogStats: GameParticipantStat[];
+  winnerTeam: number | null;
+  getChampion: (id: string) => Champion | undefined;
+  getPlayer: (id: number) => Player | undefined;
+}) {
+  const topDamage = [...eogStats]
+    .sort((a, b) => b.totalDamageDealtToChampions - a.totalDamageDealtToChampions)
+    .slice(0, 3);
+  const teamDamage = [1, 2].map((team) =>
+    eogStats
+      .filter((row) => row.team === team)
+      .reduce((sum, row) => sum + row.totalDamageDealtToChampions, 0),
+  );
+  const maxTeamDamage = Math.max(...teamDamage, 1);
+
+  const renderTeam = (picks: GamePick[], teamNum: 1 | 2) => (
+    <div className={`rounded-xl border p-2.5 ${
+      teamNum === 1 ? 'border-blue-700/25 bg-blue-950/12' : 'border-red-700/25 bg-red-950/12'
+    } ${winnerTeam === teamNum ? 'ring-1 ring-prof-high/35' : ''}`}>
+      <div className="mb-2 flex items-center justify-between">
+        <div className={`text-xs font-bold ${teamNum === 1 ? 'text-blue-300' : 'text-red-300'}`}>Team {teamNum}</div>
+        {winnerTeam === teamNum && <span className="text-[10px] text-prof-high">승리</span>}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {picks.map((pick) => {
+          const champion = getChampion(pick.championId);
+          const player = getPlayer(pick.playerId);
+          return (
+            <div key={`${pick.gameId}-${pick.playerId}-${pick.championId}`} className="flex items-center gap-1 rounded-lg border border-lol-border/45 bg-lol-dark/35 px-1.5 py-1">
+              {champion
+                ? <img src={champion.imageUrl} className="h-6 w-6 rounded object-cover" />
+                : <div className="h-6 w-6 rounded border border-dashed border-lol-border/60" />}
+              <div className="max-w-24 truncate text-[11px] text-lol-gold-light/75">
+                {player?.name ?? '?'}
+              </div>
+            </div>
+          );
+        })}
+        {picks.length === 0 && <div className="text-xs text-lol-gold-light/35">픽 기록 없음</div>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3 p-3">
+      <div className="grid gap-2 lg:grid-cols-2">
+        {renderTeam(team1, 1)}
+        {renderTeam(team2, 2)}
+      </div>
+      {eogStats.length > 0 && (
+        <div className="grid gap-2 lg:grid-cols-[0.85fr_1.15fr]">
+          <div className="rounded-xl border border-lol-border/60 bg-lol-dark/35 p-2.5">
+            <div className="mb-2 text-xs text-lol-gold-light/50">팀 딜량</div>
+            {[1, 2].map((team) => (
+              <div key={team} className="mb-1.5 last:mb-0">
+                <div className="mb-1 flex justify-between text-[11px] text-lol-gold-light/55">
+                  <span>Team {team}</span>
+                  <span>{formatShortNumber(teamDamage[team - 1])}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-lol-blue">
+                  <div
+                    className={`h-full rounded-full ${team === 1 ? 'bg-blue-500/80' : 'bg-red-500/80'}`}
+                    style={{ width: `${(teamDamage[team - 1] / maxTeamDamage) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-xl border border-lol-border/60 bg-lol-dark/35 p-2.5">
+            <div className="mb-2 text-xs text-lol-gold-light/50">딜량 TOP</div>
+            <div className="flex flex-wrap gap-2">
+              {topDamage.map((row, index) => {
+                const champion = row.championId ? getChampion(row.championId) : undefined;
+                const player = row.playerId ? getPlayer(row.playerId) : undefined;
+                return (
+                  <div key={row.id ?? `${row.summonerName}-${index}`} className="flex items-center gap-2 rounded-lg border border-lol-border/45 bg-lol-dark/40 px-2 py-1">
+                    {champion && <img src={champion.imageUrl} className="h-6 w-6 rounded object-cover" />}
+                    <div className="text-[11px]">
+                      <div className="text-lol-gold-light/80">{index + 1}. {player?.name ?? row.alias ?? row.summonerName}</div>
+                      <div className="text-lol-gold/70">{formatShortNumber(row.totalDamageDealtToChampions)} 딜</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
