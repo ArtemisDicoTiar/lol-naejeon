@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Generates src/version.generated.ts with git hash + commit count + build time.
-// Skips on Vercel build servers (no git available there). Vercel uploads the
-// locally-generated file instead.
+// The generated file is ignored by git, so CI/Vercel must create it during
+// prebuild before TypeScript resolves imports from '@/version.generated'.
 
 import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -11,17 +11,13 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT  = resolve(ROOT, 'src/version.generated.ts');
 
-if (process.env.VERCEL) {
-  console.log('[gen-version] Running on Vercel — skipping (using uploaded file).');
-  process.exit(0);
-}
-
 function git(cmd, fallback = 'unknown') {
   try { return execSync(cmd, { cwd: ROOT }).toString().trim(); }
   catch { return fallback; }
 }
 
-const hash  = git('git rev-parse --short HEAD');
+const vercelHash = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7);
+const hash  = git('git rev-parse --short HEAD', vercelHash ?? 'unknown');
 const count = git('git rev-list --count HEAD', '0');
 const time  = new Date().toISOString();
 
