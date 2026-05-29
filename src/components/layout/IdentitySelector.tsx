@@ -27,15 +27,15 @@ export function IdentitySelector({ players, onSelect, currentId, inline, forceSe
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center">
-      <div className="bg-lol-gray border border-lol-border rounded-lg p-6 max-w-sm w-full mx-4">
+      <div className="bg-lol-gray border border-lol-border rounded-lg p-5 max-w-sm w-full mx-4">
         <h2 className="text-xl font-bold text-lol-gold text-center mb-2">눈오는 헤네시스</h2>
-        <p className="text-sm text-lol-gold-light/60 text-center mb-6">누구인지 선택하세요</p>
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <p className="text-sm text-lol-gold-light/60 text-center mb-4">누구인지 선택하세요</p>
+        <div className="grid grid-cols-2 gap-2.5 mb-4">
           {players.map((p) => (
             <button
               key={p.id}
               onClick={() => onSelect(p.id!)}
-              className={`cursor-pointer p-3 rounded border text-center font-medium transition-colors ${
+              className={`cursor-pointer p-2.5 rounded border text-center text-sm font-medium transition-colors ${
                 currentId === p.id
                   ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
                   : 'border-lol-border bg-lol-blue text-lol-gold-light/70 hover:border-lol-gold/50'

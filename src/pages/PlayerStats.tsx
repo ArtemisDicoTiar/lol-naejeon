@@ -60,9 +60,9 @@ function MetricTile({
   }[tone];
 
   return (
-    <div className="rounded-xl border border-lol-border/70 bg-lol-dark/45 p-4">
+    <div className="rounded-lg border border-lol-border/70 bg-lol-dark/45 p-3">
       <div className="text-xs text-lol-gold-light/45">{label}</div>
-      <div className={`mt-1 text-2xl font-black ${toneClass}`}>{value}</div>
+      <div className={`mt-1 text-xl font-black ${toneClass}`}>{value}</div>
       {sub && <div className="mt-1 text-[11px] text-lol-gold-light/40">{sub}</div>}
     </div>
   );
@@ -216,11 +216,11 @@ export function PlayerStats() {
   const modeLabel = modeFilter === 'all' ? '전체 모드' : GAME_MODE_LABELS[modeFilter];
 
   return (
-    <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl border border-lol-gold/25 bg-[radial-gradient(circle_at_15%_20%,rgba(200,155,60,0.22),transparent_30%),linear-gradient(135deg,#010a13_0%,#0a1428_52%,#1e2328_100%)] p-5 shadow-2xl shadow-black/30 md:p-7">
-        <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full border border-lol-gold/20 bg-lol-gold/5 blur-sm" />
-        <div className="absolute bottom-2 right-6 hidden text-7xl font-black tracking-[-0.12em] text-lol-gold/5 lg:block">PLAYER</div>
-        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+    <div className="space-y-5">
+      <div className="relative overflow-hidden rounded-xl border border-lol-gold/25 bg-[radial-gradient(circle_at_15%_20%,rgba(200,155,60,0.18),transparent_30%),linear-gradient(135deg,#010a13_0%,#0a1428_52%,#1e2328_100%)] p-4 shadow-xl shadow-black/25 md:p-5">
+        <div className="absolute -right-16 -top-20 h-52 w-52 rounded-full border border-lol-gold/20 bg-lol-gold/5 blur-sm" />
+        <div className="absolute bottom-2 right-6 hidden text-6xl font-black tracking-[-0.12em] text-lol-gold/5 lg:block">PLAYER</div>
+        <div className="relative flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="mb-3 flex flex-wrap gap-2">
               <span className="rounded-full border border-lol-gold/30 bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/60">
@@ -230,16 +230,16 @@ export function PlayerStats() {
                 {modeLabel}
               </span>
             </div>
-            <h1 className="text-4xl font-black tracking-tight text-lol-gold md:text-5xl">
+            <h1 className="text-3xl font-black tracking-tight text-lol-gold md:text-4xl">
               {profile?.player.name ?? '유저 통계'}
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-lol-gold-light/65">
+            <p className="mt-2.5 max-w-2xl text-sm leading-6 text-lol-gold-light/65">
               선수별 승률, 최근 흐름, 주력 챔피언, 종료 후 전투 지표를 한 페이지에서 확인합니다.
             </p>
           </div>
 
-          <div className="w-full max-w-3xl rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4">
-            <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="w-full max-w-3xl rounded-lg border border-lol-gold/20 bg-lol-dark/45 p-3">
+            <div className="mb-2.5 flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
                 <label htmlFor="player-stats-select" className="text-sm text-lol-gold-light/70">선수</label>
                 <select
@@ -281,11 +281,11 @@ export function PlayerStats() {
       ) : (
         <>
           <Card className="overflow-hidden">
-            <div className="grid gap-6 xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)]">
-              <div className="space-y-4">
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-lol-gold/20 bg-lol-dark/45 p-5 text-center">
+            <div className="grid gap-4 xl:grid-cols-[minmax(260px,300px)_minmax(0,1fr)]">
+              <div className="space-y-3">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4 text-center">
                   <div
-                    className="grid h-40 w-40 place-items-center rounded-full p-2"
+                    className="grid h-32 w-32 place-items-center rounded-full p-1.5"
                     style={{
                       background: `conic-gradient(#c89b3c ${clampPercent(profile.winrate) * 3.6}deg, rgba(70,55,20,0.8) 0deg)`,
                     }}
@@ -293,15 +293,15 @@ export function PlayerStats() {
                     <div className="grid h-full w-full place-items-center rounded-full bg-lol-dark">
                       <div>
                         <div className="text-xs text-lol-gold-light/45">승률</div>
-                        <div className="text-4xl font-black text-lol-gold">{formatDecimal(profile.winrate)}%</div>
+                        <div className="text-3xl font-black text-lol-gold">{formatDecimal(profile.winrate)}%</div>
                       </div>
                     </div>
                   </div>
-                  <div className="mt-4 text-lg font-bold text-lol-gold-light">{profile.player.name}</div>
+                  <div className="mt-3 text-base font-bold text-lol-gold-light">{profile.player.name}</div>
                   <div className="mt-1 text-sm text-lol-gold-light/45">
                     {profile.totalGames}전 · {profile.wins}승 {profile.losses}패
                   </div>
-                  <div className="mt-4 grid w-full grid-cols-2 gap-2 text-xs">
+                  <div className="mt-3 grid w-full grid-cols-2 gap-2 text-xs">
                     <div className="rounded border border-lol-border/60 bg-lol-blue/40 px-2 py-2 text-lol-gold-light/65">
                       챔프폭 <span className="font-bold text-lol-gold">{profile.uniqueChampions}</span>
                     </div>
@@ -316,11 +316,11 @@ export function PlayerStats() {
                   description="현재 필터 기준 전체 평균과 비교합니다."
                   series={combatRadarSeries}
                   emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
-                  chartHeight={240}
+                  chartHeight={220}
                 />
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <MetricTile label="최근 폼" value={`${formatDecimal(profile.recentWinrate)}%`} sub={`${profile.recentWins}승 ${profile.recentLosses}패`} />
                   <MetricTile
@@ -362,7 +362,7 @@ export function PlayerStats() {
             </div>
           </Card>
 
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
             <Card title="주력 챔피언">
               {profile.topChampions.length === 0 ? (
                 <p className="text-sm text-lol-gold-light/50">아직 이 선수의 경기 기록이 없습니다.</p>

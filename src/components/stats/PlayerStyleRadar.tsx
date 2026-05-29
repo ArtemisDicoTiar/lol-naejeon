@@ -142,7 +142,7 @@ export function PlayerStyleRadar({
       {selectedSummaries.length === 0 ? (
         <p className="text-center py-8 text-lol-gold-light/50">비교할 플레이어를 선택하세요.</p>
       ) : (
-        <ResponsiveContainer width="100%" height={chartHeight ?? (compact ? 310 : 400)}>
+        <ResponsiveContainer width="100%" height={chartHeight ?? (compact ? 280 : 380)}>
           <RadarChart data={chartData} cx="50%" cy="50%" outerRadius={compact ? '67%' : '74%'}>
             <PolarGrid stroke="#463714" />
             <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: compact ? 10 : 12 }} />

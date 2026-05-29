@@ -117,11 +117,11 @@ export function Dashboard() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl border border-lol-gold/30 bg-[radial-gradient(circle_at_15%_20%,rgba(200,155,60,0.22),transparent_28%),linear-gradient(135deg,#010a13_0%,#0a1428_55%,#1e2328_100%)] p-5 md:p-7 shadow-2xl shadow-black/30">
-        <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full border border-lol-gold/20 bg-lol-gold/5 blur-sm" />
-        <div className="absolute bottom-3 right-5 hidden text-8xl font-black tracking-[-0.12em] text-lol-gold/5 md:block">ARAM</div>
-        <div className="relative grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-end">
+    <div className="space-y-5">
+      <div className="relative overflow-hidden rounded-xl border border-lol-gold/30 bg-[radial-gradient(circle_at_15%_20%,rgba(200,155,60,0.18),transparent_28%),linear-gradient(135deg,#010a13_0%,#0a1428_55%,#1e2328_100%)] p-4 md:p-5 shadow-xl shadow-black/25">
+        <div className="absolute -right-14 -top-16 h-48 w-48 rounded-full border border-lol-gold/20 bg-lol-gold/5 blur-sm" />
+        <div className="absolute bottom-3 right-5 hidden text-7xl font-black tracking-[-0.12em] text-lol-gold/5 md:block">ARAM</div>
+        <div className="relative grid gap-4 lg:grid-cols-[1.4fr_1fr] lg:items-end">
           <div>
             <div className="mb-3 flex flex-wrap gap-2">
               <span className="inline-flex rounded-full border border-lol-gold/30 bg-lol-dark/50 px-3 py-1 text-xs text-lol-gold-light/60">
@@ -140,13 +140,13 @@ export function Dashboard() {
                 {session ? `${session.name} 진행중` : '활성 세션 없음'}
               </span>
             </div>
-            <h1 className="text-4xl font-black tracking-tight text-lol-gold md:text-6xl">
+            <h1 className="text-3xl font-black tracking-tight text-lol-gold md:text-4xl">
               눈오는 헤네시스
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-lol-gold-light/65 md:text-base">
+            <p className="mt-2.5 max-w-2xl text-sm leading-6 text-lol-gold-light/65">
               우리끼리 하는 칼바람 내전 기록실. 밴픽, 피어리스 밴, 유저별 통계, LCU 종료 후 세부 지표까지 한 곳에 모읍니다.
             </p>
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-4 flex flex-wrap gap-2.5">
               {session ? (
                 <>
                   <Link to="/session/new-game"><Button size="lg">새 게임 시작</Button></Link>
@@ -158,24 +158,24 @@ export function Dashboard() {
               <Link to="/stats"><Button variant="ghost" size="lg">누적 통계</Button></Link>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4">
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="rounded-lg border border-lol-gold/20 bg-lol-dark/45 p-3">
               <div className="text-xs text-lol-gold-light/45">누적 게임</div>
-              <div className="mt-1 text-3xl font-black text-lol-gold">{stats?.wrStats.totalGames ?? 0}</div>
+              <div className="mt-1 text-2xl font-black text-lol-gold">{stats?.wrStats.totalGames ?? 0}</div>
             </div>
-            <div className="rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4">
+            <div className="rounded-lg border border-lol-gold/20 bg-lol-dark/45 p-3">
               <div className="text-xs text-lol-gold-light/45">등록 선수</div>
-              <div className="mt-1 text-3xl font-black text-lol-gold">{players.length}</div>
+              <div className="mt-1 text-2xl font-black text-lol-gold">{players.length}</div>
             </div>
-            <div className="rounded-xl border border-blue-500/20 bg-blue-950/20 p-4">
+            <div className="rounded-lg border border-blue-500/20 bg-blue-950/20 p-3">
               <div className="text-xs text-lol-gold-light/45">Team 1 누적</div>
-              <div className="mt-1 text-2xl font-black text-blue-300">{formatPercent(globalTeam1Wr)}</div>
+              <div className="mt-1 text-xl font-black text-blue-300">{formatPercent(globalTeam1Wr)}</div>
             </div>
-            <div className="rounded-xl border border-red-500/20 bg-red-950/20 p-4">
+            <div className="rounded-lg border border-red-500/20 bg-red-950/20 p-3">
               <div className="text-xs text-lol-gold-light/45">Team 2 누적</div>
-              <div className="mt-1 text-2xl font-black text-red-300">{formatPercent(globalTeam2Wr)}</div>
+              <div className="mt-1 text-xl font-black text-red-300">{formatPercent(globalTeam2Wr)}</div>
             </div>
-            <div className="col-span-2 rounded-xl border border-lol-gold/15 bg-lol-dark/45 p-4">
+            <div className="col-span-2 rounded-lg border border-lol-gold/15 bg-lol-dark/45 p-3">
               <div className="mb-2 flex items-center justify-between text-xs text-lol-gold-light/45">
                 <span>누적 진영 밸런스</span>
                 <span>{globalSideTotal}게임</span>
@@ -292,28 +292,28 @@ export function Dashboard() {
       {/* Active session */}
       {session && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Card>
               <div className="text-center">
-                <div className="text-3xl font-bold text-lol-gold">{players.length}</div>
+                <div className="text-2xl font-bold text-lol-gold">{players.length}</div>
                 <div className="text-sm text-lol-gold-light/60 mt-1">등록 선수</div>
               </div>
             </Card>
             <Card>
               <div className="text-center">
-                <div className="text-3xl font-bold text-lol-gold">{games.length}</div>
+                <div className="text-2xl font-bold text-lol-gold">{games.length}</div>
                 <div className="text-sm text-lol-gold-light/60 mt-1">세션 게임</div>
               </div>
             </Card>
             <Card>
               <div className="text-center">
-                <div className="text-3xl font-bold text-tier-s">{fierlessBans.length}</div>
+                <div className="text-2xl font-bold text-tier-s">{fierlessBans.length}</div>
                 <div className="text-sm text-lol-gold-light/60 mt-1">피어리스 밴</div>
               </div>
             </Card>
             <Card>
               <div className="text-center">
-                <div className="text-3xl font-bold text-prof-high">
+                <div className="text-2xl font-bold text-prof-high">
                   {Math.max(0, champions.length - fierlessBans.length)}
                 </div>
                 <div className="text-sm text-lol-gold-light/60 mt-1">남은 챔피언</div>

@@ -115,7 +115,7 @@ export function Stats() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-lol-gold">통계</h1>
         {modeToggle}
@@ -130,8 +130,8 @@ export function Stats() {
         const hotChampion = [...stats.champCompare]
           .sort((a, b) => (b.internalPicks + b.internalBans) - (a.internalPicks + a.internalBans))[0];
         return (
-          <div className="rounded-2xl border border-lol-gold/20 bg-[linear-gradient(135deg,rgba(200,155,60,0.13),rgba(10,20,40,0.65))] p-4">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-xl border border-lol-gold/20 bg-[linear-gradient(135deg,rgba(200,155,60,0.13),rgba(10,20,40,0.65))] p-3.5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-xs uppercase tracking-[0.25em] text-lol-gold-light/35">Inhouse Overview</div>
                 <div className="mt-1 text-xl font-bold text-lol-gold">요약 대시보드</div>
@@ -141,28 +141,28 @@ export function Stats() {
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-4">
-              <div className="rounded-xl border border-lol-border/70 bg-lol-dark/45 p-4">
+              <div className="rounded-lg border border-lol-border/70 bg-lol-dark/45 p-3">
                 <div className="text-xs text-lol-gold-light/45">총 게임</div>
-                <div className="mt-1 text-3xl font-black text-lol-gold">{stats.wrStats.totalGames}</div>
+                <div className="mt-1 text-2xl font-black text-lol-gold">{stats.wrStats.totalGames}</div>
               </div>
-              <div className="rounded-xl border border-lol-border/70 bg-lol-dark/45 p-4">
+              <div className="rounded-lg border border-lol-border/70 bg-lol-dark/45 p-3">
                 <div className="text-xs text-lol-gold-light/45">플레이어</div>
-                <div className="mt-1 text-3xl font-black text-lol-gold">{stats.players.length}</div>
+                <div className="mt-1 text-2xl font-black text-lol-gold">{stats.players.length}</div>
               </div>
-              <div className="rounded-xl border border-lol-border/70 bg-lol-dark/45 p-4">
+              <div className="rounded-lg border border-lol-border/70 bg-lol-dark/45 p-3">
                 <div className="text-xs text-lol-gold-light/45">핫 챔피언</div>
                 <div className="mt-1 truncate text-2xl font-black text-lol-gold">{hotChampion?.nameKo ?? '-'}</div>
                 <div className="text-[10px] text-lol-gold-light/40">
                   {hotChampion ? `${hotChampion.internalPicks}픽 · ${hotChampion.internalBans}밴` : '기록 없음'}
                 </div>
               </div>
-              <div className="rounded-xl border border-lol-border/70 bg-lol-dark/45 p-4">
+              <div className="rounded-lg border border-lol-border/70 bg-lol-dark/45 p-3">
                 <div className="text-xs text-lol-gold-light/45">EOG 수집</div>
-                <div className="mt-1 text-3xl font-black text-lol-gold">{stats.eogOverview.capturedGames}</div>
+                <div className="mt-1 text-2xl font-black text-lol-gold">{stats.eogOverview.capturedGames}</div>
                 <div className="text-[10px] text-lol-gold-light/40">{stats.eogOverview.participantRows}명 통계</div>
               </div>
             </div>
-            <div className="mt-4 rounded-xl border border-lol-border/60 bg-lol-dark/35 p-3">
+            <div className="mt-3 rounded-lg border border-lol-border/60 bg-lol-dark/35 p-3">
               <div className="mb-2 flex items-center justify-between text-xs">
                 <span className={t1Better ? 'text-blue-300' : 'text-blue-400/70'}>Team 1 {Math.round(t1Wr)}%</span>
                 <span className={!t1Better ? 'text-red-300' : 'text-red-400/70'}>Team 2 {Math.round(t2Wr)}%</span>
@@ -284,7 +284,7 @@ export function Stats() {
         </div>
       </div>
 
-      <TrioRadar stats={stats} chartHeight={430} />
+      <TrioRadar stats={stats} chartHeight={390} />
 
       {/* Player Ranking */}
       <PlayerRanking stats={stats} />

@@ -83,7 +83,7 @@ function AppContent() {
       <LcuContext.Provider value={lcu}>
         <div className="min-h-screen bg-lol-dark flex flex-col">
           <Nav identity={identity} lcu={lcu} />
-          <main className={`flex-1 mx-auto w-full px-4 py-6 ${isNewGame ? 'max-w-[1920px]' : 'max-w-6xl'}`}>
+          <main className={`flex-1 mx-auto w-full px-3 py-4 md:px-4 ${isNewGame ? 'max-w-[1920px]' : 'max-w-6xl'}`}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/players" element={<Players />} />
