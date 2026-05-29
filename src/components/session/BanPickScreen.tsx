@@ -8,7 +8,7 @@ import { scoreComposition } from '@/lib/recommendation/scoring';
 import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
 import { estimatePlayerProficiencies, type EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
-import { TAG_LABELS } from '@/data/tag-display';
+import { getTagColor, TAG_LABELS } from '@/data/tag-display';
 import { ARAM_ROLE_LABELS, type AramRole } from '@/data/aram-champion-meta';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
@@ -46,6 +46,48 @@ const LANE_LABELS: Record<LaneRole, string> = {
   mid: '미드',
   adc: '원딜',
   support: '서폿',
+};
+
+const ROLE_ICONS: Record<AramRole, string> = {
+  poke: '↗',
+  engage: '⚡',
+  sustain: '+',
+  dps: '◎',
+  tank: '◆',
+  utility: '✦',
+};
+
+const LANE_ICONS: Record<LaneRole, string> = {
+  top: '▲',
+  jungle: '♣',
+  mid: '◇',
+  adc: '⌁',
+  support: '✚',
+};
+
+const TAG_ICONS: Partial<Record<MechanicTag, string>> = {
+  knockup: '↑',
+  pull: '⌁',
+  aoe_cc: '◎',
+  single_target_cc: '●',
+  shield: '⬡',
+  heal: '+',
+  speed_buff: '»',
+  attack_steroid: '▲',
+  zone_control: '▣',
+  poke_long: '↗',
+  poke_mid: '→',
+  burst: '✦',
+  dps_sustained: '∞',
+  execute: '!',
+  revive: '↺',
+  invulnerable: '◇',
+  terrain_create: '▥',
+  anti_heal: '⊘',
+  tank_shred: '▽',
+  diving: '↯',
+  dash_reset: '↻',
+  stealth: '◌',
 };
 
 const CHAMPION_LANES: Partial<Record<string, LaneRole>> = {
@@ -1164,24 +1206,9 @@ export function BanPickScreen({
                 {pickedChamp && (() => {
                   const traits = championTraits[pickedChamp.id];
                   if (!traits) return null;
-                  const tagLabels: Partial<Record<MechanicTag, string>> = {
-                    knockup: '넉업', pull: '끌기', aoe_cc: 'AoE CC', single_target_cc: '단일CC',
-                    shield: '쉴드', heal: '힐', speed_buff: '이속', attack_steroid: '공버프',
-                    zone_control: '장악', poke_long: '롱포크', poke_mid: '미드포크', burst: '버스트',
-                    dps_sustained: '지속딜', execute: '처형', revive: '부활', invulnerable: '무적',
-                    anti_heal: '치감', tank_shred: '탱파', diving: '다이브', dash_reset: '리셋',
-                    stealth: '은신', terrain_create: '지형',
-                  };
-                  const tagColors: Partial<Record<MechanicTag, string>> = {
-                    heal: 'bg-green-900/60 text-green-300', shield: 'bg-cyan-900/60 text-cyan-300',
-                    anti_heal: 'bg-red-900/60 text-red-300', knockup: 'bg-yellow-900/60 text-yellow-300',
-                    aoe_cc: 'bg-yellow-900/60 text-yellow-300', pull: 'bg-yellow-900/60 text-yellow-300',
-                    burst: 'bg-orange-900/60 text-orange-300', tank_shred: 'bg-red-900/60 text-red-300',
-                    revive: 'bg-emerald-900/60 text-emerald-300', invulnerable: 'bg-emerald-900/60 text-emerald-300',
-                  };
                   return (
                     <div className="flex flex-wrap items-center gap-1 mt-1">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-[10px] font-bold ${
                         pickedChamp.aramTier === 'S' ? 'bg-tier-s/20 text-tier-s' :
                         pickedChamp.aramTier === 'A' ? 'bg-tier-a/20 text-tier-a' :
                         pickedChamp.aramTier === 'B' ? 'bg-tier-b/20 text-tier-b' :
@@ -1189,8 +1216,13 @@ export function BanPickScreen({
                         'bg-tier-d/20 text-tier-d'
                       }`}>{pickedChamp.aramTier}</span>
                       {traits.mechanics.slice(0, 5).map(tag => (
-                        <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded ${tagColors[tag] ?? 'bg-lol-blue text-lol-gold-light/50'}`}>
-                          {tagLabels[tag] ?? tag}
+                        <span
+                          key={tag}
+                          title={TAG_LABELS[tag] ?? tag}
+                          aria-label={TAG_LABELS[tag] ?? tag}
+                          className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold ${getTagColor(tag)}`}
+                        >
+                          {TAG_ICONS[tag] ?? '?'}
                         </span>
                       ))}
                     </div>
@@ -1515,66 +1547,84 @@ export function BanPickScreen({
             {/* Skip ban is now in the champion grid as an X card */}
           </div>
 
-          {/* Role filter chips — always visible */}
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="text-[10px] text-lol-gold-light/40 mr-1">역할</span>
-            {(Object.keys(ARAM_ROLE_LABELS) as AramRole[]).map((role) => {
-              const active = roleFilter === role;
-              return (
-                <button key={role}
-                  onClick={() => setRoleFilter((prev) => prev === role ? null : role)}
-                  className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                    active
-                      ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                      : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
-                  }`}>
-                  {ARAM_ROLE_LABELS[role]}
+          <div className="space-y-1.5 rounded border border-lol-border bg-lol-dark/40 p-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-7 text-center text-[10px] text-lol-gold-light/35" title="역할">R</span>
+              {(Object.keys(ARAM_ROLE_LABELS) as AramRole[]).map((role) => {
+                const active = roleFilter === role;
+                return (
+                  <button
+                    key={role}
+                    onClick={() => setRoleFilter((prev) => prev === role ? null : role)}
+                    title={`역할: ${ARAM_ROLE_LABELS[role]}`}
+                    aria-label={`역할: ${ARAM_ROLE_LABELS[role]}`}
+                    className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded border text-sm font-bold transition-colors ${
+                      active
+                        ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
+                        : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+                    }`}
+                  >
+                    {ROLE_ICONS[role]}
+                  </button>
+                );
+              })}
+              {(roleFilter || laneFilter || traitFilter) && (
+                <button
+                  onClick={() => { setRoleFilter(null); setLaneFilter(null); setTraitFilter(null); }}
+                  title="필터 초기화"
+                  aria-label="필터 초기화"
+                  className="ml-auto flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-lol-border/50 text-xs text-lol-gold-light/45 hover:text-lol-gold-light"
+                >
+                  ×
                 </button>
-              );
-            })}
-            {(roleFilter || laneFilter || traitFilter) && (
-              <button
-                onClick={() => { setRoleFilter(null); setLaneFilter(null); setTraitFilter(null); }}
-                className="cursor-pointer text-[10px] px-2 py-0.5 rounded border border-lol-border/50 text-lol-gold-light/40 hover:text-lol-gold-light ml-1">
-                필터 초기화
-              </button>
-            )}
-          </div>
+              )}
+            </div>
 
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="text-[10px] text-lol-gold-light/40 mr-1">라인</span>
-            {(Object.keys(LANE_LABELS) as LaneRole[]).map((lane) => {
-              const active = laneFilter === lane;
-              return (
-                <button key={lane}
-                  onClick={() => setLaneFilter((prev) => prev === lane ? null : lane)}
-                  className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                    active
-                      ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                      : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
-                  }`}>
-                  {LANE_LABELS[lane]}
-                </button>
-              );
-            })}
-          </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-7 text-center text-[10px] text-lol-gold-light/35" title="라인">L</span>
+              {(Object.keys(LANE_LABELS) as LaneRole[]).map((lane) => {
+                const active = laneFilter === lane;
+                return (
+                  <button
+                    key={lane}
+                    onClick={() => setLaneFilter((prev) => prev === lane ? null : lane)}
+                    title={`라인: ${LANE_LABELS[lane]}`}
+                    aria-label={`라인: ${LANE_LABELS[lane]}`}
+                    className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded border text-sm font-bold transition-colors ${
+                      active
+                        ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
+                        : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
+                    }`}
+                  >
+                    {LANE_ICONS[lane]}
+                  </button>
+                );
+              })}
+            </div>
 
-          <div className="flex flex-wrap items-center gap-1 p-2 rounded border border-lol-border bg-lol-dark/40">
-            <span className="text-[10px] text-lol-gold-light/40 mr-1">특성</span>
-            {(Object.keys(TAG_LABELS) as MechanicTag[]).map((tag) => {
-              const active = traitFilter === tag;
-              return (
-                <button key={tag}
-                  onClick={() => setTraitFilter((prev) => prev === tag ? null : tag)}
-                  className={`cursor-pointer text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                    active
-                      ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                      : 'border-lol-border text-lol-gold-light/40 hover:border-lol-gold/50'
-                  }`}>
-                  {TAG_LABELS[tag]}
-                </button>
-              );
-            })}
+            <div className="flex max-h-[4.6rem] items-start gap-1.5 overflow-y-auto pr-1">
+              <span className="mt-0.5 w-7 shrink-0 text-center text-[10px] text-lol-gold-light/35" title="특성">T</span>
+              <div className="flex flex-wrap gap-1">
+                {(Object.keys(TAG_LABELS) as MechanicTag[]).map((tag) => {
+                  const active = traitFilter === tag;
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => setTraitFilter((prev) => prev === tag ? null : tag)}
+                      title={`특성: ${TAG_LABELS[tag] ?? tag}`}
+                      aria-label={`특성: ${TAG_LABELS[tag] ?? tag}`}
+                      className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded border text-sm font-bold transition-colors ${
+                        active
+                          ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
+                          : 'border-lol-border text-lol-gold-light/40 hover:border-lol-gold/50'
+                      }`}
+                    >
+                      {TAG_ICONS[tag] ?? '?'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div className="text-xs text-center space-y-1">
