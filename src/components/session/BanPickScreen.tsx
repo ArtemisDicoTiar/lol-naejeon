@@ -1222,7 +1222,7 @@ export function BanPickScreen({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="banpick-compact space-y-2">
       {/* Phase indicator + LCU bridge */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

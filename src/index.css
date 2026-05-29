@@ -52,3 +52,23 @@ textarea {
   scrollbar-width: thin;
   scrollbar-color: var(--color-lol-gold) var(--color-lol-blue);
 }
+
+.banpick-compact {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.banpick-compact .text-sm {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.banpick-compact .text-xs {
+  font-size: 0.6875rem;
+  line-height: 0.9rem;
+}
+
+.banpick-compact .text-lg {
+  font-size: 0.875rem;
+  line-height: 1.1rem;
+}

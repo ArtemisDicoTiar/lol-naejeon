@@ -853,42 +853,26 @@ let timerInterval = null;
 
 async function startTimerPolling() {
   stopTimerPolling();
-  // LCU gives a static adjustedTimeLeftInPhase that resets each poll.
-  // Capture once per phase, then count down locally without re-polling the timer.
-  let currentPhase = '';
-  let phaseEndTime = 0;
-  let totalTime = 0;
 
-  // One-time fetch to capture initial phase & timer
-  const capturePhase = async () => {
+  const pollTimer = async () => {
     try {
       const resp = await createHttp1Request({ method: 'GET', url: '/lol-champ-select/v1/session' }, credentials);
       if (resp.status === 200) {
         const data = resp.json();
         const timer = data.timer || {};
         const phase = timer.phase || 'UNKNOWN';
-        if (phase !== currentPhase) {
-          currentPhase = phase;
-          const rawTimeLeft = timer.adjustedTimeLeftInPhase ?? timer.timeLeftInPhase ?? 0;
-          phaseEndTime = Date.now() + rawTimeLeft;
-          totalTime = Math.ceil((timer.totalTimeInPhase ?? 0) / 1000);
-          console.log(`   ⏱️ 페이즈 변경: ${phase} (${Math.ceil(rawTimeLeft/1000)}s)`);
-        }
+        const rawTimeLeft = Number(timer.adjustedTimeLeftInPhase ?? timer.timeLeftInPhase ?? 0);
+        const rawTotalTime = Number(timer.totalTimeInPhase ?? 0);
+        const timeLeft = Math.max(0, Math.ceil(rawTimeLeft / 1000));
+        const totalTime = Math.max(0, Math.ceil(rawTotalTime / 1000));
+        console.log(`   ⏱️ ${phase} ${timeLeft}s / ${totalTime}s`);
+        broadcast({ type: 'timerUpdate', phase, timeLeft, totalTime });
       }
     } catch {}
   };
 
-  await capturePhase();
-
-  // Check for phase changes every 2 seconds (not timer value, just phase name)
-  phaseCheckInterval = setInterval(capturePhase, 2000);
-
-  // Tick down locally every second
-  timerInterval = setInterval(() => {
-    const timeLeft = Math.max(0, Math.ceil((phaseEndTime - Date.now()) / 1000));
-    console.log(`   ⏱️ ${currentPhase} ${timeLeft}s / ${totalTime}s`);
-    broadcast({ type: 'timerUpdate', phase: currentPhase, timeLeft, totalTime });
-  }, 1000);
+  await pollTimer();
+  timerInterval = setInterval(pollTimer, 1000);
 }
 
 let phaseCheckInterval = null;
