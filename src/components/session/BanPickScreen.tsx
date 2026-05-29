@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type { Champion, Player, ProficiencyLevel, GameMode } from '@/lib/db';
 import { GAME_MODE_LABELS } from '@/lib/db';
 import type { RecommendedComp } from '@/lib/recommendation/types';
@@ -202,12 +202,6 @@ export function BanPickScreen({
     const lcuPhase = state.phase?.toUpperCase() ?? '';
 
     // Rebuild team assignments from LCU data (always, regardless of phase)
-    const playerNameToId = new Map<string, number>();
-    for (const id of [...team1PlayerIds, ...team2PlayerIds]) {
-      const name = players.find(p => p.id === id)?.name ?? '';
-      if (name) playerNameToId.set(name, id);
-    }
-
     const buildTeamFromLcu = (lcuPicks: typeof state.team1Picks) => {
       const sorted = [...lcuPicks].sort((a, b) => a.cellId - b.cellId);
       const ids: number[] = [];
@@ -435,6 +429,17 @@ export function BanPickScreen({
     return m;
   }, [team2PlayerIds, mergedProficiencies]);
 
+  const playerNameToId = useMemo(() => new Map(players.map((p) => [p.name, p.id!])), [players]);
+
+  const champByNormId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const champion of champions) {
+      map.set(champion.id.toLowerCase(), champion.id);
+      map.set(champion.id.replace(/[^a-zA-Z]/g, '').toLowerCase(), champion.id);
+    }
+    return map;
+  }, [champions]);
+
   const champFrequency = useMemo(() => {
     if (!wrStats) return undefined;
     const out: Record<string, { pickRate: number; banRate: number }> = {};
@@ -578,7 +583,13 @@ export function BanPickScreen({
     }
   };
 
-  const resetRound = () => {
+  const confirmedRef = useRef(false);
+
+  // Swap
+  const [swapFirst, setSwapFirst] = useState<number | null>(null);
+  const swapMode = swapFirst !== null;
+
+  const resetRound = useCallback(() => {
     setTeam1Bans(Array(team1PlayerIds.length).fill(''));
     setTeam2Bans(Array(team2PlayerIds.length).fill(''));
     setPicks({});
@@ -594,18 +605,23 @@ export function BanPickScreen({
     setTraitFilter(null);
     // Pause LCU sync so it doesn't re-apply old state
     setLcuPaused(true);
-  };
+  }, [team1PlayerIds, team2PlayerIds.length]);
 
-  // Auto-reset when LCU champion select ends (went back to lobby)
+  // Champ-select Delete can arrive just before gameflow becomes InProgress.
+  // Delay the reset so normal game start has time to auto-confirm instead of
+  // wiping the final picks as a false "back to lobby" signal.
   useEffect(() => {
-    if (lcu.connected && !lcu.champSelectActive) {
-      // Champ select ended — only reset if we had picks (a round was in progress)
-      const hadPicks = Object.keys(picks).length > 0 || team1Bans.some(b => b) || team2Bans.some(b => b);
-      if (hadPicks) {
-        resetRound();
-      }
-    }
-  }, [lcu.champSelectActive]);
+    if (!lcu.connected || lcu.champSelectActive || lcu.gameStartedAt) return;
+
+    const hadDraft = Object.keys(picks).length > 0 || team1Bans.some(b => b) || team2Bans.some(b => b);
+    if (!hadDraft) return;
+
+    const resetTimer = window.setTimeout(() => {
+      if (!confirmedRef.current) resetRound();
+    }, 6000);
+
+    return () => window.clearTimeout(resetTimer);
+  }, [lcu.connected, lcu.champSelectActive, lcu.gameStartedAt, picks, resetRound, team1Bans, team2Bans]);
 
   const handleSkipBan = () => {
     if (!activeSlot || activeSlot.type !== 'ban') return;
@@ -657,10 +673,6 @@ export function BanPickScreen({
   const allLocked = teamsReady && [...team1PlayerIds, ...team2PlayerIds].every((id) => lockedPicks.has(id));
   const canConfirm = allPicked && allLocked;
 
-  // Swap
-  const [swapFirst, setSwapFirst] = useState<number | null>(null);
-  const swapMode = swapFirst !== null;
-
   const handleSwapClick = (pid: number) => {
     if (swapFirst === null) {
       setSwapFirst(pid);
@@ -694,28 +706,58 @@ export function BanPickScreen({
     setPicks(newPicks);
   };
 
-  const handleConfirm = () => {
+  const hasAllTeamPicks = useCallback((candidatePicks: Record<number, string>) =>
+    teamsReady && [...team1PlayerIds, ...team2PlayerIds].every((id) => candidatePicks[id]),
+  [teamsReady, team1PlayerIds, team2PlayerIds]);
+
+  const liveGamePlayers = lcu.liveGamePlayers;
+  const resolveLiveGamePicks = useCallback(() => {
+    if (!liveGamePlayers) return null;
+
+    const resolved: Record<number, string> = { ...picks };
+    const applyLiveTeam = (liveTeam: typeof liveGamePlayers.team1, fallbackIds: number[]) => {
+      liveTeam.forEach((livePlayer, index) => {
+        const playerId = livePlayer.alias ? playerNameToId.get(livePlayer.alias) : fallbackIds[index];
+        if (!playerId) return;
+
+        const championId =
+          champByNormId.get(livePlayer.championId.toLowerCase()) ??
+          champByNormId.get(livePlayer.championId.replace(/[^a-zA-Z]/g, '').toLowerCase());
+        if (championId) resolved[playerId] = championId;
+      });
+    };
+
+    applyLiveTeam(liveGamePlayers.team1, team1PlayerIds);
+    applyLiveTeam(liveGamePlayers.team2, team2PlayerIds);
+    return resolved;
+  }, [champByNormId, liveGamePlayers, picks, playerNameToId, team1PlayerIds, team2PlayerIds]);
+
+  const handleConfirm = useCallback((confirmPicks: Record<number, string> = picks) => {
     const banResult: Record<1 | 2, string[]> = {
       1: team1Bans.filter((b) => b && b !== SKIP_BAN),
       2: team2Bans.filter((b) => b && b !== SKIP_BAN),
     };
-    onConfirm({ bans: banResult, picks });
-  };
+    onConfirm({ bans: banResult, picks: confirmPicks });
+  }, [onConfirm, picks, team1Bans, team2Bans]);
 
   // Auto-confirm and navigate when game starts (LCU detected) — guard against
   // double-fire from StrictMode / repeated gameStart messages from the bridge.
-  const confirmedRef = useRef(false);
   useEffect(() => {
     if (!lcu.gameStartedAt) {
       confirmedRef.current = false;
       return;
     }
     if (confirmedRef.current) return;
-    if (teamsReady && allPicked && !lcuPaused) {
+    if (!teamsReady || lcuPaused) return;
+
+    const livePicks = resolveLiveGamePicks();
+    const confirmPicks = livePicks ?? picks;
+    if (hasAllTeamPicks(confirmPicks)) {
       confirmedRef.current = true;
-      handleConfirm();
+      if (livePicks) setPicks(livePicks);
+      handleConfirm(confirmPicks);
     }
-  }, [lcu.gameStartedAt, teamsReady, allPicked, lcuPaused]);
+  }, [lcu.gameStartedAt, teamsReady, lcuPaused, picks, hasAllTeamPicks, resolveLiveGamePicks, handleConfirm]);
 
   const computeGridChampions = (query: string) => {
     let list = champions.filter((c) => !fierlessBans.includes(c.id));
@@ -1216,7 +1258,7 @@ export function BanPickScreen({
             픽
           </button>
         </div>
-        <Button onClick={handleConfirm} disabled={!canConfirm || swapMode}>
+        <Button onClick={() => handleConfirm()} disabled={!canConfirm || swapMode}>
           {!allPicked ? '픽 미완료' : !allLocked ? `락인 대기 (${lockedPicks.size}/${team1PlayerIds.length + team2PlayerIds.length})` : '게임 시작!'}
         </Button>
       </div>

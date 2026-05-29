@@ -122,7 +122,6 @@ export function useLcuBridge() {
           } else if (data.type === 'gameStart') {
             setGameStartedAt(Date.now());
             setChampSelectActive(false);
-            setLastState(null);
             setLobbyState(null);
             setLiveGamePlayers(null); // reset; bridge will send fresh data
             setEog({ status: 'idle', capture: null, participantStats: [], linkedGameId: null, error: null });
