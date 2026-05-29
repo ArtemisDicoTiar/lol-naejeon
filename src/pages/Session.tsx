@@ -884,7 +884,7 @@ function CompactGameSummary({
   const maxTeamDamage = Math.max(...teamDamage, 1);
 
   const renderTeam = (picks: GamePick[], teamNum: 1 | 2) => (
-    <div className={`rounded-xl border p-2.5 ${
+    <div className={`min-w-0 rounded-xl border p-2.5 ${
       teamNum === 1 ? 'border-blue-700/25 bg-blue-950/12' : 'border-red-700/25 bg-red-950/12'
     } ${winnerTeam === teamNum ? 'ring-1 ring-prof-high/35' : ''}`}>
       <div className="mb-2 flex items-center justify-between">
@@ -913,7 +913,7 @@ function CompactGameSummary({
 
   return (
     <div className="space-y-3 p-3">
-      <div className="grid gap-2 lg:grid-cols-2">
+      <div className="grid grid-cols-2 gap-2">
         {renderTeam(team1, 1)}
         {renderTeam(team2, 2)}
       </div>
@@ -1020,7 +1020,7 @@ function GamePickPanel({
   onRemovePick: (gameId: number, draftId: string) => void;
 }) {
   const renderTeam = (team: EditableGamePick[], teamNum: 1 | 2) => (
-    <div className={`rounded-xl border p-2.5 ${
+    <div className={`min-w-0 rounded-xl border p-2.5 ${
       teamNum === 1 ? 'border-blue-700/25 bg-blue-950/12' : 'border-red-700/25 bg-red-950/12'
     } ${winningTeam === teamNum ? 'ring-1 ring-prof-high/35' : ''}`}>
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -1044,7 +1044,7 @@ function GamePickPanel({
           const player = getPlayer(pick.playerId);
           if (isEditingPicks) {
             return (
-              <div key={pick.draftId} className="flex min-w-[220px] flex-1 items-center gap-1 rounded-lg border border-lol-border/55 bg-lol-dark/45 p-1.5">
+              <div key={pick.draftId} className="flex w-full min-w-0 items-center gap-1 rounded-lg border border-lol-border/55 bg-lol-dark/45 p-1.5">
                 {champion && <ChampionIcon champion={champion} size="sm" />}
                 <select
                   value={pick.playerId}
@@ -1095,7 +1095,7 @@ function GamePickPanel({
   );
 
   return (
-    <div className="grid gap-2">
+    <div className="grid grid-cols-2 gap-2">
       {renderTeam(team1, 1)}
       {renderTeam(team2, 2)}
     </div>

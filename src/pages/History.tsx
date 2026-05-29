@@ -467,7 +467,7 @@ function HistoryPickGrid({
   ) => void;
 }) {
   const renderTeam = (team: GamePick[], teamNum: 1 | 2) => (
-    <div className={`rounded-xl border p-2.5 ${
+    <div className={`min-w-0 rounded-xl border p-2.5 ${
       teamNum === 1 ? 'border-blue-700/25 bg-blue-950/12' : 'border-red-700/25 bg-red-950/12'
     } ${winningTeam === teamNum ? 'ring-1 ring-prof-high/35' : ''}`}>
       <div className="mb-2 flex items-center justify-between">
@@ -480,7 +480,7 @@ function HistoryPickGrid({
           const player = getPlayer(pick.playerId);
           if (isEditing) {
             return (
-              <div key={pick.id} className="flex min-w-[220px] flex-1 items-center gap-1 rounded-lg border border-lol-border/55 bg-lol-dark/45 p-1.5">
+              <div key={pick.id} className="flex w-full min-w-0 items-center gap-1 rounded-lg border border-lol-border/55 bg-lol-dark/45 p-1.5">
                 {champion && <ChampionIcon champion={champion} size="sm" />}
                 <select
                   value={pick.playerId}
@@ -524,7 +524,7 @@ function HistoryPickGrid({
   );
 
   return (
-    <div className="grid gap-2 lg:grid-cols-2">
+    <div className="grid grid-cols-2 gap-2">
       {renderTeam(team1, 1)}
       {renderTeam(team2, 2)}
     </div>
