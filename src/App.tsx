@@ -81,7 +81,8 @@ function AppContent() {
   return (
     <IdentityContext.Provider value={{ userId: identity.userId, isMaster: identity.isMaster, playerName: identity.playerName }}>
       <LcuContext.Provider value={lcu}>
-        <div className="min-h-screen bg-lol-dark flex flex-col">
+        <div className="relative min-h-screen flex flex-col overflow-x-hidden">
+          <div className="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(rgba(240,230,210,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(240,230,210,0.02)_1px,transparent_1px)] bg-[size:44px_44px]" />
           <Nav identity={identity} lcu={lcu} />
           <main className={`flex-1 mx-auto w-full px-3 py-4 md:px-4 ${isNewGame ? 'max-w-[1920px]' : 'max-w-6xl'}`}>
             <Routes>
