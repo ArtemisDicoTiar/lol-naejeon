@@ -203,6 +203,23 @@ export function Session() {
     if (aPending !== bPending) return aPending ? -1 : 1;
     return b.gameNumber - a.gameNumber;
   }), [games]);
+  const livePickSummary = useMemo(() => {
+    if (!correctedPicks) return null;
+    const rows = [...correctedPicks.team1, ...correctedPicks.team2];
+    let mapped = 0;
+    let matched = 0;
+    let needsFix = 0;
+    for (const row of rows) {
+      if (row.player && row.champ) mapped++;
+      const recorded = pendingGamePicks.find((pick) =>
+        row.player && pick.playerId === row.player.id && pick.team === row.teamNum,
+      );
+      const isMatched = !!recorded && recorded.championId === row.champ?.id;
+      if (isMatched) matched++;
+      else if (row.player && row.champ) needsFix++;
+    }
+    return { total: rows.length, mapped, matched, needsFix };
+  }, [correctedPicks, pendingGamePicks]);
 
   const handleEndSession = async () => {
     if (!confirm('세션을 종료하시겠습니까? 종료 후에는 게임을 추가할 수 없습니다.')) return;
@@ -441,55 +458,98 @@ export function Session() {
 
       {/* Live game picks correction — shown when bridge sends actual picks */}
       {liveGamePlayers && pendingGame && pendingGame.winningTeam === null && (
-        <Card title="🎮 실제 픽 확인 (게임 중)">
-          <p className="text-xs text-lol-gold-light/60 mb-3">
-            게임 클라이언트에서 실제 픽 정보를 가져왔습니다. 잘못 기록된 픽이 있다면 여기서 보정할 수 있습니다.
-          </p>
+        <Card className="border-lol-gold/35 bg-[radial-gradient(circle_at_18%_0%,rgba(200,155,60,0.16),transparent_34%),linear-gradient(180deg,rgba(30,35,40,0.96),rgba(1,10,19,0.78))]">
+          <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-lol-gold-light/35">Live Pick Verification</div>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h3 className="text-xl font-black text-lol-gold">실제 픽 확인</h3>
+                <StatusPill tone={livePickSummary?.needsFix ? 'yellow' : 'green'}>
+                  {livePickSummary?.needsFix ? `${livePickSummary.needsFix}개 보정 필요` : '기록 일치'}
+                </StatusPill>
+              </div>
+              <p className="mt-1 text-sm text-lol-gold-light/55">
+                클라이언트에서 읽은 실제 픽과 현재 기록을 비교합니다. 순서가 어긋난 판은 여기서 한 번에 보정하세요.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg border border-lol-border/70 bg-lol-dark/45 px-3 py-2">
+                <div className="text-lg font-black text-lol-gold">{livePickSummary?.mapped ?? 0}</div>
+                <div className="text-[10px] text-lol-gold-light/40">매핑</div>
+              </div>
+              <div className="rounded-lg border border-prof-high/25 bg-prof-high/8 px-3 py-2">
+                <div className="text-lg font-black text-prof-high">{livePickSummary?.matched ?? 0}</div>
+                <div className="text-[10px] text-lol-gold-light/40">일치</div>
+              </div>
+              <div className="rounded-lg border border-yellow-600/25 bg-yellow-950/20 px-3 py-2">
+                <div className="text-lg font-black text-yellow-300">{livePickSummary?.needsFix ?? 0}</div>
+                <div className="text-[10px] text-lol-gold-light/40">차이</div>
+              </div>
+            </div>
+          </div>
           <button
             onClick={() => setShowLivePanel(!showLivePanel)}
-            className="cursor-pointer text-sm text-lol-gold-light/70 hover:text-lol-gold mb-3">
-            {showLivePanel ? '▲ 숨기기' : '▼ 픽 정보 보기'}
+            className="mb-3 w-full cursor-pointer rounded-lg border border-lol-border/70 bg-lol-dark/35 px-3 py-2 text-sm text-lol-gold-light/70 transition-colors hover:border-lol-gold/50 hover:text-lol-gold">
+            {showLivePanel ? '실제 픽 패널 접기' : '실제 픽 비교 펼치기'}
           </button>
           {showLivePanel && correctedPicks && (
             <div className="space-y-3">
               {([
-                { label: 'T1 (ORDER/블루)', team: correctedPicks.team1 },
-                { label: 'T2 (CHAOS/레드)', team: correctedPicks.team2 },
-              ] as const).map(({ label, team }) => (
-                <div key={label}>
-                  <div className="text-xs text-lol-gold-light/50 mb-1">{label}</div>
-                  <div className="space-y-1">
+                { label: 'Team 1', sub: 'ORDER / 블루', team: correctedPicks.team1, accent: 'border-blue-600/30 bg-blue-950/12' },
+                { label: 'Team 2', sub: 'CHAOS / 레드', team: correctedPicks.team2, accent: 'border-red-600/30 bg-red-950/12' },
+              ] as const).map(({ label, sub, team, accent }) => (
+                <div key={label} className={`rounded-xl border p-3 ${accent}`}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-bold text-lol-gold">{label}</div>
+                      <div className="text-[10px] text-lol-gold-light/35">{sub}</div>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                     {team.map((row, i) => {
                       const recorded = pendingGamePicks.find((p) =>
                         row.player && p.playerId === row.player.id && p.team === row.teamNum,
                       );
                       const matches = recorded?.championId === row.champ?.id;
+                      const recordedChamp = recorded ? champions.find((c) => c.id === recorded.championId) : undefined;
                       return (
-                        <div key={i} className={`flex items-center gap-2 p-1.5 rounded text-sm ${
-                          !row.player ? 'opacity-50' : matches ? '' : 'bg-yellow-900/20 border border-yellow-700/30'
+                        <div key={i} className={`relative overflow-hidden rounded-lg border p-2.5 ${
+                          !row.player
+                            ? 'border-yellow-700/30 bg-yellow-950/10 opacity-75'
+                            : matches
+                              ? 'border-prof-high/25 bg-prof-high/8'
+                              : 'border-yellow-600/35 bg-yellow-950/18'
                         }`}>
-                          {row.champ && <img src={row.champ.imageUrl} className="w-7 h-7 rounded" />}
-                          <span className="text-lol-gold-light">
-                            {row.player?.name ?? row.livePlayer.alias ?? row.livePlayer.summonerName}
-                          </span>
-                          <span className="text-lol-gold-light/60">{row.champ?.nameKo ?? row.livePlayer.championName}</span>
-                          {!row.player && <span className="text-yellow-400/70 text-xs">(매핑 없음)</span>}
-                          {row.player && !matches && recorded && (
-                            <span className="text-yellow-400/70 text-xs">
-                              ← 기록: {champions.find((c) => c.id === recorded.championId)?.nameKo ?? recorded.championId}
-                            </span>
+                          <div className="flex items-center gap-2">
+                            {row.champ
+                              ? <img src={row.champ.imageUrl} className="h-10 w-10 rounded-lg border border-lol-border/60 object-cover" />
+                              : <div className="h-10 w-10 rounded-lg border border-dashed border-lol-border/70 bg-lol-blue/40" />}
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-semibold text-lol-gold-light">
+                                {row.player?.name ?? row.livePlayer.alias ?? row.livePlayer.summonerName}
+                              </div>
+                              <div className="truncate text-xs text-lol-gold/80">{row.champ?.nameKo ?? row.livePlayer.championName}</div>
+                            </div>
+                            <StatusPill tone={!row.player ? 'yellow' : matches ? 'green' : 'yellow'} className="px-2 py-0.5 text-[10px]">
+                              {!row.player ? '미매핑' : matches ? '일치' : '보정'}
+                            </StatusPill>
+                          </div>
+                          {row.player && !matches && (
+                            <div className="mt-2 rounded border border-yellow-700/25 bg-lol-dark/45 px-2 py-1 text-[10px] text-yellow-100/75">
+                              현재 기록: {recordedChamp?.nameKo ?? recorded?.championId ?? '없음'}
+                            </div>
                           )}
-                          {row.player && !matches && !recorded && (
-                            <span className="text-yellow-400/70 text-xs">← 기록 없음</span>
-                          )}
-                          {matches && <span className="text-prof-high/60 text-xs">✓ 일치</span>}
                         </div>
                       );
                     })}
                   </div>
                 </div>
               ))}
-              <div className="pt-2 flex gap-2">
+              <div className="flex flex-col gap-2 rounded-xl border border-lol-border/70 bg-lol-dark/45 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-lol-gold-light/60">
+                  보정 적용 시 현재 진행 중 게임의 픽 기록을 실제 클라이언트 픽으로 교체합니다.
+                </div>
+                <div className="flex gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
@@ -513,6 +573,7 @@ export function Session() {
                   보정 적용
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowLivePanel(false)}>닫기</Button>
+                </div>
               </div>
             </div>
           )}
@@ -542,62 +603,49 @@ export function Session() {
               const team2 = displayPicks.filter((p) => p.team === 2);
               const isLatest = game.winningTeam === null || (!hasPendingGame && game.id === latestGameId);
               return (
-                <div key={game.id} className={`p-4 bg-lol-blue rounded border ${game.winningTeam === null ? 'border-lol-gold/60 shadow-lg shadow-lol-gold/10' : 'border-lol-border'}`}>
-                  {bans.length > 0 && (
-                    <div className="flex gap-4 mb-3 pb-2 border-b border-lol-border/50">
-                      {([1, 2] as const).map((t) => {
-                        const teamBanList = bans.filter((b) => b.team === t);
-                        if (teamBanList.length === 0) return null;
-                        return (
-                          <div key={t} className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-red-400/70">T{t} 밴</span>
-                            {teamBanList.map((b) => {
-                              const champ = getChampion(b.championId);
-                              return champ ? <ChampionIcon key={b.id} champion={champ} size="sm" disabled /> : null;
-                            })}
-                          </div>
-                        );
-                      })}
+                <div key={game.id} className={`relative overflow-hidden rounded-xl border bg-[linear-gradient(135deg,rgba(10,20,40,0.92),rgba(1,10,19,0.72))] shadow-[0_14px_38px_rgba(0,0,0,0.22)] ${
+                  game.winningTeam === null ? 'border-lol-gold/60 shadow-lol-gold/10' : 'border-lol-border/80'
+                }`}>
+                  <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 ${
+                    game.winningTeam === 1 ? 'bg-blue-500/70' : game.winningTeam === 2 ? 'bg-red-500/70' : 'bg-lol-gold/70'
+                  }`} />
+                  <div className="flex flex-col gap-3 border-b border-lol-border/60 bg-lol-dark/28 p-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="text-lg font-black text-lol-gold">Game #{game.gameNumber}</span>
+                        <StatusPill tone={game.winningTeam === null ? 'yellow' : 'green'}>
+                          {game.winningTeam === null ? '진행 중' : `Team ${game.winningTeam} 승리`}
+                        </StatusPill>
+                        <StatusPill tone="blue">{game.format}</StatusPill>
+                        <button
+                          onClick={() => setGameMode(game.id!, game.mode === 'augmented' ? 'aram' : 'augmented')}
+                          title="클릭해서 모드 전환"
+                          className={`cursor-pointer rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                            (game.mode ?? 'aram') === 'augmented'
+                              ? 'border-purple-500/35 bg-purple-950/35 text-purple-300 hover:bg-purple-900/45'
+                              : 'border-lol-border/80 bg-lol-dark/50 text-lol-gold-light/65 hover:border-lol-gold/50'
+                          }`}>
+                          {GAME_MODE_LABELS[game.mode ?? 'aram']}
+                        </button>
+                        {eogCapture && (
+                          <StatusPill tone={
+                            eogCapture.status === 'captured' ? 'green' : eogCapture.status === 'unlinked' ? 'yellow' : 'red'
+                          }>
+                            EOG {eogCapture.status === 'captured' ? '완료' : eogCapture.status === 'unlinked' ? '미연결' : '실패'}
+                          </StatusPill>
+                        )}
+                      </div>
+                      <div className="text-xs text-lol-gold-light/38">
+                        {new Date(game.playedAt).toLocaleString('ko-KR')} · {team1.length}v{team2.length}
+                      </div>
                     </div>
-                  )}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lol-gold font-bold">Game #{game.gameNumber}</span>
-                      <span className="text-xs bg-lol-gold/20 text-lol-gold px-2 py-0.5 rounded">{game.format}</span>
-                      <button
-                        onClick={() => setGameMode(game.id!, game.mode === 'augmented' ? 'aram' : 'augmented')}
-                        title="클릭해서 모드 전환"
-                        className={`cursor-pointer text-xs px-2 py-0.5 rounded transition-colors ${
-                          (game.mode ?? 'aram') === 'augmented'
-                            ? 'bg-purple-900/40 text-purple-300 border border-purple-700/50 hover:bg-purple-800/50'
-                            : 'bg-lol-blue/40 text-lol-gold-light/70 border border-lol-border hover:border-lol-gold/50'
-                        }`}>
-                        {GAME_MODE_LABELS[game.mode ?? 'aram']}
-                      </button>
-                      {eogCapture && (
-                        <span className={`text-[10px] px-2 py-0.5 rounded border ${
-                          eogCapture.status === 'captured'
-                            ? 'border-prof-high/30 text-prof-high'
-                            : eogCapture.status === 'unlinked'
-                              ? 'border-yellow-700/30 text-yellow-300'
-                              : 'border-red-700/30 text-red-300'
-                        }`}>
-                          EOG {eogCapture.status === 'captured' ? '완료' : eogCapture.status === 'unlinked' ? '미연결' : '실패'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {game.winningTeam ? (
-                        <span className="text-prof-high text-sm font-medium">Team {game.winningTeam} 승리</span>
-                      ) : (
-                        <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {game.winningTeam ? null : (
+                        <>
                           <Button size="sm" variant="secondary" onClick={() => setGameResult(game.id!, 1)}>T1 승</Button>
                           <Button size="sm" variant="secondary" onClick={() => setGameResult(game.id!, 2)}>T2 승</Button>
-                        </div>
+                        </>
                       )}
-                      <Button size="sm" variant="danger" onClick={() => {
-                        if (confirm(`Game #${game.gameNumber}을 삭제하시겠습니까?`)) removeGame(game.id!);
-                      }}>삭제</Button>
                       <Button
                         size="sm"
                         variant={isEditingPicks ? 'primary' : 'ghost'}
@@ -610,8 +658,29 @@ export function Session() {
                           취소
                         </Button>
                       )}
+                      <Button size="sm" variant="danger" onClick={() => {
+                        if (confirm(`Game #${game.gameNumber}을 삭제하시겠습니까?`)) removeGame(game.id!);
+                      }}>삭제</Button>
                     </div>
                   </div>
+                  <div className="p-3">
+                  {bans.length > 0 && (
+                    <div className="mb-3 grid gap-2 md:grid-cols-2">
+                      {([1, 2] as const).map((t) => {
+                        const teamBanList = bans.filter((b) => b.team === t);
+                        if (teamBanList.length === 0) return null;
+                        return (
+                          <div key={t} className="flex items-center gap-1.5 rounded-lg border border-red-700/20 bg-red-950/10 px-2 py-1.5">
+                            <span className="mr-1 text-[10px] font-semibold text-red-300/80">T{t} 밴</span>
+                            {teamBanList.map((b) => {
+                              const champ = getChampion(b.championId);
+                              return champ ? <ChampionIcon key={b.id} champion={champ} size="sm" disabled /> : null;
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   {isLatest && wrStats && displayPicks.length > 0 && (
                     <ActiveGameStats
                       team1={team1}
@@ -639,11 +708,22 @@ export function Session() {
                       />
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-3 lg:grid-cols-2">
                     {[{ team: team1, num: 1 }, { team: team2, num: 2 }].map(({ team, num }) => (
-                      <div key={num} className={`p-2 rounded ${game.winningTeam === num ? 'bg-prof-high/10 border border-prof-high/30' : 'bg-lol-dark/50'}`}>
+                      <div key={num} className={`rounded-xl border p-3 ${
+                        num === 1
+                          ? 'border-blue-700/30 bg-blue-950/15'
+                          : 'border-red-700/30 bg-red-950/15'
+                      } ${game.winningTeam === num ? 'ring-1 ring-prof-high/35 shadow-[0_0_24px_rgba(10,200,120,0.08)]' : ''}`}>
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <div className="text-xs text-lol-gold font-medium">Team {num}</div>
+                          <div className="flex items-center gap-2">
+                            <div className={`h-2.5 w-2.5 rounded-full ${num === 1 ? 'bg-blue-400' : 'bg-red-400'}`} />
+                            <div className="text-sm font-bold text-lol-gold">Team {num}</div>
+                            <span className="rounded-full border border-lol-border/60 bg-lol-dark/45 px-2 py-0.5 text-[10px] text-lol-gold-light/45">
+                              {team.length}명
+                            </span>
+                            {game.winningTeam === num && <StatusPill tone="green" className="px-2 py-0.5 text-[10px]">Winner</StatusPill>}
+                          </div>
                           {isEditingPicks && (
                             <button
                               onClick={() => addDraftPick(game.id!, num as 1 | 2)}
@@ -653,13 +733,13 @@ export function Session() {
                             </button>
                           )}
                         </div>
-                        <div className="space-y-1">
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                           {team.map((pick) => {
                             const champ = getChampion(pick.championId);
                             const player = getPlayer(pick.playerId);
                             if (isEditingPicks) {
                               return (
-                                <div key={pick.draftId} className="flex items-center gap-1">
+                                <div key={pick.draftId} className="flex items-center gap-1 rounded-lg border border-lol-border/55 bg-lol-dark/45 p-1.5">
                                   {champ && <ChampionIcon champion={champ} size="sm" />}
                                   <select
                                     value={pick.playerId}
@@ -690,11 +770,15 @@ export function Session() {
                               );
                             }
                             return (
-                              <div key={pick.draftId} className="flex items-center gap-2">
-                                {champ && <ChampionIcon champion={champ} size="sm" />}
-                                <div>
-                                  <span className="text-sm text-lol-gold-light">{player?.name}</span>
-                                  <span className="text-xs text-lol-gold-light/50 ml-1">{champ?.nameKo}</span>
+                              <div key={pick.draftId} className="group relative overflow-hidden rounded-lg border border-lol-border/55 bg-[linear-gradient(135deg,rgba(30,35,40,0.72),rgba(1,10,19,0.45))] p-2 transition-colors hover:border-lol-gold/35">
+                                <div className="flex items-center gap-2">
+                                  {champ
+                                    ? <img src={champ.imageUrl} className="h-10 w-10 rounded-lg border border-lol-border/60 object-cover" />
+                                    : <div className="h-10 w-10 rounded-lg border border-dashed border-lol-border/60" />}
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-semibold text-lol-gold-light">{player?.name ?? '알 수 없음'}</div>
+                                    <div className="truncate text-xs text-lol-gold/75">{champ?.nameKo ?? pick.championId}</div>
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -707,6 +791,7 @@ export function Session() {
                         </div>
                       </div>
                     ))}
+                  </div>
                   </div>
                 </div>
               );
