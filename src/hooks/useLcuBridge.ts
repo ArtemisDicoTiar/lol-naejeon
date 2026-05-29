@@ -107,6 +107,8 @@ export function useLcuBridge() {
             setChampSelectActive(true);
             setGameStartedAt(null);
             setGameEndedAt(null);
+          } else if (data.type === 'champSelectSnapshot') {
+            setLastState(data);
           } else if (data.type === 'champSelectEnd') {
             setChampSelectActive(false);
           } else if (data.type === 'lobbyUpdate') {

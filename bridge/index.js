@@ -183,12 +183,46 @@ function normalizeHistoryGame(game) {
 
 // --- Lobby snapshot for fallback alias resolution ---
 let lobbySnapshot = { team100: [], team200: [] };
+let lastChampSelectSnapshot = null;
 
 // --- LCU Write: hover/lock-in champion for current user ---
 let mySummonerId = null;
 let eogCapturePromise = null;
 let lastEogFingerprint = null;
 let lastEogCapturedAt = 0;
+
+async function fetchChampSelectSnapshotAfterGameStart(reason = 'gameStart') {
+  const delays = [0, 300, 1000, 2000];
+
+  for (const delay of delays) {
+    if (delay > 0) await sleep(delay);
+    try {
+      const resp = await createHttp1Request({ method: 'GET', url: '/lol-champ-select/v1/session' }, credentials);
+      if (resp.status !== 200) {
+        console.log(`   ⚠️ 게임 시작 후 챔셀 조회 실패(${resp.status})`);
+        continue;
+      }
+      const state = await parseChampSelectState(resp.json());
+      lastChampSelectSnapshot = state;
+      const t1Info = state.team1Picks.map(p => `${p.alias ?? '?'}=${p.champId}`).join(', ');
+      const t2Info = state.team2Picks.map(p => `${p.alias ?? '?'}=${p.champId}`).join(', ');
+      console.log(`   ✅ 게임 시작 후 챔셀 조회 성공 | T1 픽[${t1Info}] | T2 픽[${t2Info}]`);
+      broadcast({ type: 'champSelectSnapshot', source: reason, ok: true, ...state });
+      return state;
+    } catch (error) {
+      console.log(`   ⚠️ 게임 시작 후 챔셀 조회 오류: ${error?.message ?? error}`);
+    }
+  }
+
+  if (lastChampSelectSnapshot) {
+    console.log('   ↩️ 게임 시작 후 챔셀 직접 조회 실패 — 마지막 챔셀 스냅샷 재사용');
+    broadcast({ type: 'champSelectSnapshot', source: reason, ok: false, fallback: true, ...lastChampSelectSnapshot });
+    return lastChampSelectSnapshot;
+  }
+
+  broadcast({ type: 'champSelectSnapshotFailed', source: reason, error: '게임 시작 후 챔피언 선택 세션을 조회할 수 없습니다.' });
+  return null;
+}
 
 async function getMySelldId() {
   if (!credentials) return undefined;
@@ -563,6 +597,9 @@ async function connectToLCU() {
       if (uri === '/lol-champ-select/v1/session') {
         if (eventType === 'Delete') {
           console.log('⚡ 챔피언 셀렉트 종료');
+          if (lastChampSelectSnapshot) {
+            broadcast({ type: 'champSelectSnapshot', source: 'champSelectEnd', fallback: true, ...lastChampSelectSnapshot });
+          }
           broadcast({ type: 'champSelectEnd' });
           lastState = null;
           stopTimerPolling();
@@ -578,6 +615,7 @@ async function connectToLCU() {
         const state = await parseChampSelectState(data);
         if (stateChanged(lastState, state)) {
           lastState = state;
+          lastChampSelectSnapshot = state;
           const t1Info = state.team1Picks.map(p => `${p.alias ?? '?'}=${p.champId}`).join(', ');
           const t2Info = state.team2Picks.map(p => `${p.alias ?? '?'}=${p.champId}`).join(', ');
           console.log(`⚡ 업데이트 | T1 밴[${state.team1Bans}] 픽[${t1Info}] | T2 밴[${state.team2Bans}] 픽[${t2Info}]`);
@@ -641,6 +679,7 @@ async function connectToLCU() {
           // Cache lobby once more before game starts
           await cacheLobbyMembers();
           broadcast({ type: 'gameStart' });
+          fetchChampSelectSnapshotAfterGameStart(`gameflow:${phase}`);
           // Fetch actual picks from Live Client Data API (runs in background)
           scheduleLivePicksFetch();
         } else if (phase === 'WaitingForStats' || phase === 'EndOfGame' || phase === 'PreEndOfGame') {
@@ -672,6 +711,7 @@ async function connectToLCU() {
     if (resp.status === 200) {
       const state = await parseChampSelectState(resp.json());
       lastState = state;
+      lastChampSelectSnapshot = state;
       console.log('⚡ 이미 챔피언 셀렉트 중!');
       broadcast({ type: 'champSelectUpdate', ...state });
     }
