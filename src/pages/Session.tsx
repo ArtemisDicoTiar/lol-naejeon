@@ -196,6 +196,13 @@ export function Session() {
   const bannedPercent = champions.length > 0 ? (fierlessBans.length / champions.length) * 100 : 0;
   const completedGames = games.filter((game) => game.winningTeam !== null).length;
   const pendingGames = games.length - completedGames;
+  const latestGameId = games.at(-1)?.id;
+  const displayGames = useMemo(() => [...games].sort((a, b) => {
+    const aPending = a.winningTeam === null;
+    const bPending = b.winningTeam === null;
+    if (aPending !== bPending) return aPending ? -1 : 1;
+    return b.gameNumber - a.gameNumber;
+  }), [games]);
 
   const handleEndSession = async () => {
     if (!confirm('세션을 종료하시겠습니까? 종료 후에는 게임을 추가할 수 없습니다.')) return;
@@ -522,7 +529,7 @@ export function Session() {
           />
         ) : (
           <div className="space-y-4">
-            {games.map((game, idx) => {
+            {displayGames.map((game) => {
               const picks = gamePicks[game.id!] ?? [];
               const isEditingPicks = editingGameId === game.id;
               const displayPicks = isEditingPicks
@@ -533,9 +540,9 @@ export function Session() {
               const eogStats = gameParticipantStatsMap[game.id!] ?? [];
               const team1 = displayPicks.filter((p) => p.team === 1);
               const team2 = displayPicks.filter((p) => p.team === 2);
-              const isLatest = idx === games.length - 1;
+              const isLatest = game.winningTeam === null || (!hasPendingGame && game.id === latestGameId);
               return (
-                <div key={game.id} className="p-4 bg-lol-blue rounded border border-lol-border">
+                <div key={game.id} className={`p-4 bg-lol-blue rounded border ${game.winningTeam === null ? 'border-lol-gold/60 shadow-lg shadow-lol-gold/10' : 'border-lol-border'}`}>
                   {bans.length > 0 && (
                     <div className="flex gap-4 mb-3 pb-2 border-b border-lol-border/50">
                       {([1, 2] as const).map((t) => {

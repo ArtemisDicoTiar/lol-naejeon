@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { Champion, Player, ProficiencyLevel } from '@/lib/db';
 import { Button } from '@/components/ui/Button';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
@@ -20,6 +20,13 @@ interface AugWaitScreenProps {
 
 const PROF_SCORE: Record<string, number> = { S: 5, '상': 3, '중': 2, '하': 1 };
 const TIER_SCORE: Record<string, number> = { S: 2.5, A: 2, B: 1.5, C: 1, D: 0.5 };
+
+function normalizePlayerKey(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]/g, '');
+}
 
 export function AugWaitScreen({
   team1PlayerIds,
@@ -68,9 +75,23 @@ export function AugWaitScreen({
 
   const playerByAlias = useMemo(() => {
     const map = new Map<string, number>();
-    for (const p of players) map.set(p.name, p.id!);
+    for (const p of players) {
+      map.set(p.name, p.id!);
+      map.set(normalizePlayerKey(p.name), p.id!);
+    }
     return map;
   }, [players]);
+
+  const resolvePlayerIdFromLcuName = useCallback((alias?: string | null, summonerName?: string | null) => {
+    for (const value of [alias, summonerName]) {
+      if (!value) continue;
+      const direct = playerByAlias.get(value);
+      if (direct) return direct;
+      const normalized = playerByAlias.get(normalizePlayerKey(value));
+      if (normalized) return normalized;
+    }
+    return undefined;
+  }, [playerByAlias]);
 
   // Which team is "ours" (the user's team)
   const myTeamIds = useMemo(() =>
@@ -116,20 +137,28 @@ export function AugWaitScreen({
   const lcuPicks = useMemo(() => {
     if (!lcu.lastState || champKeyMap.size === 0) return {};
     const out: Record<number, string> = {};
-    const allPicks = [
-      ...lcu.lastState.team1Picks,
-      ...lcu.lastState.team2Picks,
-    ];
-    for (const pick of allPicks) {
-      if (!pick.champId || pick.champId <= 0) continue;
-      const champId = champKeyMap.get(pick.champId);
-      if (!champId) continue;
-      if (pick.alias && playerByAlias.has(pick.alias)) {
-        out[playerByAlias.get(pick.alias)!] = champId;
+    const applyTeam = (lcuTeam: NonNullable<typeof lcu.lastState>['team1Picks'], fallbackIds: number[]) => {
+      const sorted = [...lcuTeam].sort((a, b) => a.cellId - b.cellId);
+      const slots = sorted.map((pick) => resolvePlayerIdFromLcuName(pick.alias, pick.gameName));
+      const matched = new Set(slots.filter((id): id is number => typeof id === 'number'));
+      const remaining = fallbackIds.filter((id) => !matched.has(id));
+      const alignedIds = slots
+        .map((id) => id ?? remaining.shift())
+        .filter((id): id is number => typeof id === 'number');
+
+      for (let index = 0; index < sorted.length; index++) {
+        const pick = sorted[index];
+        if (!pick.champId || pick.champId <= 0) continue;
+        const champId = champKeyMap.get(pick.champId);
+        if (!champId) continue;
+        const playerId = resolvePlayerIdFromLcuName(pick.alias, pick.gameName) ?? alignedIds[index];
+        if (playerId) out[playerId] = champId;
       }
-    }
+    };
+    applyTeam(lcu.lastState.team1Picks, team1PlayerIds);
+    applyTeam(lcu.lastState.team2Picks, team2PlayerIds);
     return out;
-  }, [lcu.lastState, champKeyMap, playerByAlias]);
+  }, [lcu.lastState, champKeyMap, resolvePlayerIdFromLcuName, team1PlayerIds, team2PlayerIds]);
 
   // Bench (team pool) — numeric IDs from LCU, converted to string
   const benchChampIds = useMemo(() => {
@@ -158,19 +187,30 @@ export function AugWaitScreen({
     if (confirmedRef.current) return;
     const { team1, team2 } = lcu.liveGamePlayers;
     const picks: Record<number, string> = {};
-    for (const lp of [...team1, ...team2]) {
-      const pid = lp.alias ? playerByAlias.get(lp.alias) : undefined;
-      if (!pid) continue;
-      const champId =
-        champByNormId.get(lp.championId.toLowerCase()) ??
-        champByNormId.get(lp.championId.replace(/[^a-zA-Z]/g, '').toLowerCase());
-      if (champId) picks[pid] = champId;
-    }
+    const applyLiveTeam = (liveTeam: typeof team1, fallbackIds: number[]) => {
+      const slots = liveTeam.map((lp) => resolvePlayerIdFromLcuName(lp.alias, lp.summonerName));
+      const matched = new Set(slots.filter((id): id is number => typeof id === 'number'));
+      const remaining = fallbackIds.filter((id) => !matched.has(id));
+      const alignedIds = slots
+        .map((id) => id ?? remaining.shift())
+        .filter((id): id is number => typeof id === 'number');
+
+      liveTeam.forEach((lp, index) => {
+        const pid = resolvePlayerIdFromLcuName(lp.alias, lp.summonerName) ?? alignedIds[index];
+        if (!pid) return;
+        const champId =
+          champByNormId.get(lp.championId.toLowerCase()) ??
+          champByNormId.get(lp.championId.replace(/[^a-zA-Z]/g, '').toLowerCase());
+        if (champId) picks[pid] = champId;
+      });
+    };
+    applyLiveTeam(team1, team1PlayerIds);
+    applyLiveTeam(team2, team2PlayerIds);
     if (Object.keys(picks).length > 0) {
       confirmedRef.current = true;
       onConfirm({ bans: { 1: [], 2: [] }, picks });
     }
-  }, [lcu.liveGamePlayers, lcu.gameStartedAt, playerByAlias, champByNormId, onConfirm]);
+  }, [lcu.liveGamePlayers, lcu.gameStartedAt, resolvePlayerIdFromLcuName, champByNormId, onConfirm, team1PlayerIds, team2PlayerIds]);
 
   const handleManualConfirm = () => {
     if (confirmedRef.current) return;

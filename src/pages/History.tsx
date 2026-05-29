@@ -60,6 +60,12 @@ export function History() {
             return { ...game, picks, eogCapture: eogCapture ?? null, participantStats };
           }),
         );
+        gamesWithDetails.sort((a, b) => {
+          const aPending = a.winningTeam === null;
+          const bPending = b.winningTeam === null;
+          if (aPending !== bPending) return aPending ? -1 : 1;
+          return b.gameNumber - a.gameNumber;
+        });
         if (gamesWithDetails.length > 0) {
           sessionsWithGames.push({ ...session, games: gamesWithDetails });
         }

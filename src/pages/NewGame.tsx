@@ -49,6 +49,13 @@ function average(values: number[]) {
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }
 
+function normalizePlayerKey(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]/g, '');
+}
+
 function getPlayerPower(stats: FullStats, playerId: number) {
   const overall = stats.wrStats.playerOverallStats[playerId];
   const ability = average((stats.radarData[playerId] ?? []).map((point) => point.value));
@@ -179,7 +186,12 @@ export function NewGame() {
   }, [allPlayerIds, keepTeams, lastGameTeams]);
 
   const playerNameToId = useMemo(() => {
-    return new Map(players.map(p => [p.name, p.id!]));
+    const map = new Map<string, number>();
+    for (const player of players) {
+      map.set(player.name, player.id!);
+      map.set(normalizePlayerKey(player.name), player.id!);
+    }
+    return map;
   }, [players]);
 
   // Helper: apply team assignments from alias arrays
@@ -190,11 +202,11 @@ export function NewGame() {
     const matched = new Set<number>();
 
     for (const alias of t1Aliases) {
-      const pid = playerNameToId.get(alias);
+      const pid = playerNameToId.get(alias) ?? playerNameToId.get(normalizePlayerKey(alias));
       if (pid) { newAssignments[pid] = 1; matched.add(pid); }
     }
     for (const alias of t2Aliases) {
-      const pid = playerNameToId.get(alias);
+      const pid = playerNameToId.get(alias) ?? playerNameToId.get(normalizePlayerKey(alias));
       if (pid) { newAssignments[pid] = 2; matched.add(pid); }
     }
 
@@ -246,8 +258,9 @@ export function NewGame() {
       if (fromLcu && state.mode === 'augmented') {
         setMode((prev) => prev === 'augmented' ? prev : 'augmented');
       }
-      const t1Aliases = state.team1Picks.map(p => p.alias).filter(Boolean) as string[];
-      const t2Aliases = state.team2Picks.map(p => p.alias).filter(Boolean) as string[];
+      const sortByCell = <T extends { cellId: number }>(rows: T[]) => [...rows].sort((a, b) => a.cellId - b.cellId);
+      const t1Aliases = sortByCell(state.team1Picks).map(p => p.alias).filter(Boolean) as string[];
+      const t2Aliases = sortByCell(state.team2Picks).map(p => p.alias).filter(Boolean) as string[];
       applyTeamsFromAliases(t1Aliases, t2Aliases);
     }, 0);
     return () => window.clearTimeout(timer);

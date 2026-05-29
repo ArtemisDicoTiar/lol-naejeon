@@ -103,6 +103,13 @@ function getChampionLane(champion: Champion): LaneRole {
   return 'mid';
 }
 
+function normalizePlayerKey(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]/g, '');
+}
+
 export function BanPickScreen({
   format, mode = 'aram', team1PlayerIds, team2PlayerIds, players, champions,
   fierlessBans, proficiencies, onConfirm, onBack, onReorderTeams,
@@ -183,6 +190,26 @@ export function BanPickScreen({
     return map;
   }, [champKeyMap]);
 
+  const playerNameToId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const player of players) {
+      map.set(player.name, player.id!);
+      map.set(normalizePlayerKey(player.name), player.id!);
+    }
+    return map;
+  }, [players]);
+
+  const resolvePlayerIdFromLcuName = useCallback((alias?: string | null, gameName?: string | null) => {
+    for (const value of [alias, gameName]) {
+      if (!value) continue;
+      const direct = playerNameToId.get(value);
+      if (direct) return direct;
+      const normalized = playerNameToId.get(normalizePlayerKey(value));
+      if (normalized) return normalized;
+    }
+    return undefined;
+  }, [playerNameToId]);
+
   // Resume LCU sync when a new champ select starts (different state from what caused pause)
   useEffect(() => {
     if (lcuPaused && lcu.champSelectActive) {
@@ -200,22 +227,28 @@ export function BanPickScreen({
     }
     const state = lcu.lastState;
     const lcuPhase = state.phase?.toUpperCase() ?? '';
+    const sortLcuPicks = (lcuPicks: typeof state.team1Picks) =>
+      [...lcuPicks].sort((a, b) => a.cellId - b.cellId);
 
-    // Rebuild team assignments from LCU data (always, regardless of phase)
-    const buildTeamFromLcu = (lcuPicks: typeof state.team1Picks) => {
-      const sorted = [...lcuPicks].sort((a, b) => a.cellId - b.cellId);
-      const ids: number[] = [];
-      for (const p of sorted) {
-        if (p.alias && playerNameToId.has(p.alias)) {
-          ids.push(playerNameToId.get(p.alias)!);
-        }
-      }
-      return ids;
+    const sortedTeam1LcuPicks = sortLcuPicks(state.team1Picks);
+    const sortedTeam2LcuPicks = sortLcuPicks(state.team2Picks);
+
+    const buildAlignedTeamFromLcu = (lcuPicks: typeof state.team1Picks, currentIds: number[]) => {
+      const slots = lcuPicks.map((p) => resolvePlayerIdFromLcuName(p.alias, p.gameName));
+      const matched = new Set(slots.filter((id): id is number => typeof id === 'number'));
+      const remaining = currentIds.filter((id) => !matched.has(id));
+      return slots
+        .map((id) => id ?? remaining.shift())
+        .filter((id): id is number => typeof id === 'number');
     };
 
-    if (state.team1Picks.some(p => p.alias) || state.team2Picks.some(p => p.alias)) {
-      const lcuT1 = buildTeamFromLcu(state.team1Picks);
-      const lcuT2 = buildTeamFromLcu(state.team2Picks);
+    const lcuT1 = buildAlignedTeamFromLcu(sortedTeam1LcuPicks, team1PlayerIds);
+    const lcuT2 = buildAlignedTeamFromLcu(sortedTeam2LcuPicks, team2PlayerIds);
+    const hasResolvedLcuPlayer = [...sortedTeam1LcuPicks, ...sortedTeam2LcuPicks]
+      .some((p) => resolvePlayerIdFromLcuName(p.alias, p.gameName));
+
+    // Rebuild team assignments from LCU data (always, regardless of phase)
+    if (hasResolvedLcuPlayer) {
       const matched = new Set([...lcuT1, ...lcuT2]);
       for (const id of team1PlayerIds) { if (!matched.has(id)) lcuT1.push(id); }
       for (const id of team2PlayerIds) { if (!matched.has(id)) lcuT2.push(id); }
@@ -226,22 +259,19 @@ export function BanPickScreen({
 
     // PLANNING phase: apply picks as tentative (hover) but don't lock-in or change phase
     if (lcuPhase === 'PLANNING') {
-      const applyHovers = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
+      const applyHovers = (lcuPicks: typeof state.team1Picks, alignedIds: number[]) => {
         const result: Record<number, string> = {};
         lcuPicks.forEach((p, i) => {
           if (p.champId <= 0) return;
           const champStrId = champKeyMap.get(p.champId);
           if (!champStrId) return;
-          if (p.alias && playerNameToId.has(p.alias)) {
-            result[playerNameToId.get(p.alias)!] = champStrId;
-          } else if (i < fallbackIds.length) {
-            result[fallbackIds[i]] = champStrId;
-          }
+          const playerId = resolvePlayerIdFromLcuName(p.alias, p.gameName) ?? alignedIds[i];
+          if (playerId) result[playerId] = champStrId;
         });
         return result;
       };
-      const hovers1 = applyHovers(state.team1Picks, team1PlayerIds);
-      const hovers2 = applyHovers(state.team2Picks, team2PlayerIds);
+      const hovers1 = applyHovers(sortedTeam1LcuPicks, lcuT1);
+      const hovers2 = applyHovers(sortedTeam2LcuPicks, lcuT2);
       if (Object.keys(hovers1).length > 0 || Object.keys(hovers2).length > 0) {
         setPicks(prev => ({ ...prev, ...hovers1, ...hovers2 }));
         // Stay in planning phase, don't lock, don't advance
@@ -299,24 +329,21 @@ export function BanPickScreen({
     // Apply picks: during any phase except pure BAN_PICK with no completed bans
     const isBanPhaseOnly = lcuPhase === 'BAN_PICK' && [...lcuBans1, ...lcuBans2].every(b => !b.completed);
     if (!isBanPhaseOnly) {
-      const applyPicks = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
+      const applyPicks = (lcuPicks: typeof state.team1Picks, alignedIds: number[]) => {
         const result: Record<number, string> = {};
         lcuPicks.forEach((p, i) => {
           // Only apply picks that have a locked champion or are in pick actions (not hover during ban)
           if (p.champId <= 0) return;
           const champStrId = champKeyMap.get(p.champId);
           if (!champStrId) return;
-          if (p.alias && playerNameToId.has(p.alias)) {
-            result[playerNameToId.get(p.alias)!] = champStrId;
-          } else if (i < fallbackIds.length) {
-            result[fallbackIds[i]] = champStrId;
-          }
+          const playerId = resolvePlayerIdFromLcuName(p.alias, p.gameName) ?? alignedIds[i];
+          if (playerId) result[playerId] = champStrId;
         });
         return result;
       };
 
-      const picks1 = applyPicks(state.team1Picks, team1PlayerIds);
-      const picks2 = applyPicks(state.team2Picks, team2PlayerIds);
+      const picks1 = applyPicks(sortedTeam1LcuPicks, lcuT1);
+      const picks2 = applyPicks(sortedTeam2LcuPicks, lcuT2);
 
       if (Object.keys(picks1).length > 0 || Object.keys(picks2).length > 0) {
         setPicks(prev => ({ ...prev, ...picks1, ...picks2 }));
@@ -325,23 +352,18 @@ export function BanPickScreen({
     }
 
     // Auto lock-in: match by alias first, then by position fallback
-    const lockFromLcu = (lcuPicks: typeof state.team1Picks, fallbackIds: number[]) => {
+    const lockFromLcu = (lcuPicks: typeof state.team1Picks, alignedIds: number[]) => {
       const result: number[] = [];
       lcuPicks.forEach((p, i) => {
         if (!p.locked || p.champId <= 0) return;
-        // Try alias match
-        if (p.alias && playerNameToId.has(p.alias)) {
-          result.push(playerNameToId.get(p.alias)!);
-        } else if (i < fallbackIds.length) {
-          // Fallback: position order
-          result.push(fallbackIds[i]);
-        }
+        const playerId = resolvePlayerIdFromLcuName(p.alias, p.gameName) ?? alignedIds[i];
+        if (playerId) result.push(playerId);
       });
       return result;
     };
 
-    const locked1 = lockFromLcu(state.team1Picks, team1PlayerIds);
-    const locked2 = lockFromLcu(state.team2Picks, team2PlayerIds);
+    const locked1 = lockFromLcu(sortedTeam1LcuPicks, lcuT1);
+    const locked2 = lockFromLcu(sortedTeam2LcuPicks, lcuT2);
     const allToLock = [...locked1, ...locked2];
 
     if (allToLock.length > 0) {
@@ -357,7 +379,7 @@ export function BanPickScreen({
     // Use content-based signatures for team IDs so we don't re-run when the
     // parent re-renders and passes a new array reference. onReorderTeams is now
     // wrapped in useCallback in NewGame.tsx so it has a stable identity.
-  }, [lcu.lastState, champKeyMap, team1Sig, team2Sig, players, onReorderTeams]);
+  }, [lcu.lastState, champKeyMap, team1Sig, team2Sig, players, onReorderTeams, resolvePlayerIdFromLcuName]);
 
   // Estimated proficiencies: auto-estimate for champions without manual proficiency
   const { mergedProficiencies, estimatedMap } = useMemo(() => {
@@ -428,8 +450,6 @@ export function BanPickScreen({
     for (const pid of team2PlayerIds) { if (mergedProficiencies[pid]) m[pid] = mergedProficiencies[pid]; }
     return m;
   }, [team2PlayerIds, mergedProficiencies]);
-
-  const playerNameToId = useMemo(() => new Map(players.map((p) => [p.name, p.id!])), [players]);
 
   const champByNormId = useMemo(() => {
     const map = new Map<string, string>();
@@ -716,8 +736,14 @@ export function BanPickScreen({
 
     const resolved: Record<number, string> = { ...picks };
     const applyLiveTeam = (liveTeam: typeof liveGamePlayers.team1, fallbackIds: number[]) => {
+      const slots = liveTeam.map((livePlayer) => resolvePlayerIdFromLcuName(livePlayer.alias, livePlayer.summonerName));
+      const matched = new Set(slots.filter((id): id is number => typeof id === 'number'));
+      const remaining = fallbackIds.filter((id) => !matched.has(id));
+      const alignedIds = slots
+        .map((id) => id ?? remaining.shift())
+        .filter((id): id is number => typeof id === 'number');
       liveTeam.forEach((livePlayer, index) => {
-        const playerId = livePlayer.alias ? playerNameToId.get(livePlayer.alias) : fallbackIds[index];
+        const playerId = resolvePlayerIdFromLcuName(livePlayer.alias, livePlayer.summonerName) ?? alignedIds[index];
         if (!playerId) return;
 
         const championId =
@@ -730,7 +756,7 @@ export function BanPickScreen({
     applyLiveTeam(liveGamePlayers.team1, team1PlayerIds);
     applyLiveTeam(liveGamePlayers.team2, team2PlayerIds);
     return resolved;
-  }, [champByNormId, liveGamePlayers, picks, playerNameToId, team1PlayerIds, team2PlayerIds]);
+  }, [champByNormId, liveGamePlayers, picks, resolvePlayerIdFromLcuName, team1PlayerIds, team2PlayerIds]);
 
   const handleConfirm = useCallback((confirmPicks: Record<number, string> = picks) => {
     const banResult: Record<1 | 2, string[]> = {
