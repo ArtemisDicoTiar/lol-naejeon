@@ -31,37 +31,82 @@ export function Stats() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [slowLoad, setSlowLoad] = useState(false);
+  const [eogLoading, setEogLoading] = useState(false);
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [selectedRadarPlayerIds, setSelectedRadarPlayerIds] = useState<number[]>([]);
   const radarSelectionInitializedRef = useRef(false);
   const statsCacheRef = useRef(new Map<ModeFilter, FullStats>());
+  const fastStatsCacheRef = useRef(new Map<ModeFilter, FullStats>());
   const loadRequestIdRef = useRef(0);
 
   const loadStats = useCallback((options: LoadOptions = {}) => {
     const requestId = ++loadRequestIdRef.current;
+    const targetMode = modeFilter;
+    const filter = targetMode === 'all' ? undefined : targetMode;
     const slowTimer = window.setTimeout(() => {
       if (!options.background && requestId === loadRequestIdRef.current) setSlowLoad(true);
     }, 2500);
-    if (options.clearCache) statsCacheRef.current.clear();
-    const cached = options.clearCache ? undefined : statsCacheRef.current.get(modeFilter);
+    if (options.clearCache) {
+      statsCacheRef.current.clear();
+      fastStatsCacheRef.current.clear();
+    }
+    const fullCached = options.clearCache ? undefined : statsCacheRef.current.get(targetMode);
+    const fastCached = options.clearCache ? undefined : fastStatsCacheRef.current.get(targetMode);
     if (!options.background) {
       setShowDetailedStats(false);
       setSlowLoad(false);
     }
-    if (cached) {
-      setStats(cached);
+
+    if (fullCached) {
+      window.clearTimeout(slowTimer);
+      setStats(fullCached);
+      setLoading(false);
+      setEogLoading(false);
+      setLoadError(false);
+      return;
+    }
+
+    if (fastCached) {
+      setStats(fastCached);
       setLoading(false);
     } else if (!options.background) {
       setLoading(true);
     }
+
     setLoadError(false);
-    const filter = modeFilter === 'all' ? undefined : modeFilter;
-    computeFullStats(filter)
+
+    const loadFullStats = () => {
+      setEogLoading(true);
+      computeFullStats(filter, { includeEog: true })
+        .then((s) => {
+          if (requestId !== loadRequestIdRef.current) return;
+          statsCacheRef.current.set(targetMode, s);
+          setStats(s);
+        })
+        .catch((error) => {
+          if (requestId !== loadRequestIdRef.current) return;
+          console.error('Failed to load detailed stats:', error);
+        })
+        .finally(() => {
+          if (requestId !== loadRequestIdRef.current) return;
+          setEogLoading(false);
+        });
+    };
+
+    const fastPromise = fastCached
+      ? Promise.resolve(fastCached)
+      : computeFullStats(filter, { includeEog: false });
+
+    fastPromise
       .then((s) => {
         if (requestId !== loadRequestIdRef.current) return;
-        statsCacheRef.current.set(modeFilter, s);
+        fastStatsCacheRef.current.set(targetMode, s);
         setStats(s);
+        setLoading(false);
+        setSlowLoad(false);
+        window.clearTimeout(slowTimer);
+        window.setTimeout(loadFullStats, 0);
       })
       .catch((error) => {
         if (requestId !== loadRequestIdRef.current) return;
@@ -207,6 +252,7 @@ export function Stats() {
             <StatusPill tone={modeFilter === 'augmented' ? 'purple' : 'muted'}>
               {modeFilter === 'all' ? '전체 모드' : GAME_MODE_LABELS[modeFilter as GameMode]}
             </StatusPill>
+            {eogLoading && <StatusPill tone="blue">전투 로그 로딩</StatusPill>}
           </>
         )}
         actions={modeToggle}
@@ -276,7 +322,11 @@ export function Stats() {
       })()}
 
       <Card title="EOG 전투 지표">
-        {stats.eogOverview.capturedGames === 0 ? (
+        {eogLoading && stats.eogOverview.capturedGames === 0 ? (
+          <p className="text-sm text-lol-gold-light/50">
+            승률/픽밴 통계를 먼저 표시했습니다. 딜량, 받은 피해, CC 같은 전투 로그는 백그라운드에서 불러오는 중입니다.
+          </p>
+        ) : stats.eogOverview.capturedGames === 0 ? (
           <p className="text-sm text-lol-gold-light/50">
             아직 종료 후 상세 통계가 수집된 게임이 없습니다. 브릿지를 연결한 상태에서 게임을 끝내면 여기에 누적됩니다.
           </p>

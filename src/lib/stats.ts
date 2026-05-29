@@ -247,6 +247,10 @@ export interface FullStats {
   championEogSummary: ChampionEogSummaryEntry[];
 }
 
+export interface ComputeFullStatsOptions {
+  includeEog?: boolean;
+}
+
 const ROLE_KO: Record<string, string> = {
   poke: '포크', engage: '이니시', sustain: '유지력',
   dps: '딜러', tank: '탱커', utility: '유틸',
@@ -320,14 +324,30 @@ function avgEog(aggregate: EogAggregate | undefined, metric: EogMetric) {
   return aggregate[metric] / aggregate.games;
 }
 
-export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats> {
-  const [players, champions, allGamesRaw, allPicksRaw, allBansRaw, allParticipantStatsRaw, allProficiencies] = await Promise.all([
+async function loadParticipantStatsForGames(gameIds: number[] | null) {
+  if (gameIds && gameIds.length === 0) return [];
+  if (!gameIds) return db.gameParticipantStats.toArray();
+
+  const CHUNK_SIZE = 100;
+  const chunks: number[][] = [];
+  for (let index = 0; index < gameIds.length; index += CHUNK_SIZE) {
+    chunks.push(gameIds.slice(index, index + CHUNK_SIZE));
+  }
+  const rows = await Promise.all(chunks.map((chunk) => db.gameParticipantStats.where('gameId').anyOf(chunk).toArray()));
+  return rows.flat();
+}
+
+export async function computeFullStats(
+  modeFilter?: GameMode,
+  options: ComputeFullStatsOptions = {},
+): Promise<FullStats> {
+  const includeEog = options.includeEog ?? true;
+  const [players, champions, allGamesRaw, allPicksRaw, allBansRaw, allProficiencies] = await Promise.all([
     db.players.toArray(),
     db.champions.toArray(),
     db.games.toArray(),
     db.gamePicks.toArray(),
     db.gameBans.toArray(),
-    db.gameParticipantStats.toArray(),
     db.proficiencies.toArray(),
   ]);
   // Apply same mode filter to games/picks so downstream calcs (radar, role
@@ -335,7 +355,8 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
   const allGames = modeFilter
     ? allGamesRaw.filter((g) => (g.mode ?? 'aram') === modeFilter)
     : allGamesRaw;
-  const gameIdSet = modeFilter ? new Set(allGames.map((g) => g.id)) : null;
+  const gameIds = allGames.map((g) => g.id).filter((id): id is number => typeof id === 'number');
+  const gameIdSet = modeFilter ? new Set(gameIds) : null;
   const allPicks = gameIdSet
     ? allPicksRaw.filter((p) => gameIdSet.has(p.gameId))
     : allPicksRaw;
@@ -344,6 +365,9 @@ export async function computeFullStats(modeFilter?: GameMode): Promise<FullStats
     : allBansRaw;
   const wrStats = computeStatsFromData(allGames, allPicks, allBans);
   const gameMap = new Map(allGames.map((game) => [game.id, game]));
+  const allParticipantStatsRaw = includeEog
+    ? await loadParticipantStatsForGames(gameIdSet ? gameIds : null)
+    : [];
   const filteredParticipantStats = gameIdSet
     ? allParticipantStatsRaw.filter((row) => row.gameId && gameIdSet.has(row.gameId))
     : allParticipantStatsRaw.filter((row) => row.gameId);

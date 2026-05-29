@@ -312,7 +312,7 @@ export function NewGame() {
     if (selectedPlayerIds.length < 2) return;
     setBalanceLoading(true);
     try {
-      const stats = await computeFullStats(mode);
+      const stats = await computeFullStats(mode, { includeEog: false });
       const recommendation = findGoldenBalance(stats, selectedPlayerIds);
       if (!recommendation) return;
       const assignments: Record<number, 1 | 2> = {};

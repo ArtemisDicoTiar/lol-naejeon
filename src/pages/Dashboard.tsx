@@ -60,8 +60,11 @@ export function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     const loadStats = async () => {
-      const next = await computeFullStats();
-      if (!cancelled) setStats(next);
+      const quick = await computeFullStats(undefined, { includeEog: false });
+      if (cancelled) return;
+      setStats(quick);
+      const detailed = await computeFullStats(undefined, { includeEog: true });
+      if (!cancelled) setStats(detailed);
     };
     const timer = window.setTimeout(() => { void loadStats(); }, 0);
     const handleDataChanged = () => { window.setTimeout(() => { void loadStats(); }, 0); };
