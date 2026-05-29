@@ -16,6 +16,8 @@ import type { Champion } from '@/lib/db';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
 import { getTagLabel, getTagColor } from '@/data/tag-display';
 
+type EditableGamePick = GamePick & { draftId: string };
+
 export function Session() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -30,6 +32,8 @@ export function Session() {
   const [unlinkedCaptures, setUnlinkedCaptures] = useState<GameEogCapture[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
+  const [editingGameId, setEditingGameId] = useState<number | null>(null);
+  const [draftPicksByGameId, setDraftPicksByGameId] = useState<Record<number, EditableGamePick[]>>({});
   const autoNavigateRef = useRef(false);
 
   useEffect(() => { db.players.toArray().then(setPlayers); }, []);
@@ -152,6 +156,14 @@ export function Session() {
 
   const getChampion = (id: string) => champions.find((c) => c.id === id);
   const getPlayer = (id: number) => players.find((p) => p.id === id);
+  const sortedPlayers = useMemo(
+    () => [...players].sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    [players],
+  );
+  const sortedChampions = useMemo(
+    () => [...champions].sort((a, b) => a.nameKo.localeCompare(b.nameKo, 'ko')),
+    [champions],
+  );
   const bannedChampions = champions.filter((c) => fierlessBans.includes(c.id));
   const availableCount = champions.length - fierlessBans.length;
   const bannedPercent = champions.length > 0 ? (fierlessBans.length / champions.length) * 100 : 0;
@@ -163,6 +175,96 @@ export function Session() {
     const syncMsg = await endSession(isMaster);
     if (syncMsg) alert(syncMsg);
     navigate('/');
+  };
+
+  const makeEditablePick = (pick: GamePick, index: number): EditableGamePick => ({
+    ...pick,
+    draftId: `${pick.id ?? 'new'}-${index}-${pick.team}-${pick.playerId}-${pick.championId}`,
+  });
+
+  const startEditingGamePicks = (gameId: number) => {
+    const currentPicks = gamePicks[gameId] ?? [];
+    setDraftPicksByGameId((prev) => ({
+      ...prev,
+      [gameId]: currentPicks.map(makeEditablePick),
+    }));
+    setEditingGameId(gameId);
+  };
+
+  const cancelEditingGamePicks = (gameId: number) => {
+    setDraftPicksByGameId((prev) => {
+      const next = { ...prev };
+      delete next[gameId];
+      return next;
+    });
+    setEditingGameId(null);
+  };
+
+  const updateDraftPick = (
+    gameId: number,
+    draftId: string,
+    changes: Partial<Pick<GamePick, 'playerId' | 'championId' | 'team'>>,
+  ) => {
+    setDraftPicksByGameId((prev) => ({
+      ...prev,
+      [gameId]: (prev[gameId] ?? []).map((pick) =>
+        pick.draftId === draftId ? { ...pick, ...changes } : pick,
+      ),
+    }));
+  };
+
+  const addDraftPick = (gameId: number, team: 1 | 2) => {
+    const current = draftPicksByGameId[gameId] ?? [];
+    const usedPlayerIds = new Set(current.map((pick) => pick.playerId));
+    const fallbackPlayer = sortedPlayers.find((player) => !usedPlayerIds.has(player.id!)) ?? sortedPlayers[0];
+    const fallbackChampion = sortedChampions[0];
+    if (!fallbackPlayer || !fallbackChampion) return;
+
+    setDraftPicksByGameId((prev) => ({
+      ...prev,
+      [gameId]: [
+        ...(prev[gameId] ?? []),
+        {
+          draftId: `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          gameId,
+          team,
+          playerId: fallbackPlayer.id!,
+          championId: fallbackChampion.id,
+        },
+      ],
+    }));
+  };
+
+  const removeDraftPick = (gameId: number, draftId: string) => {
+    setDraftPicksByGameId((prev) => ({
+      ...prev,
+      [gameId]: (prev[gameId] ?? []).filter((pick) => pick.draftId !== draftId),
+    }));
+  };
+
+  const saveEditingGamePicks = async (gameId: number) => {
+    const draftPicks = draftPicksByGameId[gameId] ?? [];
+    const validPicks = draftPicks.filter((pick) => pick.playerId && pick.championId);
+    if (validPicks.length === 0) {
+      alert('저장할 픽이 없습니다.');
+      return;
+    }
+
+    const duplicatePlayer = validPicks.find((pick, index) =>
+      validPicks.findIndex((candidate) => candidate.playerId === pick.playerId) !== index,
+    );
+    if (duplicatePlayer) {
+      alert(`같은 플레이어가 중복으로 들어가 있습니다: ${getPlayer(duplicatePlayer.playerId)?.name ?? duplicatePlayer.playerId}`);
+      return;
+    }
+
+    await correctGamePicks(gameId, validPicks.map((pick) => ({
+      playerId: pick.playerId,
+      championId: pick.championId,
+      team: pick.team,
+    })));
+    await loadAncillaryGameData();
+    cancelEditingGamePicks(gameId);
   };
 
   if (loading) return <div className="text-center py-8 text-lol-gold">로딩 중...</div>;
@@ -395,11 +497,15 @@ export function Session() {
           <div className="space-y-4">
             {games.map((game, idx) => {
               const picks = gamePicks[game.id!] ?? [];
+              const isEditingPicks = editingGameId === game.id;
+              const displayPicks = isEditingPicks
+                ? (draftPicksByGameId[game.id!] ?? picks.map(makeEditablePick))
+                : picks.map(makeEditablePick);
               const bans = gameBansMap[game.id!] ?? [];
               const eogCapture = gameEogMap[game.id!];
               const eogStats = gameParticipantStatsMap[game.id!] ?? [];
-              const team1 = picks.filter((p) => p.team === 1);
-              const team2 = picks.filter((p) => p.team === 2);
+              const team1 = displayPicks.filter((p) => p.team === 1);
+              const team2 = displayPicks.filter((p) => p.team === 2);
               const isLatest = idx === games.length - 1;
               return (
                 <div key={game.id} className="p-4 bg-lol-blue rounded border border-lol-border">
@@ -458,9 +564,21 @@ export function Session() {
                       <Button size="sm" variant="danger" onClick={() => {
                         if (confirm(`Game #${game.gameNumber}을 삭제하시겠습니까?`)) removeGame(game.id!);
                       }}>삭제</Button>
+                      <Button
+                        size="sm"
+                        variant={isEditingPicks ? 'primary' : 'ghost'}
+                        onClick={() => isEditingPicks ? void saveEditingGamePicks(game.id!) : startEditingGamePicks(game.id!)}
+                      >
+                        {isEditingPicks ? '픽 수정 완료' : '픽 수정'}
+                      </Button>
+                      {isEditingPicks && (
+                        <Button size="sm" variant="ghost" onClick={() => cancelEditingGamePicks(game.id!)}>
+                          취소
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  {isLatest && wrStats && picks.length > 0 && (
+                  {isLatest && wrStats && displayPicks.length > 0 && (
                     <ActiveGameStats
                       team1={team1}
                       team2={team2}
@@ -490,13 +608,55 @@ export function Session() {
                   <div className="grid grid-cols-2 gap-4">
                     {[{ team: team1, num: 1 }, { team: team2, num: 2 }].map(({ team, num }) => (
                       <div key={num} className={`p-2 rounded ${game.winningTeam === num ? 'bg-prof-high/10 border border-prof-high/30' : 'bg-lol-dark/50'}`}>
-                        <div className="text-xs text-lol-gold mb-2 font-medium">Team {num}</div>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="text-xs text-lol-gold font-medium">Team {num}</div>
+                          {isEditingPicks && (
+                            <button
+                              onClick={() => addDraftPick(game.id!, num as 1 | 2)}
+                              className="cursor-pointer rounded border border-lol-border/70 px-2 py-0.5 text-[10px] text-lol-gold-light/60 hover:border-lol-gold/60 hover:text-lol-gold"
+                            >
+                              픽 추가
+                            </button>
+                          )}
+                        </div>
                         <div className="space-y-1">
                           {team.map((pick) => {
                             const champ = getChampion(pick.championId);
                             const player = getPlayer(pick.playerId);
+                            if (isEditingPicks) {
+                              return (
+                                <div key={pick.draftId} className="flex items-center gap-1">
+                                  {champ && <ChampionIcon champion={champ} size="sm" />}
+                                  <select
+                                    value={pick.playerId}
+                                    onChange={(event) => updateDraftPick(game.id!, pick.draftId, { playerId: Number(event.target.value) })}
+                                    className="min-w-0 flex-1 cursor-pointer rounded border border-lol-border bg-lol-dark px-1 py-0.5 text-[11px] text-lol-gold-light"
+                                  >
+                                    {sortedPlayers.map((candidate) => (
+                                      <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    value={pick.championId}
+                                    onChange={(event) => updateDraftPick(game.id!, pick.draftId, { championId: event.target.value })}
+                                    className="min-w-0 flex-1 cursor-pointer rounded border border-lol-border bg-lol-dark px-1 py-0.5 text-[11px] text-lol-gold-light"
+                                  >
+                                    {sortedChampions.map((candidate) => (
+                                      <option key={candidate.id} value={candidate.id}>{candidate.nameKo}</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    onClick={() => removeDraftPick(game.id!, pick.draftId)}
+                                    className="cursor-pointer px-1 text-xs text-red-400/60 hover:text-red-300"
+                                    title="픽 삭제"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              );
+                            }
                             return (
-                              <div key={pick.id} className="flex items-center gap-2">
+                              <div key={pick.draftId} className="flex items-center gap-2">
                                 {champ && <ChampionIcon champion={champ} size="sm" />}
                                 <div>
                                   <span className="text-sm text-lol-gold-light">{player?.name}</span>
@@ -505,6 +665,11 @@ export function Session() {
                               </div>
                             );
                           })}
+                          {team.length === 0 && (
+                            <div className="rounded border border-dashed border-lol-border/50 px-2 py-3 text-center text-xs text-lol-gold-light/35">
+                              {isEditingPicks ? '픽 추가로 기록을 채우세요.' : '기록된 픽 없음'}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
