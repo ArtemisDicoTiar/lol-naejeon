@@ -281,7 +281,7 @@ export function PlayerStats() {
       ) : (
         <>
           <Card className="overflow-hidden">
-            <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+            <div className="grid gap-6 xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)]">
               <div className="space-y-4">
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-lol-gold/20 bg-lol-dark/45 p-5 text-center">
                   <div
@@ -316,7 +316,7 @@ export function PlayerStats() {
                   description="현재 필터 기준 전체 평균과 비교합니다."
                   series={combatRadarSeries}
                   emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
-                  chartHeight={260}
+                  chartHeight={240}
                 />
               </div>
 

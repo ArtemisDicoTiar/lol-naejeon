@@ -90,7 +90,15 @@ function formatRaw(axis: string, value: number) {
   return Math.round(value).toLocaleString('ko-KR');
 }
 
-export function TrioRadar({ stats, chartHeight = 390 }: { stats: FullStats; chartHeight?: number }) {
+export function TrioRadar({
+  stats,
+  chartHeight = 390,
+  className,
+}: {
+  stats: FullStats;
+  chartHeight?: number;
+  className?: string;
+}) {
   const defaultTeamA = stats.trioPlayerSynergy[0]?.playerIds ?? stats.players.slice(0, 3).map((player) => player.id!);
   const defaultTeamB = stats.trioPlayerSynergy[1]?.playerIds
     ?? stats.players
@@ -212,7 +220,7 @@ export function TrioRadar({ stats, chartHeight = 390 }: { stats: FullStats; char
   );
 
   return (
-    <Card title="3인팀 비교 레이더">
+    <Card title="3인팀 비교 레이더" className={className}>
       <p className="mb-4 text-sm text-lol-gold-light/55">
         3명씩 두 팀을 선택해서 조합 승률, 역할 밸런스, 평균 전투 성향을 비교합니다.
       </p>

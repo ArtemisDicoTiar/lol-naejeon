@@ -43,15 +43,19 @@ function formatRawValue(axis: keyof StyleMetrics, value: number) {
 export function PlayerStyleRadar({
   stats,
   compact = false,
+  chartHeight,
   selectedIds: controlledSelectedIds,
   onTogglePlayer,
   hideSelector = false,
+  className,
 }: {
   stats: FullStats;
   compact?: boolean;
+  chartHeight?: number;
   selectedIds?: number[];
   onTogglePlayer?: (playerId: number) => void;
   hideSelector?: boolean;
+  className?: string;
 }) {
   const playerIdsWithData = useMemo(
     () => new Set(stats.playerEogSummary.map((entry) => entry.playerId)),
@@ -105,7 +109,7 @@ export function PlayerStyleRadar({
   };
 
   return (
-    <Card title="플레이스타일 레이더">
+    <Card title="플레이스타일 레이더" className={className}>
       {!compact && <p className="mb-4 text-sm text-lol-gold-light/55">
         종료 후 통계가 수집된 게임 기준으로 실제 전투 성향을 비교합니다. 각 축은 선택한 플레이어 중 최고값을 100으로 정규화합니다.
       </p>}
@@ -138,7 +142,7 @@ export function PlayerStyleRadar({
       {selectedSummaries.length === 0 ? (
         <p className="text-center py-8 text-lol-gold-light/50">비교할 플레이어를 선택하세요.</p>
       ) : (
-        <ResponsiveContainer width="100%" height={compact ? 310 : 400}>
+        <ResponsiveContainer width="100%" height={chartHeight ?? (compact ? 310 : 400)}>
           <RadarChart data={chartData} cx="50%" cy="50%" outerRadius={compact ? '67%' : '74%'}>
             <PolarGrid stroke="#463714" />
             <PolarAngleAxis dataKey="axis" tick={{ fill: '#f0e6d2', fontSize: compact ? 10 : 12 }} />
