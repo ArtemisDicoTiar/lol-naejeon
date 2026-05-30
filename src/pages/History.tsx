@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ActionGroup, EmptyState, PageHeader, StatusPill } from '@/components/ui/Page';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
-import { db, deleteSession, GAME_MODE_LABELS, updateGameMode, updateSessionName, type Champion, type Game, type GameEogCapture, type GameMode, type GameParticipantStat, type GamePick, type Player, type Session } from '@/lib/db';
+import { db, deleteGame, deleteSession, GAME_MODE_LABELS, updateGameMode, updateSessionName, type Champion, type Game, type GameEogCapture, type GameMode, type GameParticipantStat, type GamePick, type Player, type Session } from '@/lib/db';
 import { importRetroCustomGames } from '@/lib/history-import';
 import { syncToVercel } from '@/lib/auto-sync';
 import { useIdentityContext, useLcuContext } from '@/App';
@@ -95,6 +95,18 @@ export function History() {
     await loadSessions();
   };
 
+  const handleDeleteGame = async (game: GameWithDetails) => {
+    if (!confirm(`Game #${game.gameNumber} 기록을 삭제하시겠습니까? 픽/밴/EOG 통계도 함께 삭제됩니다.`)) return;
+    await deleteGame(game.id!);
+    await loadSessions(false);
+    if (isMaster) {
+      await syncToVercel();
+    }
+    window.dispatchEvent(new CustomEvent('lol-data-changed', {
+      detail: { source: 'history-game-delete', gameId: game.id },
+    }));
+  };
+
   const handleRenameSession = async (sid: number, currentName: string) => {
     const newName = prompt('새 세션 이름:', currentName);
     if (!newName || newName === currentName) return;
@@ -111,6 +123,18 @@ export function History() {
     }
     window.dispatchEvent(new CustomEvent('lol-data-changed', {
       detail: { source: 'history-mode-edit', gameId: game.id, mode: nextMode },
+    }));
+  };
+
+  const handleUpdateGameWinner = async (game: GameWithDetails, winningTeam: 1 | 2 | null) => {
+    if (game.winningTeam === winningTeam) return;
+    await db.games.update(game.id!, { winningTeam });
+    await loadSessions(false);
+    if (isMaster) {
+      await syncToVercel();
+    }
+    window.dispatchEvent(new CustomEvent('lol-data-changed', {
+      detail: { source: 'history-result-edit', gameId: game.id, winningTeam },
     }));
   };
 
@@ -360,11 +384,38 @@ export function History() {
                         {game.eogCapture && <StatusPill tone="green" className="px-2 py-0.5 text-[10px]">📊 EOG</StatusPill>}
                       </div>
                       <ActionGroup>
-                        {game.winningTeam && (
-                          <StatusPill tone={game.winningTeam === 1 ? 'blue' : 'red'}>🏆 Team {game.winningTeam}</StatusPill>
-                        )}
+                        <StatusPill tone={game.winningTeam === 1 ? 'blue' : game.winningTeam === 2 ? 'red' : 'yellow'}>
+                          {game.winningTeam ? `🏆 Team ${game.winningTeam}` : '결과 대기'}
+                        </StatusPill>
                         {isMaster && (
                           <>
+                            <div className="flex items-center gap-1 rounded-lg border border-lol-border/60 bg-lol-dark/35 px-1 py-0.5">
+                              {([1, 2] as const).map((team) => (
+                                <button
+                                  key={team}
+                                  onClick={() => void handleUpdateGameWinner(game, team)}
+                                  className={`cursor-pointer rounded px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                                    game.winningTeam === team
+                                      ? team === 1
+                                        ? 'bg-blue-500/25 text-blue-200'
+                                        : 'bg-red-500/25 text-red-200'
+                                      : 'text-lol-gold-light/45 hover:bg-lol-gray hover:text-lol-gold-light'
+                                  }`}
+                                >
+                                  T{team} 승
+                                </button>
+                              ))}
+                              <button
+                                onClick={() => void handleUpdateGameWinner(game, null)}
+                                className={`cursor-pointer rounded px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                                  game.winningTeam === null
+                                    ? 'bg-yellow-500/20 text-yellow-200'
+                                    : 'text-lol-gold-light/35 hover:bg-lol-gray hover:text-lol-gold-light'
+                                }`}
+                              >
+                                대기
+                              </button>
+                            </div>
                             {game.eogCapture && (
                               <Button
                                 size="sm"
@@ -386,6 +437,13 @@ export function History() {
                                 취소
                               </Button>
                             )}
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => void handleDeleteGame(game)}
+                            >
+                              삭제
+                            </Button>
                           </>
                         )}
                       </ActionGroup>
