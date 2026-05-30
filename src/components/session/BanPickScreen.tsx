@@ -8,7 +8,7 @@ import { scoreComposition } from '@/lib/recommendation/scoring';
 import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
 import { estimatePlayerProficiencies, type EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
-import { getTagColor, TAG_LABELS } from '@/data/tag-display';
+import { getTagColor, getTagLabel, TAG_LABELS } from '@/data/tag-display';
 import { ARAM_ROLE_LABELS, type AramRole } from '@/data/aram-champion-meta';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { ChampionWithHover } from '@/components/champions/ChampionWithHover';
@@ -48,21 +48,34 @@ const LANE_LABELS: Record<LaneRole, string> = {
   support: '서폿',
 };
 
-const ROLE_ICONS: Record<AramRole, string> = {
-  poke: '↗',
-  engage: '⚡',
-  sustain: '+',
-  dps: '◎',
-  tank: '◆',
-  utility: '✦',
+const STATIC_ICON_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images';
+const CHAMP_SELECT_SVG_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-champ-select/global/default/svg';
+const SPELL_ICON_BASE = 'https://raw.communitydragon.org/latest/game/assets/spells/icons2d';
+
+const ROLE_ICON_URLS: Record<AramRole, string> = {
+  poke: `${STATIC_ICON_BASE}/npe-ft-role-icon-mage.png`,
+  engage: `${STATIC_ICON_BASE}/npe-ft-role-icon-fighter.png`,
+  sustain: `${STATIC_ICON_BASE}/npe-ft-role-icon-support.png`,
+  dps: `${STATIC_ICON_BASE}/npe-ft-role-icon-marksman.png`,
+  tank: `${STATIC_ICON_BASE}/npe-ft-role-icon-tank.png`,
+  utility: `${STATIC_ICON_BASE}/npe-ft-role-icon-support.png`,
 };
 
-const LANE_ICONS: Record<LaneRole, string> = {
-  top: '▲',
-  jungle: '♣',
-  mid: '◇',
-  adc: '⌁',
-  support: '✚',
+const ROLE_SHORT_LABELS: Record<AramRole, string> = {
+  poke: '포크',
+  engage: '이니시',
+  sustain: '유지',
+  dps: 'DPS',
+  tank: '탱커',
+  utility: '유틸',
+};
+
+const LANE_ICON_URLS: Record<LaneRole, string> = {
+  top: `${CHAMP_SELECT_SVG_BASE}/position-top.svg`,
+  jungle: `${CHAMP_SELECT_SVG_BASE}/position-jungle.svg`,
+  mid: `${CHAMP_SELECT_SVG_BASE}/position-middle.svg`,
+  adc: `${CHAMP_SELECT_SVG_BASE}/position-bottom.svg`,
+  support: `${CHAMP_SELECT_SVG_BASE}/position-utility.svg`,
 };
 
 const TAG_ICONS: Partial<Record<MechanicTag, string>> = {
@@ -88,6 +101,56 @@ const TAG_ICONS: Partial<Record<MechanicTag, string>> = {
   diving: '↯',
   dash_reset: '↻',
   stealth: '◌',
+};
+
+const TAG_ICON_URLS: Partial<Record<MechanicTag, string>> = {
+  knockup: `${SPELL_ICON_BASE}/summoner_exhaust.png`,
+  pull: `${SPELL_ICON_BASE}/summoner_exhaust.png`,
+  aoe_cc: `${SPELL_ICON_BASE}/summoner_exhaust.png`,
+  single_target_cc: `${SPELL_ICON_BASE}/summoner_exhaust.png`,
+  shield: `${SPELL_ICON_BASE}/035_tower_shield.png`,
+  heal: `${SPELL_ICON_BASE}/summoner_heal.png`,
+  speed_buff: `${SPELL_ICON_BASE}/summoner_haste.png`,
+  attack_steroid: `${STATIC_ICON_BASE}/npe-ft-role-icon-marksman.png`,
+  zone_control: `${STATIC_ICON_BASE}/flag.svg`,
+  poke_long: `${STATIC_ICON_BASE}/npe-ft-role-icon-mage.png`,
+  poke_mid: `${STATIC_ICON_BASE}/npe-ft-role-icon-mage.png`,
+  burst: `${STATIC_ICON_BASE}/npe-ft-role-icon-assassin.png`,
+  dps_sustained: `${STATIC_ICON_BASE}/npe-ft-role-icon-marksman.png`,
+  execute: `${STATIC_ICON_BASE}/exclamation-point.svg`,
+  revive: `${SPELL_ICON_BASE}/summoner_revive.png`,
+  invulnerable: `${SPELL_ICON_BASE}/summoner_boost.png`,
+  terrain_create: `${STATIC_ICON_BASE}/flag.svg`,
+  anti_heal: `${SPELL_ICON_BASE}/summoner_exhaust.png`,
+  tank_shred: `${STATIC_ICON_BASE}/npe-ft-role-icon-fighter.png`,
+  diving: `${STATIC_ICON_BASE}/npe-ft-role-icon-fighter.png`,
+  dash_reset: `${STATIC_ICON_BASE}/loop-arrow.svg`,
+  stealth: `${SPELL_ICON_BASE}/icon_summonerspell_vanish.png`,
+};
+
+const TAG_SHORT_LABELS: Partial<Record<MechanicTag, string>> = {
+  knockup: '넉업',
+  pull: '끌기',
+  aoe_cc: '광역',
+  single_target_cc: '단일',
+  shield: '쉴드',
+  heal: '힐',
+  speed_buff: '이속',
+  attack_steroid: '공속',
+  zone_control: '장악',
+  poke_long: '장거리',
+  poke_mid: '중거리',
+  burst: '버스트',
+  dps_sustained: '지속',
+  execute: '처형',
+  revive: '부활',
+  invulnerable: '무적',
+  terrain_create: '지형',
+  anti_heal: '치감',
+  tank_shred: '탱파',
+  diving: '다이브',
+  dash_reset: '리셋',
+  stealth: '은신',
 };
 
 const CHAMPION_LANES: Partial<Record<string, LaneRole>> = {
@@ -152,6 +215,56 @@ function normalizePlayerKey(value: string | null | undefined): string {
     .replace(/[^a-z0-9가-힣]/g, '');
 }
 
+function ensureBanSlotCount(bans: string[], size: number): string[] {
+  if (bans.length === size) return bans;
+  return [...bans.slice(0, size), ...Array(Math.max(0, size - bans.length)).fill('')];
+}
+
+function FilterIconButton({
+  active,
+  icon,
+  label,
+  title,
+  onClick,
+  dense = false,
+}: {
+  active: boolean;
+  icon?: string;
+  label: string;
+  title: string;
+  onClick: () => void;
+  dense?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`flex cursor-pointer items-center justify-center rounded border transition-colors ${
+        dense ? 'h-8 min-w-[3.35rem] gap-1 px-1.5' : 'h-9 min-w-[3rem] flex-col gap-0.5 px-1'
+      } ${
+        active
+          ? 'border-lol-gold bg-lol-gold/20 text-lol-gold shadow-[0_0_10px_rgba(200,155,60,0.10)]'
+          : 'border-lol-border bg-lol-blue/55 text-lol-gold-light/55 hover:border-lol-gold/50 hover:text-lol-gold-light'
+      }`}
+    >
+      {icon ? (
+        <img
+          src={icon}
+          alt=""
+          className={`${dense ? 'h-4 w-4' : 'h-[18px] w-[18px]'} object-contain ${active ? '' : 'opacity-70 grayscale-[25%]'}`}
+          loading="lazy"
+        />
+      ) : (
+        <span className="text-xs font-bold">{label.slice(0, 1)}</span>
+      )}
+      <span className={`${dense ? 'max-w-10' : 'max-w-11'} truncate text-[9px] font-semibold leading-none`}>
+        {label}
+      </span>
+    </button>
+  );
+}
+
 export function BanPickScreen({
   format, mode = 'aram', team1PlayerIds, team2PlayerIds, players, champions,
   fierlessBans, proficiencies, onConfirm, onBack, onReorderTeams,
@@ -175,6 +288,7 @@ export function BanPickScreen({
   const [phase, setPhase] = useState<'planning' | 'ban' | 'pick'>('planning');
   const [planningTimer, setPlanningTimer] = useState(25);
   const [lockedPicks, setLockedPicks] = useState<Set<number>>(new Set());
+  const [lockedBans, setLockedBans] = useState<Set<string>>(new Set()); // "team-index" keys
   const [sortMode, setSortMode] = useState<'auto' | 'name' | 'tier' | 'winrate'>('auto');
   const [roleFilter, setRoleFilter] = useState<AramRole | null>(null);
   const [laneFilter, setLaneFilter] = useState<LaneRole | null>(null);
@@ -184,6 +298,22 @@ export function BanPickScreen({
   const [matchData, setMatchData] = useState<SynergyCounterData | null>(null);
   const lcu = useLcuContext();
   const searchComposingRef = useRef(false);
+
+  useEffect(() => {
+    setTeam1Bans((prev) => ensureBanSlotCount(prev, team1Size));
+    setTeam2Bans((prev) => ensureBanSlotCount(prev, team2Size));
+    setLockedBans((prev) => {
+      const next = new Set<string>();
+      for (const key of prev) {
+        const [team, indexRaw] = key.split('-');
+        const index = Number(indexRaw);
+        if ((team === '1' && index < team1Size) || (team === '2' && index < team2Size)) {
+          next.add(key);
+        }
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [team1Size, team2Size]);
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
   useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
@@ -335,19 +465,17 @@ export function BanPickScreen({
 
     if (lcuBans1.length > 0) {
       setTeam1Bans(prev => {
-        const size = Math.max(prev.length, lcuBans1.length);
-        const newBans = Array(size).fill('');
-        prev.forEach((b, i) => { if (i < size) newBans[i] = b; });
-        lcuBans1.forEach((b, i) => { newBans[i] = b.champId; });
+        const size = team1PlayerIds.length;
+        const newBans = [...ensureBanSlotCount(prev, size)];
+        lcuBans1.slice(0, size).forEach((b, i) => { newBans[i] = b.champId; });
         return newBans;
       });
     }
     if (lcuBans2.length > 0) {
       setTeam2Bans(prev => {
-        const size = Math.max(prev.length, lcuBans2.length);
-        const newBans = Array(size).fill('');
-        prev.forEach((b, i) => { if (i < size) newBans[i] = b; });
-        lcuBans2.forEach((b, i) => { newBans[i] = b.champId; });
+        const size = team2PlayerIds.length;
+        const newBans = [...ensureBanSlotCount(prev, size)];
+        lcuBans2.slice(0, size).forEach((b, i) => { newBans[i] = b.champId; });
         return newBans;
       });
     }
@@ -601,9 +729,6 @@ export function BanPickScreen({
     );
   };
 
-  // Track which ban slots are locked
-  const [lockedBans, setLockedBans] = useState<Set<string>>(new Set()); // "team-index" keys
-
   const isBanLocked = (team: 1 | 2, index: number) => lockedBans.has(`${team}-${index}`);
 
   const lockBan = (team: 1 | 2, index: number) => {
@@ -667,7 +792,7 @@ export function BanPickScreen({
     setTraitFilter(null);
     // Pause LCU sync so it doesn't re-apply old state
     setLcuPaused(true);
-  }, [team1PlayerIds, team2PlayerIds.length]);
+  }, [team1PlayerIds, team2PlayerIds]);
 
   // Champ-select Delete can arrive just before gameflow becomes InProgress.
   // Delay the reset so normal game start has time to auto-confirm instead of
@@ -1220,9 +1345,14 @@ export function BanPickScreen({
                           key={tag}
                           title={TAG_LABELS[tag] ?? tag}
                           aria-label={TAG_LABELS[tag] ?? tag}
-                          className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold ${getTagColor(tag)}`}
+                          className={`inline-flex h-5 items-center gap-1 rounded px-1 text-[9px] font-bold ${getTagColor(tag)}`}
                         >
-                          {TAG_ICONS[tag] ?? '?'}
+                          {TAG_ICON_URLS[tag] ? (
+                            <img src={TAG_ICON_URLS[tag]} alt="" className="h-3.5 w-3.5 object-contain" loading="lazy" />
+                          ) : (
+                            <span>{TAG_ICONS[tag] ?? '?'}</span>
+                          )}
+                          <span>{TAG_SHORT_LABELS[tag] ?? getTagLabel(tag)}</span>
                         </span>
                       ))}
                     </div>
@@ -1299,24 +1429,24 @@ export function BanPickScreen({
         </div>
         <div className="flex gap-2 items-center">
           {displayTimer !== null && (
-            <span className={`text-sm font-mono mr-1 ${displayTimer <= 5 ? 'text-red-400 animate-pulse' : 'text-lol-gold'}`}>
+            <span className={`mr-1 font-mono text-[11px] ${displayTimer <= 5 ? 'text-red-400 animate-pulse' : 'text-lol-gold'}`}>
               {displayTimer}s
             </span>
           )}
           <button onClick={() => { setPhase('planning'); setPlanningTimer(25); setActiveSlot({ type: 'pick', playerId: team1PlayerIds[0] }); }}
-            className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'planning' ? 'bg-blue-900/50 text-blue-300 border border-blue-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
+            className={`cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium transition-colors ${phase === 'planning' ? 'bg-blue-900/50 text-blue-300 border border-blue-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
             조율
           </button>
           <button onClick={() => { setPhase('ban'); const idx = team1Bans.findIndex((b) => !b); if (idx >= 0) setActiveSlot({ type: 'ban', team: 1, index: idx }); }}
-            className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'ban' ? 'bg-red-900/50 text-red-300 border border-red-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
+            className={`cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium transition-colors ${phase === 'ban' ? 'bg-red-900/50 text-red-300 border border-red-700' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
             밴
           </button>
           <button onClick={() => { setPhase('pick'); const first = [...team1PlayerIds, ...team2PlayerIds].find((id) => !picks[id]); if (first) setActiveSlot({ type: 'pick', playerId: first }); }}
-            className={`cursor-pointer px-3 py-1 rounded text-sm font-medium transition-colors ${phase === 'pick' ? 'bg-lol-gold/30 text-lol-gold border border-lol-gold/50' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
+            className={`cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium transition-colors ${phase === 'pick' ? 'bg-lol-gold/30 text-lol-gold border border-lol-gold/50' : 'bg-lol-gray text-lol-gold-light/60 border border-lol-border'}`}>
             픽
           </button>
         </div>
-        <Button onClick={() => handleConfirm()} disabled={!canConfirm || swapMode}>
+        <Button size="sm" onClick={() => handleConfirm()} disabled={!canConfirm || swapMode}>
           {!allPicked ? '픽 미완료' : !allLocked ? `락인 대기 (${lockedPicks.size}/${team1PlayerIds.length + team2PlayerIds.length})` : '게임 시작!'}
         </Button>
       </div>
@@ -1549,23 +1679,18 @@ export function BanPickScreen({
 
           <div className="space-y-1.5 rounded border border-lol-border bg-lol-dark/40 p-2">
             <div className="flex items-center gap-1.5">
-              <span className="w-7 text-center text-[10px] text-lol-gold-light/35" title="역할">R</span>
+              <span className="w-8 shrink-0 text-center text-[10px] text-lol-gold-light/40" title="역할">역할</span>
               {(Object.keys(ARAM_ROLE_LABELS) as AramRole[]).map((role) => {
                 const active = roleFilter === role;
                 return (
-                  <button
+                  <FilterIconButton
                     key={role}
-                    onClick={() => setRoleFilter((prev) => prev === role ? null : role)}
+                    active={active}
+                    icon={ROLE_ICON_URLS[role]}
+                    label={ROLE_SHORT_LABELS[role]}
                     title={`역할: ${ARAM_ROLE_LABELS[role]}`}
-                    aria-label={`역할: ${ARAM_ROLE_LABELS[role]}`}
-                    className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded border text-sm font-bold transition-colors ${
-                      active
-                        ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                        : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
-                    }`}
-                  >
-                    {ROLE_ICONS[role]}
-                  </button>
+                    onClick={() => setRoleFilter((prev) => prev === role ? null : role)}
+                  />
                 );
               })}
               {(roleFilter || laneFilter || traitFilter) && (
@@ -1581,46 +1706,37 @@ export function BanPickScreen({
             </div>
 
             <div className="flex items-center gap-1.5">
-              <span className="w-7 text-center text-[10px] text-lol-gold-light/35" title="라인">L</span>
+              <span className="w-8 shrink-0 text-center text-[10px] text-lol-gold-light/40" title="라인">라인</span>
               {(Object.keys(LANE_LABELS) as LaneRole[]).map((lane) => {
                 const active = laneFilter === lane;
                 return (
-                  <button
+                  <FilterIconButton
                     key={lane}
-                    onClick={() => setLaneFilter((prev) => prev === lane ? null : lane)}
+                    active={active}
+                    icon={LANE_ICON_URLS[lane]}
+                    label={LANE_LABELS[lane]}
                     title={`라인: ${LANE_LABELS[lane]}`}
-                    aria-label={`라인: ${LANE_LABELS[lane]}`}
-                    className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded border text-sm font-bold transition-colors ${
-                      active
-                        ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                        : 'border-lol-border text-lol-gold-light/50 hover:border-lol-gold/50'
-                    }`}
-                  >
-                    {LANE_ICONS[lane]}
-                  </button>
+                    onClick={() => setLaneFilter((prev) => prev === lane ? null : lane)}
+                  />
                 );
               })}
             </div>
 
-            <div className="flex max-h-[4.6rem] items-start gap-1.5 overflow-y-auto pr-1">
-              <span className="mt-0.5 w-7 shrink-0 text-center text-[10px] text-lol-gold-light/35" title="특성">T</span>
+            <div className="flex max-h-[5.8rem] items-start gap-1.5 overflow-y-auto pr-1">
+              <span className="mt-2 w-8 shrink-0 text-center text-[10px] text-lol-gold-light/40" title="특성">특성</span>
               <div className="flex flex-wrap gap-1">
                 {(Object.keys(TAG_LABELS) as MechanicTag[]).map((tag) => {
                   const active = traitFilter === tag;
                   return (
-                    <button
+                    <FilterIconButton
                       key={tag}
-                      onClick={() => setTraitFilter((prev) => prev === tag ? null : tag)}
+                      active={active}
+                      icon={TAG_ICON_URLS[tag]}
+                      label={TAG_SHORT_LABELS[tag] ?? getTagLabel(tag)}
                       title={`특성: ${TAG_LABELS[tag] ?? tag}`}
-                      aria-label={`특성: ${TAG_LABELS[tag] ?? tag}`}
-                      className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded border text-sm font-bold transition-colors ${
-                        active
-                          ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                          : 'border-lol-border text-lol-gold-light/40 hover:border-lol-gold/50'
-                      }`}
-                    >
-                      {TAG_ICONS[tag] ?? '?'}
-                    </button>
+                      onClick={() => setTraitFilter((prev) => prev === tag ? null : tag)}
+                      dense
+                    />
                   );
                 })}
               </div>

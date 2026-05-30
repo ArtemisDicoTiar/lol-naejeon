@@ -340,11 +340,12 @@ export function Session() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="session-compact space-y-3">
       <PageHeader
         eyebrow="Current Session"
         title={session.name}
         description={`${new Date(session.createdAt).toLocaleString('ko-KR')} 시작 · 게임 진행, 피어리스 풀, 종료 후 통계를 한 화면에서 관리합니다.`}
+        className="p-3 md:p-4"
         meta={(
           <>
             <StatusPill tone={lcu.connected ? 'blue' : 'muted'}>
@@ -357,9 +358,9 @@ export function Session() {
         actions={(
           <ActionGroup>
           <Link to="/session/new-game">
-            <Button>새 게임</Button>
+            <Button size="sm">새 게임</Button>
           </Link>
-          <Button variant="danger" onClick={handleEndSession}>세션 종료</Button>
+          <Button variant="danger" size="sm" onClick={handleEndSession}>세션 종료</Button>
           </ActionGroup>
         )}
       />
@@ -594,7 +595,7 @@ export function Session() {
           <EmptyState
             title="진행된 게임이 없습니다."
             description="새 게임을 시작하면 밴픽, 결과, EOG 통계가 이곳에 쌓입니다."
-            action={<Link to="/session/new-game"><Button>새 게임 시작</Button></Link>}
+            action={<Link to="/session/new-game"><Button size="sm">새 게임 시작</Button></Link>}
           />
         ) : (
           <div className="space-y-4">

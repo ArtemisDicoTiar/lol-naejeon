@@ -15,7 +15,7 @@ export function IdentitySelector({ players, onSelect, currentId, inline, forceSe
       <select
         value={currentId ?? ''}
         onChange={(e) => onSelect(e.target.value ? parseInt(e.target.value) : null)}
-        className="bg-lol-blue border border-lol-border rounded px-2 py-1 text-xs text-lol-gold cursor-pointer"
+        className="cursor-pointer rounded border border-lol-border bg-lol-blue px-1.5 py-0.5 text-[10px] text-lol-gold"
       >
         {!forceSelection && <option value="">관전자</option>}
         {players.map((p) => (
