@@ -183,6 +183,53 @@ export function Dashboard() {
         </div>
       </div>
 
+      {!session && (
+        <Card
+          title="새 세션 시작"
+          className="border-lol-gold/35 bg-[radial-gradient(circle_at_12%_0%,rgba(200,155,60,0.16),transparent_30%),linear-gradient(135deg,rgba(30,35,40,0.96),rgba(1,10,19,0.74))]"
+        >
+          <p className="mb-3 text-sm text-lol-gold-light/60">
+            내전을 시작하려면 먼저 세션을 만드세요. 세션 안에서 여러 게임을 진행하고 피어리스 밴이 누적됩니다.
+          </p>
+          {!isMaster && (
+            <p className="mb-3 text-xs text-lol-gold-light/40">
+              이 세션은 브라우저에만 저장됩니다. 공식 기록은 마스터 계정에서 진행해 주세요.
+            </p>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={sessionName}
+              onChange={(e) => setSessionName(e.target.value)}
+              placeholder={new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) + ' 내전'}
+              className="flex-1 rounded border border-lol-border bg-lol-blue px-3 py-2 text-lol-gold-light placeholder:text-lol-gold-light/30 focus:border-lol-gold focus:outline-none"
+            />
+            <Button onClick={handleCreateSession} disabled={creating} size="lg">
+              {creating ? '생성 중...' : '세션 시작'}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {session && (
+        <Card
+          title={`세션: ${session.name}`}
+          className="border-lol-gold/35 bg-[linear-gradient(135deg,rgba(10,20,40,0.94),rgba(1,10,19,0.76))]"
+        >
+          <div className="flex flex-wrap gap-3">
+            <Link to="/session/new-game">
+              <Button size="lg">새 게임 시작</Button>
+            </Link>
+            <Link to="/session">
+              <Button variant="secondary" size="lg">세션 현황</Button>
+            </Link>
+            <Link to="/players">
+              <Button variant="secondary" size="lg">선수 관리</Button>
+            </Link>
+          </div>
+        </Card>
+      )}
+
       {dashboardHighlights && (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-lg border border-lol-border bg-lol-gray p-3">
@@ -253,32 +300,6 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* No active session */}
-      {!session && (
-        <Card title="새 세션 시작">
-          <p className="text-sm text-lol-gold-light/60 mb-4">
-            내전을 시작하려면 새 세션을 만드세요. 세션 안에서 여러 게임을 진행하고, 피어리스 밴이 누적됩니다.
-          </p>
-          {!isMaster && (
-            <p className="text-xs text-lol-gold-light/40 mb-4">
-              이 세션은 브라우저에만 저장됩니다. 공식 기록은 마스터 계정에서 진행해 주세요.
-            </p>
-          )}
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={sessionName}
-              onChange={(e) => setSessionName(e.target.value)}
-              placeholder={new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) + ' 내전'}
-              className="flex-1 bg-lol-blue border border-lol-border rounded px-3 py-2 text-lol-gold-light placeholder:text-lol-gold-light/30 focus:outline-none focus:border-lol-gold"
-            />
-            <Button onClick={handleCreateSession} disabled={creating} size="lg">
-              {creating ? '생성 중...' : '세션 시작'}
-            </Button>
-          </div>
-        </Card>
-      )}
-
       {/* Active session */}
       {session && (
         <>
@@ -288,20 +309,6 @@ export function Dashboard() {
             <StatTile label="피어리스 밴" value={fierlessBans.length} tone="red" />
             <StatTile label="남은 챔피언" value={Math.max(0, champions.length - fierlessBans.length)} tone="green" />
           </div>
-
-          <Card title={`세션: ${session.name}`}>
-            <div className="flex flex-wrap gap-3">
-              <Link to="/session/new-game">
-                <Button size="lg">새 게임 시작</Button>
-              </Link>
-              <Link to="/session">
-                <Button variant="secondary" size="lg">세션 현황</Button>
-              </Link>
-              <Link to="/players">
-                <Button variant="secondary" size="lg">선수 관리</Button>
-              </Link>
-            </div>
-          </Card>
 
           {games.length > 0 && (
             <Card title="최근 게임">
