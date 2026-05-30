@@ -874,15 +874,18 @@ function CompactGameSummary({
   getChampion: (id: string) => Champion | undefined;
   getPlayer: (id: number) => Player | undefined;
 }) {
-  const topDamage = [...eogStats]
-    .sort((a, b) => b.totalDamageDealtToChampions - a.totalDamageDealtToChampions)
-    .slice(0, 3);
   const teamDamage = [1, 2].map((team) =>
     eogStats
       .filter((row) => row.team === team)
       .reduce((sum, row) => sum + row.totalDamageDealtToChampions, 0),
   );
   const maxTeamDamage = Math.max(...teamDamage, 1);
+  const maxPlayerDamage = Math.max(...eogStats.map((row) => row.totalDamageDealtToChampions), 1);
+  const damageRowsByTeam = [1, 2].map((team) =>
+    eogStats
+      .filter((row) => row.team === team)
+      .sort((a, b) => b.totalDamageDealtToChampions - a.totalDamageDealtToChampions),
+  );
 
   const renderTeam = (picks: GamePick[], teamNum: 1 | 2) => (
     <div className={`min-w-0 rounded-xl border p-2.5 ${
@@ -912,6 +915,53 @@ function CompactGameSummary({
     </div>
   );
 
+  const renderPlayerDamageRows = (teamNum: 1 | 2) => {
+    const rows = damageRowsByTeam[teamNum - 1];
+    return (
+      <div className={`rounded-xl border p-2.5 ${
+        teamNum === 1 ? 'border-blue-700/25 bg-blue-950/12' : 'border-red-700/25 bg-red-950/12'
+      }`}>
+        <div className={`mb-2 flex items-center justify-between text-xs font-bold ${teamNum === 1 ? 'text-blue-300' : 'text-red-300'}`}>
+          <span>T{teamNum} 플레이어 딜량</span>
+          {winnerTeam === teamNum && <span className="text-[10px] text-prof-high">승리</span>}
+        </div>
+        <div className="space-y-1.5">
+          {rows.map((row, index) => {
+            const champion = row.championId ? getChampion(row.championId) : undefined;
+            const player = row.playerId ? getPlayer(row.playerId) : undefined;
+            return (
+              <div key={row.id ?? `${row.summonerName}-${teamNum}-${index}`} className="rounded-lg border border-lol-border/40 bg-lol-dark/40 p-1.5">
+                <div className="mb-1 flex items-center gap-2">
+                  {champion
+                    ? <img src={champion.imageUrl} className="h-6 w-6 rounded object-cover" />
+                    : <div className="h-6 w-6 rounded border border-dashed border-lol-border/60" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[11px] text-lol-gold-light/80">
+                      {player?.name ?? row.alias ?? row.summonerName}
+                    </div>
+                    <div className="truncate text-[10px] text-lol-gold-light/38">
+                      {champion?.nameKo ?? row.championId ?? '챔피언 미상'} · {row.kills}/{row.deaths}/{row.assists}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-[10px] font-bold text-lol-gold">
+                    {formatShortNumber(row.totalDamageDealtToChampions)}
+                  </span>
+                </div>
+                <div className={`flex h-1.5 overflow-hidden rounded-full bg-lol-blue ${teamNum === 1 ? 'justify-end' : ''}`}>
+                  <div
+                    className={`h-full rounded-full ${teamNum === 1 ? 'bg-blue-500/85' : 'bg-red-500/85'}`}
+                    style={{ width: `${(row.totalDamageDealtToChampions / maxPlayerDamage) * 100}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+          {rows.length === 0 && <div className="text-xs text-lol-gold-light/35">수집된 딜량 없음</div>}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-3 p-3">
       <div className="grid grid-cols-2 gap-2">
@@ -919,41 +969,43 @@ function CompactGameSummary({
         {renderTeam(team2, 2)}
       </div>
       {eogStats.length > 0 && (
-        <div className="grid gap-2 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="space-y-2">
           <div className="rounded-xl border border-lol-border/60 bg-lol-dark/35 p-2.5">
-            <div className="mb-2 text-xs text-lol-gold-light/50">팀 딜량</div>
-            {[1, 2].map((team) => (
-              <div key={team} className="mb-1.5 last:mb-0">
-                <div className="mb-1 flex justify-between text-[11px] text-lol-gold-light/55">
-                  <span>Team {team}</span>
-                  <span>{formatShortNumber(teamDamage[team - 1])}</span>
+            <div className="mb-2 flex items-center justify-between text-xs text-lol-gold-light/50">
+              <span>팀 딜량 비교</span>
+              <span>{formatShortNumber(teamDamage[0] + teamDamage[1])} total</span>
+            </div>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <div>
+                <div className="mb-1 flex justify-between text-[11px]">
+                  <span className="text-blue-300">T1{winnerTeam === 1 ? ' WIN' : ''}</span>
+                  <span className="text-lol-gold-light/60">{formatShortNumber(teamDamage[0])}</span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-lol-blue">
+                <div className="flex h-3 justify-end overflow-hidden rounded-l-full bg-lol-blue">
                   <div
-                    className={`h-full rounded-full ${team === 1 ? 'bg-blue-500/80' : 'bg-red-500/80'}`}
-                    style={{ width: `${(teamDamage[team - 1] / maxTeamDamage) * 100}%` }}
+                    className="h-full rounded-l-full bg-blue-500/85"
+                    style={{ width: `${(teamDamage[0] / maxTeamDamage) * 100}%` }}
                   />
                 </div>
               </div>
-            ))}
-          </div>
-          <div className="rounded-xl border border-lol-border/60 bg-lol-dark/35 p-2.5">
-            <div className="mb-2 text-xs text-lol-gold-light/50">딜량 TOP</div>
-            <div className="flex flex-wrap gap-2">
-              {topDamage.map((row, index) => {
-                const champion = row.championId ? getChampion(row.championId) : undefined;
-                const player = row.playerId ? getPlayer(row.playerId) : undefined;
-                return (
-                  <div key={row.id ?? `${row.summonerName}-${index}`} className="flex items-center gap-2 rounded-lg border border-lol-border/45 bg-lol-dark/40 px-2 py-1">
-                    {champion && <img src={champion.imageUrl} className="h-6 w-6 rounded object-cover" />}
-                    <div className="text-[11px]">
-                      <div className="text-lol-gold-light/80">{index + 1}. {player?.name ?? row.alias ?? row.summonerName}</div>
-                      <div className="text-lol-gold/70">{formatShortNumber(row.totalDamageDealtToChampions)} 딜</div>
-                    </div>
-                  </div>
-                );
-              })}
+              <div className="mt-5 text-[10px] font-black text-lol-gold-light/35">VS</div>
+              <div>
+                <div className="mb-1 flex justify-between text-[11px]">
+                  <span className="text-lol-gold-light/60">{formatShortNumber(teamDamage[1])}</span>
+                  <span className="text-red-300">T2{winnerTeam === 2 ? ' WIN' : ''}</span>
+                </div>
+                <div className="h-3 overflow-hidden rounded-r-full bg-lol-blue">
+                  <div
+                    className="h-full rounded-r-full bg-red-500/85"
+                    style={{ width: `${(teamDamage[1] / maxTeamDamage) * 100}%` }}
+                  />
+                </div>
+              </div>
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {renderPlayerDamageRows(1)}
+            {renderPlayerDamageRows(2)}
           </div>
         </div>
       )}

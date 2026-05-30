@@ -548,64 +548,98 @@ function HistoryEogSummary({
       .reduce((sum, row) => sum + row.totalDamageDealtToChampions, 0),
   );
   const maxTeamDamage = Math.max(...teamDamage, 1);
-  const topDamage = [...participantStats]
-    .sort((a, b) => b.totalDamageDealtToChampions - a.totalDamageDealtToChampions)
-    .slice(0, 4);
-  const maxPlayerDamage = Math.max(...topDamage.map((row) => row.totalDamageDealtToChampions), 1);
+  const maxPlayerDamage = Math.max(...participantStats.map((row) => row.totalDamageDealtToChampions), 1);
+  const rowsByTeam = [1, 2].map((team) =>
+    participantStats
+      .filter((row) => row.team === team)
+      .sort((a, b) => b.totalDamageDealtToChampions - a.totalDamageDealtToChampions),
+  );
 
-  return (
-    <div className="grid gap-3 xl:grid-cols-[0.75fr_1.25fr]">
-      <div className="rounded-lg border border-lol-border/55 bg-lol-dark/35 p-2.5">
-        <div className="mb-2 text-xs text-lol-gold-light/50">⚔ 팀 딜량</div>
-        {[1, 2].map((team) => (
-          <div key={team} className="mb-2 last:mb-0">
-            <div className="mb-1 flex justify-between text-[11px] text-lol-gold-light/55">
-              <span className={team === 1 ? 'text-blue-300' : 'text-red-300'}>
-                T{team}{winnerTeam === team ? ' WIN' : ''}
-              </span>
-              <span>{formatHistoryNumber(teamDamage[team - 1])}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-lol-blue">
-              <div
-                className={`h-full rounded-full ${team === 1 ? 'bg-blue-500/80' : 'bg-red-500/80'}`}
-                style={{ width: `${(teamDamage[team - 1] / maxTeamDamage) * 100}%` }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="rounded-lg border border-lol-border/55 bg-lol-dark/35 p-2.5">
-        <div className="mb-2 text-xs text-lol-gold-light/50">★ 딜량 TOP</div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {topDamage.map((row, index) => {
+  const renderPlayerDamageRows = (team: 1 | 2) => {
+    const rows = rowsByTeam[team - 1];
+    return (
+      <div className={`rounded-lg border p-2.5 ${
+        team === 1 ? 'border-blue-700/25 bg-blue-950/12' : 'border-red-700/25 bg-red-950/12'
+      }`}>
+        <div className={`mb-2 flex items-center justify-between text-xs font-bold ${team === 1 ? 'text-blue-300' : 'text-red-300'}`}>
+          <span>T{team} 플레이어 딜량</span>
+          {winnerTeam === team && <span className="text-[10px] text-prof-high">WIN</span>}
+        </div>
+        <div className="space-y-1.5">
+          {rows.map((row, index) => {
             const champion = row.championId ? getChampion(row.championId) : undefined;
             const player = row.playerId ? getPlayer(row.playerId) : undefined;
             return (
-              <div key={row.id ?? `${row.summonerName}-${index}`} className="rounded-lg border border-lol-border/45 bg-lol-dark/45 p-2">
+              <div key={row.id ?? `${row.summonerName}-${team}-${index}`} className="rounded-lg border border-lol-border/40 bg-lol-dark/40 p-1.5">
                 <div className="mb-1 flex items-center gap-2">
-                  {champion && <img src={champion.imageUrl} className="h-7 w-7 rounded object-cover" />}
-                  <div className="min-w-0">
-                    <div className="truncate text-xs text-lol-gold-light/80">
-                      {index + 1}. {player?.name ?? row.alias ?? row.summonerName}
+                  {champion
+                    ? <img src={champion.imageUrl} className="h-7 w-7 rounded object-cover" />
+                    : <div className="h-7 w-7 rounded border border-dashed border-lol-border/60" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[11px] text-lol-gold-light/80">
+                      {player?.name ?? row.alias ?? row.summonerName}
                     </div>
-                    <div className="text-[10px] text-lol-gold-light/40">
+                    <div className="truncate text-[10px] text-lol-gold-light/38">
                       {champion?.nameKo ?? row.championId ?? '챔피언 미상'} · {row.kills}/{row.deaths}/{row.assists}
                     </div>
                   </div>
+                  <div className="shrink-0 text-[10px] font-bold text-lol-gold">
+                    {formatHistoryNumber(row.totalDamageDealtToChampions)}
+                  </div>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-lol-blue">
+                <div className={`flex h-1.5 overflow-hidden rounded-full bg-lol-blue ${team === 1 ? 'justify-end' : ''}`}>
                   <div
-                    className="h-full rounded-full bg-lol-gold/85"
+                    className={`h-full rounded-full ${team === 1 ? 'bg-blue-500/85' : 'bg-red-500/85'}`}
                     style={{ width: `${(row.totalDamageDealtToChampions / maxPlayerDamage) * 100}%` }}
                   />
-                </div>
-                <div className="mt-1 text-right text-[10px] text-lol-gold/80">
-                  {formatHistoryNumber(row.totalDamageDealtToChampions)}
                 </div>
               </div>
             );
           })}
+          {rows.length === 0 && <div className="text-xs text-lol-gold-light/35">수집된 딜량 없음</div>}
         </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-lol-border/55 bg-lol-dark/35 p-2.5">
+        <div className="mb-2 flex items-center justify-between text-xs text-lol-gold-light/50">
+          <span>⚔ 팀 딜량 비교</span>
+          <span>{formatHistoryNumber(teamDamage[0] + teamDamage[1])} total</span>
+        </div>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div>
+            <div className="mb-1 flex justify-between text-[11px]">
+              <span className="text-blue-300">T1{winnerTeam === 1 ? ' WIN' : ''}</span>
+              <span className="text-lol-gold-light/60">{formatHistoryNumber(teamDamage[0])}</span>
+            </div>
+            <div className="flex h-3 justify-end overflow-hidden rounded-l-full bg-lol-blue">
+              <div
+                className="h-full rounded-l-full bg-blue-500/85"
+                style={{ width: `${(teamDamage[0] / maxTeamDamage) * 100}%` }}
+              />
+            </div>
+          </div>
+          <div className="mt-5 text-[10px] font-black text-lol-gold-light/35">VS</div>
+          <div>
+            <div className="mb-1 flex justify-between text-[11px]">
+              <span className="text-lol-gold-light/60">{formatHistoryNumber(teamDamage[1])}</span>
+              <span className="text-red-300">T2{winnerTeam === 2 ? ' WIN' : ''}</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-r-full bg-lol-blue">
+              <div
+                className="h-full rounded-r-full bg-red-500/85"
+                style={{ width: `${(teamDamage[1] / maxTeamDamage) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {renderPlayerDamageRows(1)}
+        {renderPlayerDamageRows(2)}
       </div>
     </div>
   );
