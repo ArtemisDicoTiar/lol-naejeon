@@ -1,4 +1,18 @@
-import { exportData } from './backup';
+import { exportData, type BackupData } from './backup';
+
+interface SaveDataResponse {
+  success?: boolean;
+  error?: string;
+  savedAt?: string;
+  counts?: {
+    players?: number;
+    sessions?: number;
+    games?: number;
+    gamePicks?: number;
+    gameEogCaptures?: number;
+    gameParticipantStats?: number;
+  };
+}
 
 // Sync data to Vercel Blob via API route
 export async function syncToVercel(): Promise<{ success: boolean; message: string }> {
@@ -9,26 +23,30 @@ export async function syncToVercel(): Promise<{ success: boolean; message: strin
     const res = await fetch('/api/save-data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
       body: JSON.stringify(data),
     });
 
+    const payload = await res.json().catch(() => null) as SaveDataResponse | null;
+
     if (!res.ok) {
-      const err = await res.json();
-      return { success: false, message: `동기화 실패: ${err.error}` };
+      return { success: false, message: `동기화 실패: ${payload?.error ?? res.statusText}` };
     }
 
-    return { success: true, message: '데이터가 저장되었습니다. 다른 유저가 새로고침하면 반영됩니다.' };
+    const gamesCount = payload?.counts?.games;
+    const suffix = typeof gamesCount === 'number' ? ` (${gamesCount}게임)` : '';
+    return { success: true, message: `공유 DB 저장 완료${suffix}. 다른 유저가 새로고침하면 반영됩니다.` };
   } catch (e) {
     return { success: false, message: `동기화 실패: ${(e as Error).message}` };
   }
 }
 
 // Load shared data from Vercel Blob
-export async function loadFromVercel(): Promise<any | null> {
+export async function loadFromVercel(): Promise<BackupData | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3500);
   try {
-    const res = await fetch('/api/get-data', { signal: controller.signal });
+    const res = await fetch('/api/get-data', { cache: 'no-store', signal: controller.signal });
     if (!res.ok) return null;
     return await res.json();
   } catch {

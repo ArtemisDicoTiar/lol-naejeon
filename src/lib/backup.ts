@@ -1,6 +1,6 @@
 import { db, type Player, type Proficiency, type Session, type Game, type GamePick, type GameBan, type GameEogCapture, type GameParticipantStat } from './db';
 
-interface BackupData {
+export interface BackupData {
   version: 1 | 2;
   exportedAt: string;
   players: Player[];

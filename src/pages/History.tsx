@@ -89,19 +89,27 @@ export function History() {
     return () => window.removeEventListener('lol-data-changed', handleDataChanged);
   }, [loadSessions]);
 
+  const syncHistoryChange = async (message: string) => {
+    const syncResult = await syncToVercel();
+    setRetroStatus(`${message} · ${syncResult.message}`);
+    if (!syncResult.success) {
+      console.error('Failed to sync history change:', syncResult.message);
+    }
+    return syncResult;
+  };
+
   const handleDeleteSession = async (sid: number, name: string) => {
     if (!confirm(`"${name}" 세션을 삭제하시겠습니까? 모든 게임 기록도 함께 삭제됩니다.`)) return;
     await deleteSession(sid);
     await loadSessions();
+    await syncHistoryChange('세션 삭제 완료');
   };
 
   const handleDeleteGame = async (game: GameWithDetails) => {
     if (!confirm(`Game #${game.gameNumber} 기록을 삭제하시겠습니까? 픽/밴/EOG 통계도 함께 삭제됩니다.`)) return;
     await deleteGame(game.id!);
     await loadSessions(false);
-    if (isMaster) {
-      await syncToVercel();
-    }
+    await syncHistoryChange(`Game #${game.gameNumber} 삭제 완료`);
     window.dispatchEvent(new CustomEvent('lol-data-changed', {
       detail: { source: 'history-game-delete', gameId: game.id },
     }));
@@ -112,15 +120,14 @@ export function History() {
     if (!newName || newName === currentName) return;
     await updateSessionName(sid, newName);
     await loadSessions();
+    await syncHistoryChange('세션 이름 수정 완료');
   };
 
   const handleToggleGameMode = async (game: GameWithDetails) => {
     const nextMode: GameMode = (game.mode ?? 'aram') === 'augmented' ? 'aram' : 'augmented';
     await updateGameMode(game.id!, nextMode);
     await loadSessions(false);
-    if (isMaster) {
-      await syncToVercel();
-    }
+    await syncHistoryChange(`Game #${game.gameNumber} 모드가 ${GAME_MODE_LABELS[nextMode]}로 변경됨`);
     window.dispatchEvent(new CustomEvent('lol-data-changed', {
       detail: { source: 'history-mode-edit', gameId: game.id, mode: nextMode },
     }));
@@ -130,9 +137,7 @@ export function History() {
     if (game.winningTeam === winningTeam) return;
     await db.games.update(game.id!, { winningTeam });
     await loadSessions(false);
-    if (isMaster) {
-      await syncToVercel();
-    }
+    await syncHistoryChange(`Game #${game.gameNumber} 승패 수정 완료`);
     window.dispatchEvent(new CustomEvent('lol-data-changed', {
       detail: { source: 'history-result-edit', gameId: game.id, winningTeam },
     }));
@@ -164,9 +169,7 @@ export function History() {
     });
 
     await loadSessions(false);
-    if (isMaster) {
-      await syncToVercel();
-    }
+    await syncHistoryChange(`Game #${game.gameNumber} 통계 재매핑 완료`);
     window.dispatchEvent(new CustomEvent('lol-data-changed', {
       detail: { source: 'history-eog-remap', gameId: game.id },
     }));
@@ -248,9 +251,7 @@ export function History() {
       return next;
     });
     await loadSessions(false);
-    if (isMaster) {
-      await syncToVercel();
-    }
+    await syncHistoryChange('픽 수정 완료');
     window.dispatchEvent(new CustomEvent('lol-data-changed', { detail: { source: 'history-edit', gameId } }));
   };
 
@@ -266,12 +267,7 @@ export function History() {
       const games = await lcu.fetchRecentCustomGames(20);
       const result = await importRetroCustomGames(games);
       await loadSessions(false);
-      let syncMessage = '';
-      if (isMaster) {
-        const syncResult = await syncToVercel();
-        syncMessage = ` · ${syncResult.message}`;
-      }
-      setRetroStatus(`가져오기 완료: ${result.imported}개 추가, ${result.updated}개 덮어씀, ${result.skipped}개 건너뜀${syncMessage}`);
+      await syncHistoryChange(`가져오기 완료: ${result.imported}개 추가, ${result.updated}개 덮어씀, ${result.skipped}개 건너뜀`);
     } catch (error) {
       setRetroStatus(`가져오기 실패: ${(error as Error).message}`);
     } finally {
