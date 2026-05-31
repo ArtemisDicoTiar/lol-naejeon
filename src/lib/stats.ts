@@ -249,6 +249,7 @@ export interface FullStats {
 
 export interface ComputeFullStatsOptions {
   includeEog?: boolean;
+  recentCompletedLimit?: number;
 }
 
 const ROLE_KO: Record<string, string> = {
@@ -350,19 +351,22 @@ export async function computeFullStats(
     db.gameBans.toArray(),
     db.proficiencies.toArray(),
   ]);
-  // Apply same mode filter to games/picks so downstream calcs (radar, role
-  // dist, head-to-head, trio synergy, etc.) only see the requested mode.
-  const allGames = modeFilter
+  // Apply the same scope to games/picks so downstream calcs (radar, role
+  // dist, head-to-head, trio synergy, etc.) only see the requested window.
+  const modeScopedGames = modeFilter
     ? allGamesRaw.filter((g) => (g.mode ?? 'aram') === modeFilter)
     : allGamesRaw;
+  const allGames = options.recentCompletedLimit
+    ? [...modeScopedGames]
+      .filter((game) => game.winningTeam !== null)
+      .sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime())
+      .slice(0, options.recentCompletedLimit)
+    : modeScopedGames;
   const gameIds = allGames.map((g) => g.id).filter((id): id is number => typeof id === 'number');
-  const gameIdSet = modeFilter ? new Set(gameIds) : null;
-  const allPicks = gameIdSet
-    ? allPicksRaw.filter((p) => gameIdSet.has(p.gameId))
-    : allPicksRaw;
-  const allBans = gameIdSet
-    ? allBansRaw.filter((b) => gameIdSet.has(b.gameId))
-    : allBansRaw;
+  const shouldFilterByGame = Boolean(modeFilter || options.recentCompletedLimit);
+  const gameIdSet = shouldFilterByGame ? new Set(gameIds) : null;
+  const allPicks = gameIdSet ? allPicksRaw.filter((p) => gameIdSet.has(p.gameId)) : allPicksRaw;
+  const allBans = gameIdSet ? allBansRaw.filter((b) => gameIdSet.has(b.gameId)) : allBansRaw;
   const wrStats = computeStatsFromData(allGames, allPicks, allBans);
   const gameMap = new Map(allGames.map((game) => [game.id, game]));
   const allParticipantStatsRaw = includeEog

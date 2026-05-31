@@ -21,6 +21,8 @@ function formatNumber(value: number) {
   return Math.round(value).toLocaleString('ko-KR');
 }
 
+const DASHBOARD_RECENT_GAME_LIMIT = 10;
+
 export function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -60,10 +62,10 @@ export function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     const loadStats = async () => {
-      const quick = await computeFullStats(undefined, { includeEog: false });
+      const quick = await computeFullStats(undefined, { includeEog: false, recentCompletedLimit: DASHBOARD_RECENT_GAME_LIMIT });
       if (cancelled) return;
       setStats(quick);
-      const detailed = await computeFullStats(undefined, { includeEog: true });
+      const detailed = await computeFullStats(undefined, { includeEog: true, recentCompletedLimit: DASHBOARD_RECENT_GAME_LIMIT });
       if (!cancelled) setStats(detailed);
     };
     const timer = window.setTimeout(() => { void loadStats(); }, 0);
@@ -101,9 +103,9 @@ export function Dashboard() {
   const completedSessionGames = games.filter((game) => game.winningTeam !== null);
   const team1Wins = completedSessionGames.filter((game) => game.winningTeam === 1).length;
   const team2Wins = completedSessionGames.filter((game) => game.winningTeam === 2).length;
-  const globalSideTotal = stats?.sideStats.total ?? 0;
-  const globalTeam1Wr = globalSideTotal > 0 ? ((stats?.sideStats.team1Wins ?? 0) / globalSideTotal) * 100 : 0;
-  const globalTeam2Wr = globalSideTotal > 0 ? ((stats?.sideStats.team2Wins ?? 0) / globalSideTotal) * 100 : 0;
+  const recentSideTotal = stats?.sideStats.total ?? 0;
+  const recentTeam1Wr = recentSideTotal > 0 ? ((stats?.sideStats.team1Wins ?? 0) / recentSideTotal) * 100 : 0;
+  const recentTeam2Wr = recentSideTotal > 0 ? ((stats?.sideStats.team2Wins ?? 0) / recentSideTotal) * 100 : 0;
   const lcuStatus = lcu.connected ? (lcu.champSelectActive ? '챔셀 감지' : '클라 연결됨') : '클라 미연결';
 
   if (sessionLoading) {
@@ -161,18 +163,18 @@ export function Dashboard() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            <StatTile label="누적 게임" value={stats?.wrStats.totalGames ?? 0} />
+            <StatTile label="최근 표본" value={`${stats?.wrStats.totalGames ?? 0}/${DASHBOARD_RECENT_GAME_LIMIT}`} />
             <StatTile label="등록 선수" value={players.length} />
-            <StatTile label="Team 1 누적" value={formatPercent(globalTeam1Wr)} tone="blue" />
-            <StatTile label="Team 2 누적" value={formatPercent(globalTeam2Wr)} tone="red" />
+            <StatTile label="Team 1 최근" value={formatPercent(recentTeam1Wr)} tone="blue" />
+            <StatTile label="Team 2 최근" value={formatPercent(recentTeam2Wr)} tone="red" />
             <div className="col-span-2 rounded-lg border border-lol-gold/15 bg-lol-dark/45 p-3">
               <div className="mb-2 flex items-center justify-between text-xs text-lol-gold-light/45">
-                <span>누적 진영 밸런스</span>
-                <span>{globalSideTotal}게임</span>
+                <span>최근 {DASHBOARD_RECENT_GAME_LIMIT}경기 진영 밸런스</span>
+                <span>{recentSideTotal}게임</span>
               </div>
               <div className="flex h-3 overflow-hidden rounded-full bg-lol-blue">
-                <div className="bg-blue-500/80" style={{ width: `${globalTeam1Wr}%` }} />
-                <div className="bg-red-500/80" style={{ width: `${globalTeam2Wr}%` }} />
+                <div className="bg-blue-500/80" style={{ width: `${recentTeam1Wr}%` }} />
+                <div className="bg-red-500/80" style={{ width: `${recentTeam2Wr}%` }} />
               </div>
               <div className="mt-2 flex justify-between text-[10px] text-lol-gold-light/35">
                 <span>현재 세션 T1 {team1Wins}승</span>
@@ -231,7 +233,11 @@ export function Dashboard() {
       )}
 
       {dashboardHighlights && (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-lol-gold-light/35">
+            최근 10경기 기준
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-lg border border-lol-border bg-lol-gray p-3">
             <div className="text-[11px] uppercase tracking-[0.2em] text-lol-gold-light/35">Winrate Boss</div>
             <div className="mt-2 text-lg font-bold text-lol-gold">
@@ -289,6 +295,7 @@ export function Dashboard() {
                 : '완료된 게임 필요'}
             </div>
           </div>
+        </div>
         </div>
       )}
 

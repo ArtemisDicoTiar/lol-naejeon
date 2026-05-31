@@ -265,6 +265,31 @@ function FilterIconButton({
   );
 }
 
+type CounterSuggestion = {
+  champion: Champion;
+  target?: Champion;
+  winrate?: number;
+  games?: number;
+  score: number;
+  source: 'matchup' | 'role';
+  reason: string;
+};
+
+const COUNTER_MIN_GAMES = 30;
+const ROLE_COUNTERS: Record<AramRole, AramRole[]> = {
+  poke: ['engage', 'tank'],
+  engage: ['sustain', 'utility'],
+  sustain: ['poke', 'dps'],
+  dps: ['engage', 'tank'],
+  tank: ['poke', 'dps'],
+  utility: ['engage', 'poke'],
+};
+const TIER_RANK: Record<string, number> = { S: 0, A: 1, B: 2, C: 3, D: 4 };
+
+function formatGamesShort(games: number) {
+  return games >= 1000 ? `${(games / 1000).toFixed(1)}k` : games.toLocaleString('ko-KR');
+}
+
 export function BanPickScreen({
   format, mode = 'aram', team1PlayerIds, team2PlayerIds, players, champions,
   fierlessBans, proficiencies, onConfirm, onBack, onReorderTeams,
@@ -597,6 +622,85 @@ export function BanPickScreen({
   const availableChampions = useMemo(() => {
     return champions.filter((c) => !allBannedIds.has(c.id) && !pickedIds.has(c.id));
   }, [champions, allBannedIds, pickedIds]);
+
+  const championById = useMemo(() => new Map(champions.map((champion) => [champion.id, champion])), [champions]);
+
+  const getCounterSuggestions = useCallback((opponentPickIds: string[], limit = 6): CounterSuggestion[] => {
+    const opponentChampions = opponentPickIds
+      .map((id) => championById.get(id))
+      .filter((champion): champion is Champion => Boolean(champion));
+    if (opponentChampions.length === 0) return [];
+
+    const dataSuggestions: CounterSuggestion[] = [];
+    for (const champion of availableChampions) {
+      const counterData = matchData?.counters[champion.id];
+      if (!counterData) continue;
+
+      let score = 0;
+      let best: { target: Champion; winrate: number; games: number; score: number } | null = null;
+      for (const opponent of opponentChampions) {
+        const strong = counterData.strongAgainst.find((row) => row.id === opponent.id && row.games >= COUNTER_MIN_GAMES);
+        if (strong) {
+          const confidence = Math.min(1, Math.log10(strong.games + 1) / 2.2);
+          const matchupScore = (strong.winrate - 50) * confidence;
+          score += matchupScore;
+          if (!best || matchupScore > best.score) {
+            best = { target: opponent, winrate: strong.winrate, games: strong.games, score: matchupScore };
+          }
+        }
+
+        const weak = counterData.weakAgainst.find((row) => row.id === opponent.id && row.games >= COUNTER_MIN_GAMES);
+        if (weak) {
+          const confidence = Math.min(1, Math.log10(weak.games + 1) / 2.2);
+          score -= Math.max(0, 50 - weak.winrate) * confidence * 0.8;
+        }
+      }
+
+      if (!best || score <= 0) continue;
+      dataSuggestions.push({
+        champion,
+        target: best.target,
+        winrate: best.winrate,
+        games: best.games,
+        score,
+        source: 'matchup',
+        reason: `${best.target.nameKo} 상대로 ${best.winrate.toFixed(1)}%`,
+      });
+    }
+
+    dataSuggestions.sort((a, b) =>
+      b.score - a.score ||
+      (b.winrate ?? 0) - (a.winrate ?? 0) ||
+      (b.games ?? 0) - (a.games ?? 0) ||
+      (TIER_RANK[a.champion.aramTier] ?? 3) - (TIER_RANK[b.champion.aramTier] ?? 3),
+    );
+
+    const suggestions = dataSuggestions.slice(0, limit);
+    if (suggestions.length >= Math.min(4, limit)) return suggestions;
+
+    const roleCounts = new Map<AramRole, number>();
+    for (const opponent of opponentChampions) {
+      roleCounts.set(opponent.aramRole, (roleCounts.get(opponent.aramRole) ?? 0) + 1);
+    }
+    const counterRoles = [...roleCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .flatMap(([role]) => ROLE_COUNTERS[role] ?? []);
+    const counterRoleSet = new Set(counterRoles);
+    const seen = new Set(suggestions.map((suggestion) => suggestion.champion.id));
+
+    const roleSuggestions = availableChampions
+      .filter((champion) => counterRoleSet.has(champion.aramRole) && !seen.has(champion.id))
+      .sort((a, b) => (TIER_RANK[a.aramTier] ?? 3) - (TIER_RANK[b.aramTier] ?? 3) || b.aramWinrate - a.aramWinrate)
+      .slice(0, limit - suggestions.length)
+      .map((champion) => ({
+        champion,
+        score: 0,
+        source: 'role' as const,
+        reason: `${ARAM_ROLE_LABELS[champion.aramRole]} 역할 대응`,
+      }));
+
+    return [...suggestions, ...roleSuggestions];
+  }, [availableChampions, championById, matchData]);
 
   // Fierless champion objects
   const fierlessChampions = useMemo(() => {
@@ -1039,19 +1143,8 @@ export function BanPickScreen({
 
     // Compute counter roles based on opponent picks
     const oppPicks = team === 1 ? team2Picks : team1Picks;
-    const oppRoles = oppPicks.map((cid) => champions.find((c) => c.id === cid)?.aramRole).filter(Boolean);
-    const _pokeCount = oppRoles.filter((r) => r === 'poke').length;
-    const _engageCount = oppRoles.filter((r) => r === 'engage' || r === 'tank').length;
-    const _sustainCount = oppRoles.filter((r) => r === 'sustain' || r === 'utility').length;
-    let counterRoles: string[] = [];
-    if (_pokeCount >= 2) counterRoles = ['engage', 'tank'];
-    else if (_engageCount >= 2) counterRoles = ['sustain', 'utility'];
-    else if (_sustainCount >= 2) counterRoles = ['poke'];
-    const counterChampIds = new Set(
-      oppPicks.length > 0
-        ? availableChampions.filter(c => counterRoles.includes(c.aramRole)).map(c => c.id)
-        : []
-    );
+    const counterSuggestions = getCounterSuggestions(oppPicks, 7);
+    const counterChampIds = new Set(counterSuggestions.map((suggestion) => suggestion.champion.id));
 
     return (
       <div className={`w-[360px] shrink-0 rounded-lg border ${bgClass} p-3 space-y-3 overflow-y-auto max-h-[calc(100vh-180px)]`}>
@@ -1181,53 +1274,75 @@ export function BanPickScreen({
           </div>
         )}
 
-        {/* Counter Picks — show actual counter champions */}
+        {/* Counter Picks — show actual matchup and role counter champions */}
         {phase === 'pick' && (() => {
           const oppPicks = team === 1 ? team2Picks : team1Picks;
           if (oppPicks.length === 0) return null;
 
-          const oppRoles = oppPicks.map((cid) => champions.find((c) => c.id === cid)?.aramRole).filter(Boolean);
-          const pokeCount = oppRoles.filter((r) => r === 'poke').length;
-          const engageCount = oppRoles.filter((r) => r === 'engage' || r === 'tank').length;
-          const sustainCount = oppRoles.filter((r) => r === 'sustain' || r === 'utility').length;
-
-          let counterRole: string[] = [];
-          let counterTip = '';
-          if (pokeCount >= 2) { counterRole = ['engage', 'tank']; counterTip = '상대 포크 다수 → 이니시로 카운터'; }
-          else if (engageCount >= 2) { counterRole = ['sustain', 'utility']; counterTip = '상대 이니시 다수 → 유지력으로 카운터'; }
-          else if (sustainCount >= 2) { counterRole = ['poke']; counterTip = '상대 유지력 다수 → 포크로 카운터'; }
-          else { counterRole = ['engage', 'poke', 'dps']; counterTip = '상대 밸런스 조합 → 유연한 대응 추천'; }
-
-          // Find counter champions from available pool
-          const counterChamps = availableChampions
-            .filter(c => counterRole.includes(c.aramRole) && !pickedIds.has(c.id))
-            .sort((a, b) => {
-              const tierOrder: Record<string, number> = { S: 0, A: 1, B: 2, C: 3, D: 4 };
-              return (tierOrder[a.aramTier] ?? 3) - (tierOrder[b.aramTier] ?? 3);
-            })
-            .slice(0, 5);
+          const suggestions = getCounterSuggestions(oppPicks, 6);
+          if (suggestions.length === 0) return null;
+          const hasMatchupData = suggestions.some((suggestion) => suggestion.source === 'matchup');
 
           return (
-            <div className="p-2 bg-lol-dark/40 rounded border border-lol-border/50">
-              <div className="text-[10px] text-lol-gold-light/50 mb-1">카운터 추천</div>
-              <div className="flex flex-wrap gap-1.5 mb-1.5">
-                {counterChamps.map((c) => (
-                  <div key={c.id} onClick={() => {
-                    if (activeSlot?.type === 'pick') {
-                      setPicks(prev => ({ ...prev, [activeSlot.playerId]: c.id }));
-                      if (lcu.connected && activeSlot.playerId === userId) {
-                        const numId = champIdToNumeric.get(c.id);
-                        if (numId) lcu.hoverChampion(numId);
-                      }
-                    }
-                  }} className="cursor-pointer relative">
-                    <ChampionIcon champion={c} size="sm" />
-                    <span className="absolute -top-1 -right-1 text-[7px] bg-lol-gold text-lol-dark rounded-full w-3 h-3 flex items-center justify-center font-bold">C</span>
-                  </div>
-                ))}
+            <div className="rounded-lg border border-lol-gold/30 bg-[linear-gradient(135deg,rgba(120,90,40,0.16),rgba(1,10,19,0.42))] p-2">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-lol-gold">
+                  Counter Picks
+                </div>
+                <div className={`rounded border px-1.5 py-0.5 text-[9px] ${
+                  hasMatchupData
+                    ? 'border-prof-high/35 bg-prof-high/10 text-prof-high'
+                    : 'border-lol-border bg-lol-dark/40 text-lol-gold-light/45'
+                }`}>
+                  {hasMatchupData ? '매치업 데이터' : '역할 기반'}
+                </div>
               </div>
-              <div className="text-[10px]">
-                <span className="text-lol-gold-light/40">{counterTip}</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {suggestions.map((suggestion) => {
+                  const c = suggestion.champion;
+                  return (
+                    <button
+                      key={`${c.id}-${suggestion.target?.id ?? suggestion.source}`}
+                      onClick={() => {
+                        if (activeSlot?.type === 'pick') {
+                          setPicks(prev => ({ ...prev, [activeSlot.playerId]: c.id }));
+                          if (lcu.connected && activeSlot.playerId === userId) {
+                            const numId = champIdToNumeric.get(c.id);
+                            if (numId) lcu.hoverChampion(numId);
+                          }
+                        }
+                      }}
+                      title={suggestion.reason}
+                      className="group flex cursor-pointer items-center gap-1.5 rounded border border-lol-border/70 bg-lol-dark/45 p-1 text-left transition-colors hover:border-lol-gold/55 hover:bg-lol-gold/10"
+                    >
+                      <div className="relative shrink-0">
+                        <ChampionIcon champion={c} size="sm" />
+                        <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-lol-gold px-0.5 text-[7px] font-black leading-none text-lol-dark">
+                          C
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[10px] font-bold text-lol-gold-light group-hover:text-lol-gold">
+                          {c.nameKo}
+                        </div>
+                        {suggestion.target ? (
+                          <div className="flex items-center gap-1 text-[9px] text-lol-gold-light/45">
+                            <span className="truncate">vs {suggestion.target.nameKo}</span>
+                            {suggestion.winrate && <span className="font-mono text-prof-high">{suggestion.winrate.toFixed(1)}%</span>}
+                          </div>
+                        ) : (
+                          <div className="truncate text-[9px] text-lol-gold-light/40">{suggestion.reason}</div>
+                        )}
+                        {suggestion.games && (
+                          <div className="text-[8px] text-lol-gold-light/30">{formatGamesShort(suggestion.games)} games</div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-1.5 text-[10px] text-lol-gold-light/40">
+                상대 픽별 승률 매치업을 우선 사용하고, 데이터가 적으면 역할 상성으로 보완합니다.
               </div>
             </div>
           );
