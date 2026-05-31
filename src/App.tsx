@@ -14,6 +14,7 @@ import { NewGame } from '@/pages/NewGame';
 import { Stats } from '@/pages/Stats';
 import { PlayerStats } from '@/pages/PlayerStats';
 import { Analysis } from '@/pages/Analysis';
+import { BanPickLab } from '@/pages/BanPickLab';
 import { History } from '@/pages/History';
 import { Settings } from '@/pages/Settings';
 import { refreshFromVercelIfNewer } from '@/lib/db';
@@ -125,6 +126,7 @@ function AppContent() {
               <Route path="/stats" element={<Stats />} />
               <Route path="/player-stats" element={<PlayerStats />} />
               <Route path="/analysis" element={<Analysis />} />
+              <Route path="/banpick-lab" element={<BanPickLab />} />
               <Route path="/history" element={<History />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

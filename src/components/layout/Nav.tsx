@@ -11,6 +11,7 @@ export const links = [
   { to: '/champions', label: '챔피언' },
   { to: '/stats', label: '통계' },
   { to: '/analysis', label: '분석' },
+  { to: '/banpick-lab', label: '밴픽 실험실' },
   { to: '/history', label: '기록' },
   { to: '/settings', label: '설정' },
 ];
