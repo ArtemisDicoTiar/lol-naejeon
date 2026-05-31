@@ -998,6 +998,19 @@ export function BanPickScreen({
     }
   };
 
+  const applyRecommendedPick = (playerId: number, championId: string) => {
+    if (allBannedIds.has(championId)) return;
+    if (pickedIds.has(championId) && picks[playerId] !== championId) return;
+    if (lockedPicks.has(playerId)) return;
+    setPicks((prev) => ({ ...prev, [playerId]: championId }));
+    setActiveSlot({ type: 'pick', playerId });
+    setPhase('pick');
+    if (lcu.connected && playerId === userId) {
+      const numId = champIdToNumeric.get(championId);
+      if (numId) lcu.hoverChampion(numId);
+    }
+  };
+
   const confirmedRef = useRef(false);
 
   // Swap
@@ -1342,6 +1355,66 @@ export function BanPickScreen({
     );
   };
 
+  const renderBanStrategyStrip = (team: 1 | 2, compRecs: RecommendedComp[]) => {
+    const bestComp = compRecs[0];
+    if (!bestComp) return null;
+    const teamPlayerIdsForStrategy = team === 1 ? team1PlayerIds : team2PlayerIds;
+    const orderedAssignments = [...bestComp.assignments]
+      .filter((assignment) => teamPlayerIdsForStrategy.includes(assignment.playerId))
+      .sort((a, b) => {
+        const aActive = activeSlot?.type === 'pick' && activeSlot.playerId === a.playerId ? 0 : 1;
+        const bActive = activeSlot?.type === 'pick' && activeSlot.playerId === b.playerId ? 0 : 1;
+        if (aActive !== bActive) return aActive - bActive;
+        const aLocked = lockedPicks.has(a.playerId) ? 1 : 0;
+        const bLocked = lockedPicks.has(b.playerId) ? 1 : 0;
+        if (aLocked !== bLocked) return aLocked - bLocked;
+        return a.playerName.localeCompare(b.playerName, 'ko');
+      })
+      .slice(0, 3);
+    if (orderedAssignments.length === 0) return null;
+
+    return (
+      <div className="rounded-lg border border-blue-500/20 bg-blue-950/10 p-2">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="text-[10px] font-bold text-blue-300/80">밴 기반 전략</div>
+          <div className="text-[9px] font-mono text-lol-gold-light/35">{Math.round(bestComp.score * 100)}</div>
+        </div>
+        <div className="flex gap-1.5">
+          {orderedAssignments.map((assignment) => {
+            const champion = champions.find((champ) => champ.id === assignment.championId);
+            if (!champion) return null;
+            const disabled = allBannedIds.has(assignment.championId)
+              || (pickedIds.has(assignment.championId) && picks[assignment.playerId] !== assignment.championId)
+              || lockedPicks.has(assignment.playerId);
+            return (
+              <ChampionWithHover
+                key={`${assignment.playerId}-${assignment.championId}`}
+                champion={champion}
+                wrStats={wrStats}
+                allPlayers={players}
+                proficiencies={proficiencies}
+                estimatedMap={estimatedMap}
+                highlightPlayerIds={[assignment.playerId]}
+                disabled={disabled}
+              >
+                <button
+                  type="button"
+                  onClick={() => !disabled && applyRecommendedPick(assignment.playerId, assignment.championId)}
+                  title={`${assignment.playerName} · ${assignment.championName}`}
+                  className={`relative rounded border border-lol-border/60 bg-lol-dark/45 p-0.5 transition-colors ${
+                    disabled ? 'opacity-30' : 'cursor-pointer hover:border-lol-gold/55 hover:bg-lol-gold/10'
+                  }`}
+                >
+                  <ChampionIcon champion={champion} size="sm" disabled={disabled} />
+                </button>
+              </ChampionWithHover>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderTeamPanel = (team: 1 | 2) => {
     const playerIds = team === 1 ? team1PlayerIds : team2PlayerIds;
     const bans = getTeamBans(team);
@@ -1415,6 +1488,7 @@ export function BanPickScreen({
         </div>
 
         {renderLabHintPanel(team)}
+        {renderBanStrategyStrip(team, compRecs)}
 
         {/* Ban Recommendations — per opponent player */}
         {(phase === 'ban' || phase === 'planning') && Object.keys(banRecs).length > 0 && (
