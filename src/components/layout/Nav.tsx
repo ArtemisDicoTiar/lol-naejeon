@@ -10,6 +10,7 @@ export const links = [
   { to: '/player-stats', label: '유저 통계' },
   { to: '/champions', label: '챔피언' },
   { to: '/stats', label: '통계' },
+  { to: '/analysis', label: '분석' },
   { to: '/history', label: '기록' },
   { to: '/settings', label: '설정' },
 ];
