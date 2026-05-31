@@ -7,7 +7,7 @@ import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/l
 import { scoreComposition } from '@/lib/recommendation/scoring';
 import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
 import { estimatePlayerProficiencies, type EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
-import { computeBanPickLabAnalysis, type BanPickLabAnalysis, type LabBan, type LabPick } from '@/lib/banpick-lab';
+import { computeBanPickLabAnalysis, type BanPickLabAnalysis, type LabBan, type LabPick, type LabScenario } from '@/lib/banpick-lab';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
 import { getTagColor, getTagLabel, TAG_LABELS } from '@/data/tag-display';
 import { ARAM_ROLE_LABELS, type AramRole } from '@/data/aram-champion-meta';
@@ -353,12 +353,23 @@ export function BanPickScreen({
   const labTeam1Ids = useMemo(() => team1Sig ? team1Sig.split(',').map(Number).filter(Boolean) : [], [team1Sig]);
   const labTeam2Ids = useMemo(() => team2Sig ? team2Sig.split(',').map(Number).filter(Boolean) : [], [team2Sig]);
   const labEnabled = labTeam1Ids.length === 3 && labTeam2Ids.length === 3;
+  const labTeam1BanIds = useMemo(() => team1Bans.filter((ban) => ban && ban !== SKIP_BAN), [team1Bans]);
+  const labTeam2BanIds = useMemo(() => team2Bans.filter((ban) => ban && ban !== SKIP_BAN), [team2Bans]);
+  const labBlockedBanIds = useMemo(() => [...new Set(fierlessBans)], [fierlessBans]);
+  const labBanSig = useMemo(
+    () => `${labBlockedBanIds.join(',')}|${labTeam1BanIds.join(',')}|${labTeam2BanIds.join(',')}`,
+    [labBlockedBanIds, labTeam1BanIds, labTeam2BanIds],
+  );
   useEffect(() => {
     if (!labEnabled) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setLabLoading(true);
-      computeBanPickLabAnalysis(labTeam1Ids, labTeam2Ids, mode)
+      computeBanPickLabAnalysis(labTeam1Ids, labTeam2Ids, mode, {
+        blockedChampionIds: labBlockedBanIds,
+        teamABannedChampionIds: labTeam1BanIds,
+        teamBBannedChampionIds: labTeam2BanIds,
+      })
         .then((analysis) => {
           if (!cancelled) setLabAnalysis(analysis);
         })
@@ -374,7 +385,7 @@ export function BanPickScreen({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [labEnabled, mode, labTeam1Ids, labTeam2Ids]);
+  }, [labEnabled, mode, labTeam1Ids, labTeam2Ids, labBanSig, labBlockedBanIds, labTeam1BanIds, labTeam2BanIds]);
 
   // Use LCU timer if connected, otherwise local countdown
   const lcuTimeLeft = lcu.connected && lcu.lastState?.timeLeft != null ? lcu.lastState.timeLeft : null;
@@ -998,6 +1009,30 @@ export function BanPickScreen({
     }
   };
 
+  const getLabScenarioTeamPicks = (scenario: LabScenario, team: 1 | 2): LabPick[] => {
+    return team === 1
+      ? [scenario.aFirst, ...scenario.aCompletion.picks]
+      : [...scenario.bResponse.picks, ...scenario.bFinal.picks];
+  };
+
+  const applyLabScenario = (team: 1 | 2, scenario: LabScenario) => {
+    const nextPicks = { ...picks };
+    let firstAppliedPlayerId: number | null = null;
+
+    for (const pick of getLabScenarioTeamPicks(scenario, team)) {
+      const pickedByOther = Object.entries(nextPicks)
+        .some(([playerId, championId]) => Number(playerId) !== pick.playerId && championId === pick.championId);
+      if (allBannedIds.has(pick.championId) || pickedByOther || lockedPicks.has(pick.playerId)) continue;
+      nextPicks[pick.playerId] = pick.championId;
+      firstAppliedPlayerId ??= pick.playerId;
+    }
+
+    if (firstAppliedPlayerId === null) return;
+    setPicks(nextPicks);
+    setActiveSlot({ type: 'pick', playerId: firstAppliedPlayerId });
+    setPhase('pick');
+  };
+
   const applyRecommendedPick = (playerId: number, championId: string) => {
     if (allBannedIds.has(championId)) return;
     if (pickedIds.has(championId) && picks[playerId] !== championId) return;
@@ -1355,6 +1390,100 @@ export function BanPickScreen({
     );
   };
 
+  const renderLabScenarioRecommendations = (team: 1 | 2) => {
+    if (!labEnabled || !labAnalysis || labAnalysis.scenarios.length === 0 || phase === 'pick') return null;
+
+    const scenarios = labAnalysis.scenarios.slice(0, 3);
+    const renderPickIcon = (pick: LabPick, compact = false) => {
+      const pickedByOther = Object.entries(picks)
+        .some(([playerId, championId]) => Number(playerId) !== pick.playerId && championId === pick.championId);
+      const disabled = allBannedIds.has(pick.championId) || pickedByOther;
+      return (
+        <div
+          key={`${pick.playerId}-${pick.championId}`}
+          className={`min-w-0 text-center ${disabled ? 'opacity-30 grayscale' : ''}`}
+          title={`${pick.playerName} · ${pick.championName}`}
+        >
+          <img
+            src={pick.imageUrl}
+            alt={pick.championName}
+            className={`${compact ? 'h-6 w-6' : 'h-7 w-7'} mx-auto rounded object-cover`}
+            loading="lazy"
+          />
+          <div className="mt-0.5 max-w-10 truncate text-[8px] text-lol-gold-light/36">{pick.championName}</div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="rounded-lg border border-lol-gold/28 bg-[linear-gradient(135deg,rgba(200,155,60,0.10),rgba(10,20,36,0.36))] p-2">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-lol-gold">1221 실험실 추천</div>
+            <div className="text-[9px] text-lol-gold-light/34">A1 → B2 → A2 → B1 예상 플랜</div>
+          </div>
+          <div className="rounded border border-lol-border/60 bg-lol-dark/45 px-1.5 py-0.5 text-[9px] text-lol-gold-light/42">
+            {labLoading ? '업데이트 중' : `${scenarios.length}개`}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          {scenarios.map((scenario, index) => {
+            const teamPicks = getLabScenarioTeamPicks(scenario, team);
+            const canApply = teamPicks.some((pick) => {
+              const pickedByOther = Object.entries(picks)
+                .some(([playerId, championId]) => Number(playerId) !== pick.playerId && championId === pick.championId);
+              return !allBannedIds.has(pick.championId) && !pickedByOther && !lockedPicks.has(pick.playerId);
+            });
+            const verdictTone = scenario.verdict === 'A 우세'
+              ? 'text-blue-300'
+              : scenario.verdict === 'B 카운터'
+                ? 'text-red-300'
+                : 'text-lol-gold';
+            return (
+              <button
+                key={scenario.id}
+                type="button"
+                onClick={() => canApply && applyLabScenario(team, scenario)}
+                disabled={!canApply}
+                className={`w-full rounded border border-lol-border/65 bg-lol-dark/35 p-1.5 text-left transition-colors ${
+                  canApply ? 'cursor-pointer hover:border-lol-gold/45 hover:bg-lol-gold/10' : 'opacity-45'
+                }`}
+                title={`${scenario.title} · ${scenario.verdict}`}
+              >
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="truncate text-[10px] font-bold text-lol-gold-light">#{index + 1} {scenario.title}</span>
+                  <span className={`shrink-0 text-[9px] font-black ${verdictTone}`}>
+                    {scenario.verdict} {scenario.scoreDelta > 0 ? '+' : ''}{scenario.scoreDelta.toFixed(1)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {[
+                    { label: 'A1', picks: [scenario.aFirst] },
+                    { label: 'B2', picks: scenario.bResponse.picks },
+                    { label: 'A2', picks: scenario.aCompletion.picks },
+                    { label: 'B1', picks: scenario.bFinal.picks },
+                  ].map((step) => (
+                    <div key={step.label} className="rounded border border-lol-border/40 bg-lol-blue/20 p-1">
+                      <div className="mb-1 text-center text-[8px] font-black text-lol-gold-light/34">{step.label}</div>
+                      <div className="flex justify-center gap-0.5">
+                        {step.picks.map((pick) => renderPickIcon(pick, step.picks.length > 1))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1 flex items-center gap-1 overflow-hidden text-[9px] text-lol-gold-light/35">
+                  <span className={team === 1 ? 'text-blue-300/70' : 'text-red-300/70'}>적용</span>
+                  <span className="truncate">{teamPicks.map((pick) => `${pick.playerName}-${pick.championName}`).join(' · ')}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderBanStrategyStrip = (team: 1 | 2, compRecs: RecommendedComp[]) => {
     const bestComp = compRecs[0];
     if (!bestComp) return null;
@@ -1529,11 +1658,15 @@ export function BanPickScreen({
         )}
 
         {/* Comp Recommendations */}
+        {renderLabScenarioRecommendations(team)}
+
         {compRecs.length > 0 && (
           <div>
-            <div className="text-xs text-lol-gold-light/50 mb-1">추천 조합 ({compRecs.length})</div>
-            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-              {compRecs.map((comp, i) => (
+            <div className="text-xs text-lol-gold-light/50 mb-1">
+              추천 조합 Top {Math.min(5, compRecs.length)}
+            </div>
+            <div className="space-y-1.5 max-h-[160px] overflow-y-auto">
+              {compRecs.slice(0, 5).map((comp, i) => (
                 <div key={i} onClick={() => applyComp(comp)}
                   className="cursor-pointer p-1.5 rounded border border-lol-border hover:border-lol-gold/50 bg-lol-dark/30 transition-colors">
                   <div className="flex items-center justify-between mb-1">

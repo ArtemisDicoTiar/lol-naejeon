@@ -83,6 +83,12 @@ export interface BanPickLabAnalysis {
   dataNotes: string[];
 }
 
+export interface BanPickLabAnalysisOptions {
+  blockedChampionIds?: string[];
+  teamABannedChampionIds?: string[];
+  teamBBannedChampionIds?: string[];
+}
+
 const PROF_VALUE: Record<ProficiencyLevel, number> = {
   S: 1,
   '상': 0.86,
@@ -399,8 +405,9 @@ function buildFirstPickPlans(
   champions: Champion[],
   makePick: (playerId: number, champion: Champion) => LabPick,
   aBans: LabBan[],
+  extraBlocked = new Set<string>(),
 ) {
-  const blocked = new Set(aBans.map((ban) => ban.championId));
+  const blocked = new Set([...extraBlocked, ...aBans.map((ban) => ban.championId)]);
   const rows: LabPick[] = [];
   for (const playerId of teamAIds) {
     rows.push(...buildCandidatePool(playerId, champions, makePick, blocked, new Set(), 18));
@@ -521,14 +528,37 @@ function buildScenarios(
   banPlanA: LabBan[],
   baseBanPlanB: LabBan[],
   presence: Map<string, { value: number }>,
+  fixedBlocked = new Set<string>(),
+  fixedTeamBBans: LabBan[] = [],
 ) {
-  const firstPlans = buildFirstPickPlans(teamAIds, teamBIds, champions, makePick, banPlanA);
+  const firstPlans = buildFirstPickPlans(teamAIds, teamBIds, champions, makePick, banPlanA, fixedBlocked);
   const scenarios: LabScenario[] = [];
 
   for (const first of firstPlans.slice(0, 7)) {
-    const blockedForB = new Set([...banPlanA.map((ban) => ban.championId), first.championId]);
-    const bBans = buildBanPlan(teamBIds, teamAIds, champions, makePick, traitsMap, presence, blockedForB, 3);
-    const banned = new Set([...banPlanA, ...bBans].map((ban) => ban.championId));
+    const blockedForB = new Set([
+      ...fixedBlocked,
+      ...banPlanA.map((ban) => ban.championId),
+      ...fixedTeamBBans.map((ban) => ban.championId),
+      first.championId,
+    ]);
+    const bBans = [
+      ...fixedTeamBBans,
+      ...buildBanPlan(
+        teamBIds,
+        teamAIds,
+        champions,
+        makePick,
+        traitsMap,
+        presence,
+        blockedForB,
+        Math.max(0, 3 - fixedTeamBBans.length),
+      ),
+    ];
+    const banned = new Set([
+      ...fixedBlocked,
+      ...banPlanA.map((ban) => ban.championId),
+      ...bBans.map((ban) => ban.championId),
+    ]);
     const usedAfterFirst = new Set([first.championId]);
     const bResponses = buildPairGroups(
       teamBIds,
@@ -634,6 +664,7 @@ export async function computeBanPickLabAnalysis(
   teamAIds: number[],
   teamBIds: number[],
   modeFilter: BanPickLabModeFilter = 'all',
+  options: BanPickLabAnalysisOptions = {},
 ): Promise<BanPickLabAnalysis> {
   const [players, champions, proficiencyRows, games, picks, bans, matchData] = await Promise.all([
     db.players.toArray(),
@@ -664,8 +695,59 @@ export async function computeBanPickLabAnalysis(
   const traitsMap = buildTraitsMap();
   const champMap = new Map(champions.map((champion) => [champion.id, champion]));
   const makePick = makePickFactory(playersById, proficiencies, presence, teamAIds, teamBIds);
-  const banPlanA = buildBanPlan(teamAIds, teamBIds, sortedChampions, makePick, traitsMap, presence, new Set(), 3);
-  const banPlanB = buildBanPlan(teamBIds, teamAIds, sortedChampions, makePick, traitsMap, presence, new Set(banPlanA.map((ban) => ban.championId)), 3);
+
+  const uniqueChampionIds = (ids: string[] | undefined) => [...new Set((ids ?? []).filter((id) => champMap.has(id)))];
+  const blockedChampionIds = uniqueChampionIds(options.blockedChampionIds);
+  const fixedTeamAIds = uniqueChampionIds(options.teamABannedChampionIds);
+  const fixedTeamBIds = uniqueChampionIds(options.teamBBannedChampionIds);
+  const fixedBlocked = new Set([...blockedChampionIds, ...fixedTeamAIds, ...fixedTeamBIds]);
+  const toFixedBans = (ids: string[], teamLabel: string): LabBan[] => ids
+    .map((championId): LabBan | null => {
+      const champion = champMap.get(championId);
+      if (!champion) return null;
+      return {
+        championId: champion.id,
+        championName: champion.nameKo,
+        imageUrl: champion.imageUrl,
+        score: 1,
+        reason: `${teamLabel} 현재 밴`,
+        targetPlayers: [],
+      };
+    })
+    .filter((ban): ban is LabBan => Boolean(ban));
+
+  const fixedTeamABans = toFixedBans(fixedTeamAIds, 'A팀');
+  const fixedTeamBBans = toFixedBans(fixedTeamBIds, 'B팀');
+  const banPlanA = [
+    ...fixedTeamABans,
+    ...buildBanPlan(
+      teamAIds,
+      teamBIds,
+      sortedChampions,
+      makePick,
+      traitsMap,
+      presence,
+      fixedBlocked,
+      Math.max(0, 3 - fixedTeamABans.length),
+    ),
+  ];
+  const blockedAfterAPlan = new Set([
+    ...fixedBlocked,
+    ...banPlanA.map((ban) => ban.championId),
+  ]);
+  const banPlanB = [
+    ...fixedTeamBBans,
+    ...buildBanPlan(
+      teamBIds,
+      teamAIds,
+      sortedChampions,
+      makePick,
+      traitsMap,
+      presence,
+      blockedAfterAPlan,
+      Math.max(0, 3 - fixedTeamBBans.length),
+    ),
+  ];
   const { firstPlans, scenarios } = buildScenarios(
     teamAIds,
     teamBIds,
@@ -677,6 +759,8 @@ export async function computeBanPickLabAnalysis(
     banPlanA,
     banPlanB,
     presence,
+    fixedBlocked,
+    fixedTeamBBans,
   );
 
   return {
@@ -699,7 +783,8 @@ export async function computeBanPickLabAnalysis(
     dataNotes: [
       matchData ? '외부 시너지/카운터 매치업 데이터 반영' : '외부 매치업 데이터 없음: 태그 규칙 중심',
       '숙련도 미등록 선수는 중간 숙련으로 임시 계산',
+      fixedBlocked.size > 0 ? `현재 적용 밴 ${fixedBlocked.size}개를 제외하고 재계산` : undefined,
       'A 선픽 시나리오는 B가 해당 챔피언을 밴하지 않았다는 전제',
-    ],
+    ].filter((note): note is string => Boolean(note)),
   };
 }
