@@ -7,6 +7,7 @@ import { computeWinrateStats, estimateCompWinrate, type WinrateStats } from '@/l
 import { scoreComposition } from '@/lib/recommendation/scoring';
 import { loadSynergyCounterData, type SynergyCounterData } from '@/lib/recommendation/data-loader';
 import { estimatePlayerProficiencies, type EstimatedProficiency } from '@/lib/recommendation/proficiency-estimator';
+import { computeBanPickLabAnalysis, type BanPickLabAnalysis, type LabBan, type LabPick } from '@/lib/banpick-lab';
 import { championTraits, type MechanicTag } from '@/data/champion-tags';
 import { getTagColor, getTagLabel, TAG_LABELS } from '@/data/tag-display';
 import { ARAM_ROLE_LABELS, type AramRole } from '@/data/aram-champion-meta';
@@ -290,6 +291,10 @@ function formatGamesShort(games: number) {
   return games >= 1000 ? `${(games / 1000).toFixed(1)}k` : games.toLocaleString('ko-KR');
 }
 
+function formatLabScore(score: number) {
+  return Math.round(score * 100);
+}
+
 export function BanPickScreen({
   format, mode = 'aram', team1PlayerIds, team2PlayerIds, players, champions,
   fierlessBans, proficiencies, onConfirm, onBack, onReorderTeams,
@@ -321,6 +326,8 @@ export function BanPickScreen({
   const [lcuPaused, setLcuPaused] = useState(false); // pause LCU sync after manual reset
   const [wrStats, setWrStats] = useState<WinrateStats | null>(null);
   const [matchData, setMatchData] = useState<SynergyCounterData | null>(null);
+  const [labAnalysis, setLabAnalysis] = useState<BanPickLabAnalysis | null>(null);
+  const [labLoading, setLabLoading] = useState(false);
   const lcu = useLcuContext();
   const searchComposingRef = useRef(false);
 
@@ -342,6 +349,32 @@ export function BanPickScreen({
 
   useEffect(() => { computeWinrateStats().then(setWrStats); }, []);
   useEffect(() => { loadSynergyCounterData().then(setMatchData); }, []);
+
+  const labTeam1Ids = useMemo(() => team1Sig ? team1Sig.split(',').map(Number).filter(Boolean) : [], [team1Sig]);
+  const labTeam2Ids = useMemo(() => team2Sig ? team2Sig.split(',').map(Number).filter(Boolean) : [], [team2Sig]);
+  const labEnabled = labTeam1Ids.length === 3 && labTeam2Ids.length === 3;
+  useEffect(() => {
+    if (!labEnabled) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setLabLoading(true);
+      computeBanPickLabAnalysis(labTeam1Ids, labTeam2Ids, mode)
+        .then((analysis) => {
+          if (!cancelled) setLabAnalysis(analysis);
+        })
+        .catch((error) => {
+          console.error('Failed to load banpick lab hints:', error);
+          if (!cancelled) setLabAnalysis(null);
+        })
+        .finally(() => {
+          if (!cancelled) setLabLoading(false);
+        });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [labEnabled, mode, labTeam1Ids, labTeam2Ids]);
 
   // Use LCU timer if connected, otherwise local countdown
   const lcuTimeLeft = lcu.connected && lcu.lastState?.timeLeft != null ? lcu.lastState.timeLeft : null;
@@ -874,6 +907,97 @@ export function BanPickScreen({
     }
   };
 
+  const getLabScenario = () => {
+    if (!labAnalysis || labAnalysis.scenarios.length === 0) return null;
+    const team1FirstPick = team1Picks[0];
+    if (team1FirstPick) {
+      return labAnalysis.scenarios.find((scenario) => scenario.aFirst.championId === team1FirstPick)
+        ?? labAnalysis.scenarios[0];
+    }
+    return labAnalysis.scenarios[0];
+  };
+
+  const getLabPickHints = (team: 1 | 2): { title: string; subtitle: string; picks: LabPick[] } | null => {
+    if (!labAnalysis) return null;
+    const scenario = getLabScenario();
+    const ownPlayerIds = team === 1 ? team1PlayerIds : team2PlayerIds;
+    const ownPicks = team === 1 ? team1Picks : team2Picks;
+    const usedByOther = (pick: LabPick) => pickedIds.has(pick.championId) && picks[pick.playerId] !== pick.championId;
+    const available = (source: LabPick[]) => source
+      .filter((pick) => ownPlayerIds.includes(pick.playerId))
+      .filter((pick) => !lockedPicks.has(pick.playerId))
+      .filter((pick) => !allBannedIds.has(pick.championId))
+      .filter((pick) => !usedByOther(pick))
+      .slice(0, 4);
+
+    if (team === 1 && ownPicks.length === 0) {
+      return {
+        title: 'A 1픽',
+        subtitle: '풀고 먹을 선픽 후보',
+        picks: available(labAnalysis.firstPickPlans),
+      };
+    }
+
+    if (team === 1 && scenario) {
+      return {
+        title: 'A 완성픽',
+        subtitle: scenario.verdict,
+        picks: available(scenario.aCompletion.picks),
+      };
+    }
+
+    if (team === 2 && scenario && ownPicks.length < 2) {
+      return {
+        title: 'B 2픽',
+        subtitle: 'A 선픽 응수',
+        picks: available(scenario.bResponse.picks),
+      };
+    }
+
+    if (team === 2 && scenario) {
+      return {
+        title: 'B 막픽',
+        subtitle: '완성 조합 카운터',
+        picks: available(scenario.bFinal.picks),
+      };
+    }
+
+    return null;
+  };
+
+  const applyLabBan = (team: 1 | 2, ban: LabBan) => {
+    if (allBannedIds.has(ban.championId)) return;
+    const bans = [...getTeamBans(team)];
+    const activeIndex = activeSlot?.type === 'ban' && activeSlot.team === team && !isBanLocked(team, activeSlot.index)
+      ? activeSlot.index
+      : -1;
+    const fallbackIndex = bans.findIndex((value, index) => !value && !isBanLocked(team, index));
+    const targetIndex = activeIndex >= 0 ? activeIndex : fallbackIndex;
+    if (targetIndex < 0) return;
+    bans[targetIndex] = ban.championId;
+    setTeamBans(team, bans);
+    setActiveSlot({ type: 'ban', team, index: targetIndex });
+    setPhase('ban');
+    const lcuPhaseNow = lcu.lastState?.phase?.toUpperCase() ?? '';
+    if (lcu.connected && (lcuPhaseNow === 'BAN_PICK' || lcuPhaseNow === 'BANNING')) {
+      const numId = champIdToNumeric.get(ban.championId);
+      if (numId) lcu.hoverBan(numId);
+    }
+  };
+
+  const applyLabPick = (pick: LabPick) => {
+    if (allBannedIds.has(pick.championId)) return;
+    if (pickedIds.has(pick.championId) && picks[pick.playerId] !== pick.championId) return;
+    if (lockedPicks.has(pick.playerId)) return;
+    setPicks((prev) => ({ ...prev, [pick.playerId]: pick.championId }));
+    setActiveSlot({ type: 'pick', playerId: pick.playerId });
+    setPhase('pick');
+    if (lcu.connected && pick.playerId === userId) {
+      const numId = champIdToNumeric.get(pick.championId);
+      if (numId) lcu.hoverChampion(numId);
+    }
+  };
+
   const confirmedRef = useRef(false);
 
   // Swap
@@ -1133,6 +1257,91 @@ export function BanPickScreen({
   ), [champions, fierlessBans, search, roleFilter, laneFilter, traitFilter, allBannedIds, pickedIds, activeSlot, mergedProficiencies, phase, team1PlayerIds, team2PlayerIds, sortMode]);
 
   // --- RENDER ---
+  const renderLabHintPanel = (team: 1 | 2) => {
+    if (!labEnabled) return null;
+    const pickHints = getLabPickHints(team);
+    const banHints = (team === 1 ? labAnalysis?.banPlanA : labAnalysis?.banPlanB)
+      ?.filter((ban) => !allBannedIds.has(ban.championId))
+      .slice(0, 3) ?? [];
+    const showBans = phase !== 'pick' && banHints.length > 0;
+    const showPicks = phase !== 'ban' && pickHints && pickHints.picks.length > 0;
+
+    if (labLoading && !labAnalysis) {
+      return (
+        <div className="rounded border border-lol-gold/20 bg-lol-gold/5 p-2 text-[10px] text-lol-gold-light/38">
+          실험실 추천 계산 중...
+        </div>
+      );
+    }
+    if (!showBans && !showPicks) return null;
+
+    return (
+      <div className="rounded-lg border border-lol-gold/25 bg-[linear-gradient(135deg,rgba(200,155,60,0.08),rgba(1,10,19,0.32))] p-2">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-lol-gold">실험실 추천</div>
+          <div className="rounded border border-lol-border/60 bg-lol-dark/45 px-1.5 py-0.5 text-[9px] text-lol-gold-light/42">
+            A1-B2-A2-B1
+          </div>
+        </div>
+
+        {showBans && (
+          <div className="mb-2">
+            <div className="mb-1 text-[10px] text-lol-gold-light/38">동시 밴 플랜</div>
+            <div className="flex gap-1.5">
+              {banHints.map((ban) => (
+                <button
+                  key={ban.championId}
+                  type="button"
+                  onClick={() => applyLabBan(team, ban)}
+                  title={`${ban.championName}: ${ban.reason}`}
+                  className="group flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded border border-lol-border/65 bg-lol-dark/38 p-1 text-left transition-colors hover:border-lol-gold/45 hover:bg-lol-gold/10"
+                >
+                  <img src={ban.imageUrl} alt={ban.championName} className="h-7 w-7 shrink-0 rounded object-cover opacity-85 group-hover:opacity-100" loading="lazy" />
+                  <div className="min-w-0">
+                    <div className="truncate text-[10px] font-bold text-lol-gold-light">{ban.championName}</div>
+                    <div className="truncate text-[8px] text-lol-gold-light/38">{formatLabScore(ban.score)}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showPicks && pickHints && (
+          <div>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="text-[10px] text-lol-gold-light/38">{pickHints.title}</span>
+              <span className="truncate text-[9px] text-lol-gold-light/30">{pickHints.subtitle}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {pickHints.picks.map((pick) => {
+                const disabled = allBannedIds.has(pick.championId) || (pickedIds.has(pick.championId) && picks[pick.playerId] !== pick.championId);
+                return (
+                  <button
+                    key={`${pick.playerId}-${pick.championId}`}
+                    type="button"
+                    onClick={() => !disabled && applyLabPick(pick)}
+                    title={`${pick.playerName} · ${pick.championName} · ${pick.reasons.join(', ')}`}
+                    className={`group flex min-w-0 items-center gap-1.5 rounded border border-lol-border/65 bg-lol-dark/38 p-1 text-left transition-colors ${
+                      disabled ? 'opacity-35' : 'cursor-pointer hover:border-lol-gold/45 hover:bg-lol-gold/10'
+                    }`}
+                  >
+                    <img src={pick.imageUrl} alt={pick.championName} className="h-7 w-7 shrink-0 rounded object-cover" loading="lazy" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[10px] font-bold text-lol-gold-light group-hover:text-lol-gold">{pick.championName}</div>
+                      <div className="truncate text-[8px] text-lol-gold-light/38">{pick.playerName} · {pick.tier}/{pick.proficiency}</div>
+                    </div>
+                    <span className="shrink-0 text-[9px] font-mono text-lol-gold">{formatLabScore(pick.score)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderTeamPanel = (team: 1 | 2) => {
     const playerIds = team === 1 ? team1PlayerIds : team2PlayerIds;
     const bans = getTeamBans(team);
@@ -1204,6 +1413,8 @@ export function BanPickScreen({
             </div>
           )}
         </div>
+
+        {renderLabHintPanel(team)}
 
         {/* Ban Recommendations — per opponent player */}
         {(phase === 'ban' || phase === 'planning') && Object.keys(banRecs).length > 0 && (
