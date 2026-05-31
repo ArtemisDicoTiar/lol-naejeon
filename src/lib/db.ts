@@ -135,6 +135,8 @@ type LegacyGameRow = {
 };
 
 interface ImportBlobData {
+  version?: number;
+  exportedAt?: string;
   players?: ReadonlyArray<Omit<Player, 'createdAt'> & { createdAt: string | Date }>;
   proficiencies?: ReadonlyArray<Proficiency>;
   sessions?: ReadonlyArray<LegacySessionRow>;
@@ -145,8 +147,45 @@ interface ImportBlobData {
   gameParticipantStats?: ReadonlyArray<GameParticipantStat>;
 }
 
+const SHARED_DB_EXPORTED_AT_KEY = 'lol-naejeon-shared-exported-at';
+
 function toDate(value: string | Date | undefined, fallback = new Date()): Date {
   return value ? new Date(value) : fallback;
+}
+
+function normalizeGameModeByFormat(mode: string | undefined, format: '3v3' | '3v4' | undefined): GameMode {
+  if (format === '3v4') return 'augmented';
+  if (format === '3v3') return 'aram';
+  return mode === 'augmented' ? 'augmented' : 'aram';
+}
+
+function getSharedExportedAt(): number {
+  if (typeof window === 'undefined') return 0;
+  const stored = window.localStorage.getItem(SHARED_DB_EXPORTED_AT_KEY);
+  if (!stored) return 0;
+  const numeric = Number(stored);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(stored);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function markSharedExportedAt(exportedAt: string | undefined): void {
+  if (typeof window === 'undefined' || !exportedAt) return;
+  const parsed = Date.parse(exportedAt);
+  if (!Number.isFinite(parsed)) return;
+  window.localStorage.setItem(SHARED_DB_EXPORTED_AT_KEY, String(parsed));
+}
+
+function latestPlayedAt(games: ReadonlyArray<Pick<LegacyGameRow, 'playedAt'>>): number {
+  return games.reduce((latest, game) => Math.max(latest, toDate(game.playedAt, new Date(0)).getTime()), 0);
+}
+
+function sourceMatchIdSet(games: ReadonlyArray<Pick<LegacyGameRow, 'sourceMatchId'>>): Set<number> {
+  return new Set(
+    games
+      .map((game) => game.sourceMatchId)
+      .filter((id): id is number => typeof id === 'number'),
+  );
 }
 
 class LolDB extends Dexie {
@@ -261,7 +300,7 @@ async function importDataIntoDb(data: ImportBlobData) {
     if (data.games?.length) {
       await db.games.bulkAdd(data.games.map((g) => ({
         ...g,
-        mode: (g.mode === 'augmented' ? 'augmented' : 'aram') as GameMode,
+        mode: normalizeGameModeByFormat(g.mode, g.format),
         playedAt: toDate(g.playedAt),
       })) as Game[]);
     }
@@ -283,6 +322,51 @@ async function importDataIntoDb(data: ImportBlobData) {
   });
 }
 
+export type SharedDbRefreshResult = {
+  updated: boolean;
+  message: string;
+  reason?: 'updated' | 'latest' | 'no-data' | 'local-newer' | 'error';
+};
+
+export async function refreshFromVercelIfNewer(options: { force?: boolean } = {}): Promise<SharedDbRefreshResult> {
+  try {
+    const { loadFromVercel } = await import('./auto-sync');
+    const cloudData = await loadFromVercel();
+    if (!cloudData?.players?.length) {
+      return { updated: false, reason: 'no-data', message: '공유 DB 데이터가 없습니다.' };
+    }
+
+    const cloudExportedAt = cloudData.exportedAt ? Date.parse(cloudData.exportedAt) : 0;
+    const storedExportedAt = getSharedExportedAt();
+    if (!options.force && cloudExportedAt > 0 && storedExportedAt >= cloudExportedAt) {
+      return { updated: false, reason: 'latest', message: '이미 최신 공유 DB입니다.' };
+    }
+
+    const localGames = await db.games.toArray();
+    const cloudGames = cloudData.games ?? [];
+    const localMatchIds = sourceMatchIdSet(localGames);
+    const cloudMatchIds = sourceMatchIdSet(cloudGames);
+    const localHasUnsharedMatch = [...localMatchIds].some((id) => !cloudMatchIds.has(id));
+    const localLooksNewer =
+      localGames.length > 0 &&
+      (localGames.length > cloudGames.length || localHasUnsharedMatch) &&
+      latestPlayedAt(localGames) >= latestPlayedAt(cloudGames);
+
+    if (!options.force && localLooksNewer) {
+      return { updated: false, reason: 'local-newer', message: '로컬에 공유 DB보다 최신 기록이 있어 자동 덮어쓰기를 건너뜁니다.' };
+    }
+
+    await importDataIntoDb(cloudData);
+    markSharedExportedAt(cloudData.exportedAt);
+    window.dispatchEvent(new CustomEvent('lol-data-changed', {
+      detail: { source: 'shared-db-refresh', exportedAt: cloudData.exportedAt },
+    }));
+    return { updated: true, reason: 'updated', message: `공유 DB를 불러왔습니다. (${cloudGames.length}게임)` };
+  } catch (error) {
+    return { updated: false, reason: 'error', message: `공유 DB 불러오기 실패: ${(error as Error).message}` };
+  }
+}
+
 export async function seedIfEmpty(): Promise<boolean> {
   const count = await db.players.count();
   if (count > 0) return false;
@@ -293,6 +377,7 @@ export async function seedIfEmpty(): Promise<boolean> {
     const cloudData = await loadFromVercel();
     if (cloudData && cloudData.players?.length > 0) {
       await importDataIntoDb(cloudData);
+      markSharedExportedAt(cloudData.exportedAt);
       return true;
     }
   } catch {

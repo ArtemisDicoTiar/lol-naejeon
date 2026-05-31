@@ -14,6 +14,16 @@ interface SaveDataResponse {
   };
 }
 
+const SHARED_DB_EXPORTED_AT_KEY = 'lol-naejeon-shared-exported-at';
+
+function markSharedExportedAt(exportedAt: string | undefined): void {
+  if (typeof window === 'undefined') return;
+  if (!exportedAt) return;
+  const parsed = Date.parse(exportedAt);
+  if (!Number.isFinite(parsed)) return;
+  window.localStorage.setItem(SHARED_DB_EXPORTED_AT_KEY, String(parsed));
+}
+
 // Sync data to Vercel Blob via API route
 export async function syncToVercel(): Promise<{ success: boolean; message: string }> {
   try {
@@ -34,6 +44,7 @@ export async function syncToVercel(): Promise<{ success: boolean; message: strin
     }
 
     const gamesCount = payload?.counts?.games;
+    markSharedExportedAt(data.exportedAt);
     const suffix = typeof gamesCount === 'number' ? ` (${gamesCount}게임)` : '';
     return { success: true, message: `공유 DB 저장 완료${suffix}. 다른 유저가 새로고침하면 반영됩니다.` };
   } catch (e) {

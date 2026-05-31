@@ -6,7 +6,7 @@ import { exportData, importData, downloadJson } from '@/lib/backup';
 import { importRecords, IMPORT_EXAMPLE, type ImportData } from '@/lib/import-records';
 import { syncToVercel } from '@/lib/auto-sync';
 import { useIdentityContext } from '@/App';
-import { db } from '@/lib/db';
+import { db, refreshFromVercelIfNewer } from '@/lib/db';
 
 export function Settings() {
   const { isMaster } = useIdentityContext();
@@ -189,6 +189,19 @@ export function Settings() {
       )}
 
       <div className="grid gap-3 lg:grid-cols-2">
+        <Card title="공유 DB 불러오기">
+          <p className="text-sm text-lol-gold-light/60 mb-4">
+            다른 브라우저에서 저장한 최신 기록을 이 브라우저 DB로 가져옵니다.
+          </p>
+          <Button variant="secondary" onClick={async () => {
+            setMessage('공유 DB 불러오는 중...');
+            const result = await refreshFromVercelIfNewer({ force: true });
+            setMessage(result.message);
+          }}>
+            최신 공유 DB 가져오기
+          </Button>
+        </Card>
+
         <Card title="데이터 백업/복원">
           <p className="text-sm text-lol-gold-light/60 mb-4">
             데이터는 브라우저에 저장됩니다. 정기적으로 백업하세요.

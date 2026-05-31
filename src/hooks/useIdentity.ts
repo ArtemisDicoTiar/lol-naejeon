@@ -14,12 +14,22 @@ export function useIdentity() {
   const [masterPlayerId, setMasterPlayerId] = useState<number | null>(null);
 
   useEffect(() => {
-    db.players.toArray().then((p) => {
+    let cancelled = false;
+    const loadPlayers = async () => {
+      const p = await db.players.toArray();
+      if (cancelled) return;
       setPlayers(p);
       const master = p.find((pl) => pl.name === MASTER_PLAYER_NAME);
-      if (master) setMasterPlayerId(master.id!);
+      setMasterPlayerId(master?.id ?? null);
       setLoading(false);
-    });
+    };
+    const handleDataChanged = () => { void loadPlayers(); };
+    void loadPlayers();
+    window.addEventListener('lol-data-changed', handleDataChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('lol-data-changed', handleDataChanged);
+    };
   }, []);
 
   const setUserId = (id: number | null) => {

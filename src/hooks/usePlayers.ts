@@ -17,7 +17,12 @@ export function usePlayers() {
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    const handleDataChanged = () => { void refresh(); };
+    window.addEventListener('lol-data-changed', handleDataChanged);
+    return () => window.removeEventListener('lol-data-changed', handleDataChanged);
+  }, [refresh]);
 
   const addPlayer = async (name: string) => {
     const trimmed = name.trim();

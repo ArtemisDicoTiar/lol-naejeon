@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useCallback, useEffect, useRef, useContext } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Nav } from '@/components/layout/Nav';
 import { Footer } from '@/components/layout/Footer';
@@ -15,6 +15,8 @@ import { Stats } from '@/pages/Stats';
 import { PlayerStats } from '@/pages/PlayerStats';
 import { History } from '@/pages/History';
 import { Settings } from '@/pages/Settings';
+import { refreshFromVercelIfNewer } from '@/lib/db';
+import { syncToVercel } from '@/lib/auto-sync';
 
 interface IdentityContextType {
   userId: number | null;
@@ -66,6 +68,33 @@ function AppContent() {
   const isNewGame = location.pathname === '/session/new-game';
   const identity = useIdentity();
   const lcu = useLcuBridge();
+  const lastSharedRefreshRef = useRef(0);
+
+  const refreshSharedData = useCallback((immediate = false) => {
+    const now = Date.now();
+    if (!immediate && now - lastSharedRefreshRef.current < 45_000) return;
+    lastSharedRefreshRef.current = now;
+    void refreshFromVercelIfNewer().then((result) => {
+      if (identity.isMaster && result.reason === 'local-newer') {
+        void syncToVercel();
+      }
+    });
+  }, [identity.isMaster]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => refreshSharedData(true), 0);
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') refreshSharedData();
+    };
+    const handleFocus = () => refreshSharedData();
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisible);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
+  }, [refreshSharedData]);
 
   if (identity.needsSelection && identity.players.length > 0) {
     return (

@@ -3,13 +3,39 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const BLOB_NAME = 'lol-naejeon-data.json';
 
+type SavedGameRow = {
+  format?: '3v3' | '3v4';
+  mode?: 'aram' | 'augmented';
+  [key: string]: unknown;
+};
+
+type SaveDataBody = {
+  players?: unknown[];
+  sessions?: unknown[];
+  games?: SavedGameRow[];
+  gamePicks?: unknown[];
+  gameEogCaptures?: unknown[];
+  gameParticipantStats?: unknown[];
+  [key: string]: unknown;
+};
+
+function normalizeGameModes(data: SaveDataBody): SaveDataBody {
+  return {
+    ...data,
+    games: data.games?.map((game) => ({
+      ...game,
+      mode: game.format === '3v4' ? 'augmented' : game.format === '3v3' ? 'aram' : game.mode ?? 'aram',
+    })),
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const data = req.body;
+    const data = normalizeGameModes(req.body as SaveDataBody);
     if (!data || !data.players) {
       return res.status(400).json({ error: 'Invalid data format' });
     }

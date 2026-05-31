@@ -3,6 +3,27 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const BLOB_NAME = 'lol-naejeon-data.json';
 
+type SharedGameRow = {
+  format?: '3v3' | '3v4';
+  mode?: 'aram' | 'augmented';
+  [key: string]: unknown;
+};
+
+type SharedDataBody = {
+  games?: SharedGameRow[];
+  [key: string]: unknown;
+};
+
+function normalizeGameModes(data: SharedDataBody): SharedDataBody {
+  return {
+    ...data,
+    games: data.games?.map((game) => ({
+      ...game,
+      mode: game.format === '3v4' ? 'augmented' : game.format === '3v3' ? 'aram' : game.mode ?? 'aram',
+    })),
+  };
+}
+
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   try {
     const { blobs } = await list({ prefix: BLOB_NAME });
@@ -26,7 +47,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       return res.status(502).json({ error: `Blob fetch failed: ${response.status} ${response.statusText}` });
     }
 
-    const data = await response.json();
+    const data = normalizeGameModes(await response.json() as SharedDataBody);
 
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     res.setHeader('X-Blob-Uploaded-At', blob.uploadedAt.toISOString());

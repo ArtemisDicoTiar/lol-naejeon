@@ -36,6 +36,9 @@ function inferWinningTeam(winnerTeamId: number | null): 1 | 2 | null {
 }
 
 function inferMode(game: LcuRetroGame): GameMode {
+  const participants = game.participants.filter((participant) => participant.teamId === 100 || participant.teamId === 200);
+  if (participants.length >= 7) return 'augmented';
+  if (participants.length === 6) return 'aram';
   if (game.mode === 'augmented') return 'augmented';
   const raw = JSON.stringify({
     queueId: game.queueId,
