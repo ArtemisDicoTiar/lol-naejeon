@@ -283,8 +283,8 @@ export function PlayerStats() {
       ) : (
         <>
           <Card className="overflow-hidden">
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-              <div className="grid gap-3 lg:grid-cols-[minmax(230px,270px)_minmax(0,1fr)]">
+            <div className="space-y-4">
+              <div className="grid gap-3 xl:grid-cols-[minmax(210px,240px)_minmax(220px,1fr)_minmax(260px,1.05fr)_minmax(220px,1fr)]">
                 <div className="flex flex-col items-center justify-center rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4 text-center">
                   <div
                     className="grid h-32 w-32 place-items-center rounded-full p-1.5"
@@ -313,16 +313,6 @@ export function PlayerStats() {
                   </div>
                 </div>
 
-                <CombatRadar
-                  title="전투 지표 레이더"
-                  description="현재 필터 기준 전체 평균과 비교합니다."
-                  series={combatRadarSeries}
-                  emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
-                  chartHeight={250}
-                />
-              </div>
-
-              <div className="space-y-2.5">
                 <div className="grid grid-cols-2 gap-2">
                   <MetricTile label="최근 폼" value={`${formatDecimal(profile.recentWinrate)}%`} sub={`${profile.recentWins}승 ${profile.recentLosses}패`} />
                   <MetricTile
@@ -361,6 +351,14 @@ export function PlayerStats() {
                   <MetricTile label="힐량" value={formatNumber(profile.avgTotalHeal)} />
                 </div>
               </div>
+
+              <CombatRadar
+                title="전투 지표 레이더"
+                description="현재 필터 기준 전체 평균과 비교합니다."
+                series={combatRadarSeries}
+                emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
+                chartHeight={260}
+              />
             </div>
           </Card>
 
