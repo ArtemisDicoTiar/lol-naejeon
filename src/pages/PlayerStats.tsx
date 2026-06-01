@@ -283,7 +283,7 @@ export function PlayerStats() {
       ) : (
         <>
           <Card className="overflow-hidden">
-            <div className="grid gap-3 xl:grid-cols-[minmax(210px,240px)_minmax(320px,0.9fr)_minmax(560px,1.5fr)] xl:items-stretch">
+            <div className="grid gap-3 xl:grid-cols-[minmax(210px,240px)_minmax(280px,0.8fr)_minmax(460px,1.35fr)] xl:items-stretch">
               <div className="flex flex-col items-center justify-center rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4 text-center">
                 <div
                   className="grid h-32 w-32 place-items-center rounded-full p-1.5"
@@ -317,7 +317,7 @@ export function PlayerStats() {
                 description="현재 필터 기준 전체 평균과 비교합니다."
                 series={combatRadarSeries}
                 emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
-                chartHeight={230}
+                chartHeight={205}
               />
 
               <div className="grid content-start gap-2">
@@ -350,7 +350,7 @@ export function PlayerStats() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-3">
                   <MetricTile label="평균 딜량" value={formatNumber(profile.avgDamageDealtToChampions)} />
                   <MetricTile label="받은 피해" value={formatNumber(profile.avgDamageTaken)} />
                   <MetricTile label="전방 기여" value={formatNumber(profile.avgFrontlineContribution)} />
