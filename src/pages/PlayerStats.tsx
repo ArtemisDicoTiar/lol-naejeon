@@ -283,37 +283,45 @@ export function PlayerStats() {
       ) : (
         <>
           <Card className="overflow-hidden">
-            <div className="space-y-4">
-              <div className="grid gap-3 xl:grid-cols-[minmax(210px,240px)_minmax(220px,1fr)_minmax(260px,1.05fr)_minmax(220px,1fr)]">
-                <div className="flex flex-col items-center justify-center rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4 text-center">
-                  <div
-                    className="grid h-32 w-32 place-items-center rounded-full p-1.5"
-                    style={{
-                      background: `conic-gradient(#c89b3c ${clampPercent(profile.winrate) * 3.6}deg, rgba(70,55,20,0.8) 0deg)`,
-                    }}
-                  >
-                    <div className="grid h-full w-full place-items-center rounded-full bg-lol-dark">
-                      <div>
-                        <div className="text-xs text-lol-gold-light/45">승률</div>
-                        <div className="text-3xl font-black text-lol-gold">{formatDecimal(profile.winrate)}%</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-base font-bold text-lol-gold-light">{profile.player.name}</div>
-                  <div className="mt-1 text-sm text-lol-gold-light/45">
-                    {profile.totalGames}전 · {profile.wins}승 {profile.losses}패
-                  </div>
-                  <div className="mt-3 grid w-full grid-cols-2 gap-2 text-xs">
-                    <div className="rounded border border-lol-border/60 bg-lol-blue/40 px-2 py-2 text-lol-gold-light/65">
-                      챔프폭 <span className="font-bold text-lol-gold">{profile.uniqueChampions}</span>
-                    </div>
-                    <div className="rounded border border-lol-border/60 bg-lol-blue/40 px-2 py-2 text-lol-gold-light/65">
-                      EOG <span className="font-bold text-lol-gold">{profile.eogGames}</span>
+            <div className="grid gap-3 xl:grid-cols-[minmax(210px,240px)_minmax(320px,0.9fr)_minmax(560px,1.5fr)] xl:items-stretch">
+              <div className="flex flex-col items-center justify-center rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4 text-center">
+                <div
+                  className="grid h-32 w-32 place-items-center rounded-full p-1.5"
+                  style={{
+                    background: `conic-gradient(#c89b3c ${clampPercent(profile.winrate) * 3.6}deg, rgba(70,55,20,0.8) 0deg)`,
+                  }}
+                >
+                  <div className="grid h-full w-full place-items-center rounded-full bg-lol-dark">
+                    <div>
+                      <div className="text-xs text-lol-gold-light/45">승률</div>
+                      <div className="text-3xl font-black text-lol-gold">{formatDecimal(profile.winrate)}%</div>
                     </div>
                   </div>
                 </div>
+                <div className="mt-3 text-base font-bold text-lol-gold-light">{profile.player.name}</div>
+                <div className="mt-1 text-sm text-lol-gold-light/45">
+                  {profile.totalGames}전 · {profile.wins}승 {profile.losses}패
+                </div>
+                <div className="mt-3 grid w-full grid-cols-2 gap-2 text-xs">
+                  <div className="rounded border border-lol-border/60 bg-lol-blue/40 px-2 py-2 text-lol-gold-light/65">
+                    챔프폭 <span className="font-bold text-lol-gold">{profile.uniqueChampions}</span>
+                  </div>
+                  <div className="rounded border border-lol-border/60 bg-lol-blue/40 px-2 py-2 text-lol-gold-light/65">
+                    EOG <span className="font-bold text-lol-gold">{profile.eogGames}</span>
+                  </div>
+                </div>
+              </div>
 
-                <div className="grid grid-cols-2 gap-2">
+              <CombatRadar
+                title="전투 지표 레이더"
+                description="현재 필터 기준 전체 평균과 비교합니다."
+                series={combatRadarSeries}
+                emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
+                chartHeight={230}
+              />
+
+              <div className="grid content-start gap-2">
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-4">
                   <MetricTile label="최근 폼" value={`${formatDecimal(profile.recentWinrate)}%`} sub={`${profile.recentWins}승 ${profile.recentLosses}패`} />
                   <MetricTile
                     label="현재 흐름"
@@ -342,7 +350,7 @@ export function PlayerStats() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
                   <MetricTile label="평균 딜량" value={formatNumber(profile.avgDamageDealtToChampions)} />
                   <MetricTile label="받은 피해" value={formatNumber(profile.avgDamageTaken)} />
                   <MetricTile label="전방 기여" value={formatNumber(profile.avgFrontlineContribution)} />
@@ -351,14 +359,6 @@ export function PlayerStats() {
                   <MetricTile label="힐량" value={formatNumber(profile.avgTotalHeal)} />
                 </div>
               </div>
-
-              <CombatRadar
-                title="전투 지표 레이더"
-                description="현재 필터 기준 전체 평균과 비교합니다."
-                series={combatRadarSeries}
-                emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
-                chartHeight={260}
-              />
             </div>
           </Card>
 
