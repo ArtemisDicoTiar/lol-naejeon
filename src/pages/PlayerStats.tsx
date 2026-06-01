@@ -61,9 +61,9 @@ function MetricTile({
   }[tone];
 
   return (
-    <div className="rounded-lg border border-lol-border/70 bg-lol-dark/45 p-3">
-      <div className="text-xs text-lol-gold-light/45">{label}</div>
-      <div className={`mt-1 text-xl font-black ${toneClass}`}>{value}</div>
+    <div className="rounded-lg border border-lol-border/70 bg-lol-dark/42 p-2.5">
+      <div className="text-[11px] text-lol-gold-light/45">{label}</div>
+      <div className={`mt-0.5 text-lg font-black leading-tight ${toneClass}`}>{value}</div>
       {sub && <div className="mt-1 text-[11px] text-lol-gold-light/40">{sub}</div>}
     </div>
   );
@@ -250,7 +250,7 @@ export function PlayerStats() {
           </div>
 
           <div className="w-full max-w-3xl rounded-lg border border-lol-gold/20 bg-lol-dark/45 p-3">
-            <div className="mb-2.5 flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
                 <label htmlFor="player-stats-select" className="text-sm text-lol-gold-light/70">선수</label>
                 <select
@@ -268,21 +268,6 @@ export function PlayerStats() {
               </div>
               {modeToggle}
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {sortedPlayers.map((player) => (
-                <button
-                  key={player.id}
-                  onClick={() => setParam('player', String(player.id))}
-                  className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${
-                    selectedPlayerId === player.id
-                      ? 'border-lol-gold bg-lol-gold/20 text-lol-gold'
-                      : 'cursor-pointer border-lol-border text-lol-gold-light/45 hover:border-lol-gold/50 hover:text-lol-gold-light/80'
-                  }`}
-                >
-                  {player.name}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       </div>
@@ -298,8 +283,8 @@ export function PlayerStats() {
       ) : (
         <>
           <Card className="overflow-hidden">
-            <div className="grid gap-4 xl:grid-cols-[minmax(260px,300px)_minmax(0,1fr)]">
-              <div className="space-y-3">
+            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+              <div className="grid gap-3 lg:grid-cols-[minmax(230px,270px)_minmax(0,1fr)]">
                 <div className="flex flex-col items-center justify-center rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4 text-center">
                   <div
                     className="grid h-32 w-32 place-items-center rounded-full p-1.5"
@@ -333,12 +318,12 @@ export function PlayerStats() {
                   description="현재 필터 기준 전체 평균과 비교합니다."
                   series={combatRadarSeries}
                   emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
-                  chartHeight={220}
+                  chartHeight={250}
                 />
               </div>
 
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-2 gap-2">
                   <MetricTile label="최근 폼" value={`${formatDecimal(profile.recentWinrate)}%`} sub={`${profile.recentWins}승 ${profile.recentLosses}패`} />
                   <MetricTile
                     label="현재 흐름"
@@ -358,16 +343,16 @@ export function PlayerStats() {
                   />
                 </div>
 
-                <div className="rounded-xl border border-lol-border/70 bg-lol-dark/35 p-4">
-                  <div className="mb-3 text-sm font-medium text-lol-gold">핵심 지표</div>
-                  <div className="space-y-3">
+                <div className="rounded-xl border border-lol-border/70 bg-lol-dark/35 p-3">
+                  <div className="mb-2 text-sm font-medium text-lol-gold">핵심 지표</div>
+                  <div className="space-y-2.5">
                     <MiniMeter label="시즌 승률" value={profile.winrate} right={`${profile.wins}W / ${profile.losses}L`} color="bg-lol-gold" />
                     <MiniMeter label="최근 폼" value={profile.recentWinrate} right={`${profile.recentGames}게임`} color="bg-prof-high" />
                     <MiniMeter label="폼 편차" value={50 + profile.trendDelta} right={signedPercent(profile.trendDelta)} color={profile.trendDelta >= 0 ? 'bg-prof-high' : 'bg-red-400'} />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                <div className="grid grid-cols-2 gap-2">
                   <MetricTile label="평균 딜량" value={formatNumber(profile.avgDamageDealtToChampions)} />
                   <MetricTile label="받은 피해" value={formatNumber(profile.avgDamageTaken)} />
                   <MetricTile label="전방 기여" value={formatNumber(profile.avgFrontlineContribution)} />
