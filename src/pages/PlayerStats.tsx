@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChampionIcon } from '@/components/champions/ChampionIcon';
 import { CombatRadar } from '@/components/stats/CombatRadar';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/ui/Page';
 import { GAME_MODE_LABELS, type Champion, type GameMode } from '@/lib/db';
-import { computePlayerProfile, type PlayerProfileStats } from '@/lib/player-profile';
+import { computePlayerProfile, type PlayerProfileStats, type PlayerProfileWinrateTrendPoint } from '@/lib/player-profile';
 import { usePlayers } from '@/hooks/usePlayers';
 import { useIdentityContext } from '@/App';
 
@@ -89,6 +90,49 @@ function MiniMeter({
       <div className="h-2 overflow-hidden rounded-full bg-lol-blue">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${clampPercent(value)}%` }} />
       </div>
+    </div>
+  );
+}
+
+function WinrateTrendChart({ points }: { points: PlayerProfileWinrateTrendPoint[] }) {
+  if (points.length === 0) {
+    return (
+      <div className="rounded-xl border border-lol-border/70 bg-lol-dark/35 p-3">
+        <div className="text-sm font-medium text-lol-gold">승률 추이</div>
+        <p className="mt-3 text-sm text-lol-gold-light/45">승패가 기록된 경기가 아직 없습니다.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-lol-border/70 bg-lol-dark/35 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium text-lol-gold">승률 추이</div>
+          <div className="text-[11px] text-lol-gold-light/40">날짜별 승률과 누적 승률</div>
+        </div>
+        <div className="text-[11px] text-lol-gold-light/45">
+          {points[0].label} - {points[points.length - 1].label}
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={178}>
+        <LineChart data={points} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+          <CartesianGrid stroke="#463714" strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: '#f0e6d280', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#463714' }} />
+          <YAxis domain={[0, 100]} tick={{ fill: '#f0e6d280', fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}%`} />
+          <Tooltip
+            contentStyle={{ backgroundColor: '#091428', border: '1px solid #463714', borderRadius: 8, color: '#f0e6d2' }}
+            labelStyle={{ color: '#c89b3c' }}
+            formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
+            labelFormatter={(_, payload) => {
+              const row = payload?.[0]?.payload as PlayerProfileWinrateTrendPoint | undefined;
+              return row ? `${row.dateKey} · ${row.wins}승 ${row.losses}패 (${row.games}전)` : '';
+            }}
+          />
+          <Line type="monotone" dataKey="cumulativeWinrate" name="누적 승률" stroke="#c89b3c" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+          <Line type="monotone" dataKey="winrate" name="일자 승률" stroke="#3b82f6" strokeWidth={1.8} strokeDasharray="4 4" dot={{ r: 2 }} />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -283,42 +327,44 @@ export function PlayerStats() {
       ) : (
         <>
           <Card className="overflow-hidden">
-            <div className="grid gap-3 xl:grid-cols-[minmax(210px,240px)_minmax(280px,0.8fr)_minmax(460px,1.35fr)] xl:items-stretch">
-              <div className="flex flex-col items-center justify-center rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4 text-center">
-                <div
-                  className="grid h-32 w-32 place-items-center rounded-full p-1.5"
-                  style={{
-                    background: `conic-gradient(#c89b3c ${clampPercent(profile.winrate) * 3.6}deg, rgba(70,55,20,0.8) 0deg)`,
-                  }}
-                >
-                  <div className="grid h-full w-full place-items-center rounded-full bg-lol-dark">
-                    <div>
-                      <div className="text-xs text-lol-gold-light/45">승률</div>
-                      <div className="text-3xl font-black text-lol-gold">{formatDecimal(profile.winrate)}%</div>
+            <div className="grid gap-3 xl:grid-cols-[minmax(280px,0.82fr)_minmax(560px,1.5fr)]">
+              <div className="grid content-start gap-3">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-lol-gold/20 bg-lol-dark/45 p-4 text-center">
+                  <div
+                    className="grid h-32 w-32 place-items-center rounded-full p-1.5"
+                    style={{
+                      background: `conic-gradient(#c89b3c ${clampPercent(profile.winrate) * 3.6}deg, rgba(70,55,20,0.8) 0deg)`,
+                    }}
+                  >
+                    <div className="grid h-full w-full place-items-center rounded-full bg-lol-dark">
+                      <div>
+                        <div className="text-xs text-lol-gold-light/45">승률</div>
+                        <div className="text-3xl font-black text-lol-gold">{formatDecimal(profile.winrate)}%</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-base font-bold text-lol-gold-light">{profile.player.name}</div>
+                  <div className="mt-1 text-sm text-lol-gold-light/45">
+                    {profile.totalGames}전 · {profile.wins}승 {profile.losses}패
+                  </div>
+                  <div className="mt-3 grid w-full grid-cols-2 gap-2 text-xs">
+                    <div className="rounded border border-lol-border/60 bg-lol-blue/40 px-2 py-2 text-lol-gold-light/65">
+                      챔프폭 <span className="font-bold text-lol-gold">{profile.uniqueChampions}</span>
+                    </div>
+                    <div className="rounded border border-lol-border/60 bg-lol-blue/40 px-2 py-2 text-lol-gold-light/65">
+                      EOG <span className="font-bold text-lol-gold">{profile.eogGames}</span>
                     </div>
                   </div>
                 </div>
-                <div className="mt-3 text-base font-bold text-lol-gold-light">{profile.player.name}</div>
-                <div className="mt-1 text-sm text-lol-gold-light/45">
-                  {profile.totalGames}전 · {profile.wins}승 {profile.losses}패
-                </div>
-                <div className="mt-3 grid w-full grid-cols-2 gap-2 text-xs">
-                  <div className="rounded border border-lol-border/60 bg-lol-blue/40 px-2 py-2 text-lol-gold-light/65">
-                    챔프폭 <span className="font-bold text-lol-gold">{profile.uniqueChampions}</span>
-                  </div>
-                  <div className="rounded border border-lol-border/60 bg-lol-blue/40 px-2 py-2 text-lol-gold-light/65">
-                    EOG <span className="font-bold text-lol-gold">{profile.eogGames}</span>
-                  </div>
-                </div>
-              </div>
 
-              <CombatRadar
-                title="전투 지표 레이더"
-                description="현재 필터 기준 전체 평균과 비교합니다."
-                series={combatRadarSeries}
-                emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
-                chartHeight={205}
-              />
+                <CombatRadar
+                  title="전투 지표 레이더"
+                  description="현재 필터 기준 전체 평균과 비교합니다."
+                  series={combatRadarSeries}
+                  emptyMessage="전투 로그가 충분하지 않아 레이더를 그릴 수 없습니다."
+                  chartHeight={205}
+                />
+              </div>
 
               <div className="grid content-start gap-2">
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-4">
@@ -358,6 +404,7 @@ export function PlayerStats() {
                   <MetricTile label="골드 효율" value={formatDecimal(profile.avgGoldEfficiency)} />
                   <MetricTile label="힐량" value={formatNumber(profile.avgTotalHeal)} />
                 </div>
+                <WinrateTrendChart points={profile.winrateTrend} />
               </div>
             </div>
           </Card>

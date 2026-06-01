@@ -47,6 +47,18 @@ export interface PlayerProfileRecentMatchEntry {
   goldEarned: number | null;
 }
 
+export interface PlayerProfileWinrateTrendPoint {
+  dateKey: string;
+  label: string;
+  games: number;
+  wins: number;
+  losses: number;
+  winrate: number;
+  cumulativeGames: number;
+  cumulativeWins: number;
+  cumulativeWinrate: number;
+}
+
 export interface PlayerProfileStats {
   player: Player;
   totalGames: number;
@@ -84,6 +96,7 @@ export interface PlayerProfileStats {
   };
   topChampions: PlayerProfileChampionEntry[];
   roleStats: PlayerProfileRoleEntry[];
+  winrateTrend: PlayerProfileWinrateTrendPoint[];
   recentMatches: PlayerProfileRecentMatchEntry[];
 }
 
@@ -95,6 +108,17 @@ function average(total: number, count: number) {
 
 function avgOfRows(rows: GameParticipantStat[], selector: (row: GameParticipantStat) => number) {
   return rows.length > 0 ? rows.reduce((sum, row) => sum + selector(row), 0) / rows.length : 0;
+}
+
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function toDateLabel(date: Date): string {
+  return `${date.getMonth() + 1}.${date.getDate()}`;
 }
 
 export async function computePlayerProfile(playerId: number, modeFilter?: GameMode): Promise<PlayerProfileStats | null> {
@@ -206,6 +230,46 @@ export async function computePlayerProfile(playerId: number, modeFilter?: GameMo
     }))
     .sort((a, b) => b.games - a.games);
 
+  const dailyTrend = new Map<string, { date: Date; wins: number; losses: number }>();
+  [...playerPicks]
+    .sort((a, b) => {
+      const gameA = gameMap.get(a.gameId);
+      const gameB = gameMap.get(b.gameId);
+      return new Date(gameA?.playedAt ?? 0).getTime() - new Date(gameB?.playedAt ?? 0).getTime();
+    })
+    .forEach((pick) => {
+      const game = gameMap.get(pick.gameId);
+      if (!game || game.winningTeam === null) return;
+
+      const playedAt = new Date(game.playedAt);
+      const dateKey = toDateKey(playedAt);
+      const entry = dailyTrend.get(dateKey) ?? { date: playedAt, wins: 0, losses: 0 };
+      if (pick.team === game.winningTeam) entry.wins++;
+      else entry.losses++;
+      dailyTrend.set(dateKey, entry);
+    });
+
+  let cumulativeWins = 0;
+  let cumulativeGames = 0;
+  const winrateTrend = [...dailyTrend.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([dateKey, entry]) => {
+      const games = entry.wins + entry.losses;
+      cumulativeWins += entry.wins;
+      cumulativeGames += games;
+      return {
+        dateKey,
+        label: toDateLabel(entry.date),
+        games,
+        wins: entry.wins,
+        losses: entry.losses,
+        winrate: average(entry.wins * 100, games),
+        cumulativeGames,
+        cumulativeWins,
+        cumulativeWinrate: average(cumulativeWins * 100, cumulativeGames),
+      };
+    });
+
   const recentMatches = [...playerPicks]
     .sort((a, b) => {
       const gameA = gameMap.get(a.gameId);
@@ -288,6 +352,7 @@ export async function computePlayerProfile(playerId: number, modeFilter?: GameMo
     },
     topChampions,
     roleStats,
+    winrateTrend,
     recentMatches,
   };
 }
