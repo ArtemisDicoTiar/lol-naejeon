@@ -109,11 +109,21 @@ function WinrateTrendChart({ points }: { points: PlayerProfileWinrateTrendPoint[
       <div className="mb-2 flex items-center justify-between gap-2">
         <div>
           <div className="text-sm font-medium text-lol-gold">승률 추이</div>
-          <div className="text-[11px] text-lol-gold-light/40">각 경기 시점 기준 최근 최대 5경기</div>
+          <div className="text-[11px] text-lol-gold-light/40">최근 5경기 window와 날짜별 누적 승률</div>
         </div>
         <div className="text-[11px] text-lol-gold-light/45">
           {points.length}경기 추적
         </div>
+      </div>
+      <div className="mb-2 flex flex-wrap gap-2 text-[10px] text-lol-gold-light/45">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-0.5 w-4 rounded bg-lol-gold" />
+          최근 5경기
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-0.5 w-4 rounded bg-blue-400" />
+          누적 승률
+        </span>
       </div>
       <ResponsiveContainer width="100%" height={178}>
         <LineChart data={points} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
@@ -121,15 +131,37 @@ function WinrateTrendChart({ points }: { points: PlayerProfileWinrateTrendPoint[
           <XAxis dataKey="label" tick={{ fill: '#f0e6d280', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#463714' }} />
           <YAxis domain={[0, 100]} tick={{ fill: '#f0e6d280', fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}%`} />
           <Tooltip
+            cursor={false}
             contentStyle={{ backgroundColor: '#091428', border: '1px solid #463714', borderRadius: 8, color: '#f0e6d2' }}
             labelStyle={{ color: '#c89b3c' }}
             formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
             labelFormatter={(_, payload) => {
               const row = payload?.[0]?.payload as PlayerProfileWinrateTrendPoint | undefined;
-              return row ? `${row.playedAtLabel} · ${row.label} · 최근 ${row.windowSize}경기 ${row.wins}승 ${row.losses}패` : '';
+              return row
+                ? `${row.playedAtLabel} · ${row.label} · 최근 ${row.windowSize}경기 ${row.wins}승 ${row.losses}패 · 누적 ${row.cumulativeWins}승 ${row.cumulativeGames - row.cumulativeWins}패`
+                : '';
             }}
           />
-          <Line type="monotone" dataKey="winrate" name="최근 5경기 승률" stroke="#c89b3c" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+          <Line
+            type="monotone"
+            dataKey="winrate"
+            name="최근 5경기 승률"
+            stroke="#c89b3c"
+            strokeWidth={2.5}
+            dot={{ r: 2.5 }}
+            activeDot={false}
+            isAnimationActive={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="cumulativeWinrate"
+            name="누적 승률"
+            stroke="#60a5fa"
+            strokeWidth={2}
+            dot={false}
+            activeDot={false}
+            isAnimationActive={false}
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>

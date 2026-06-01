@@ -55,6 +55,9 @@ export interface PlayerProfileWinrateTrendPoint {
   wins: number;
   losses: number;
   winrate: number;
+  cumulativeGames: number;
+  cumulativeWins: number;
+  cumulativeWinrate: number;
   result: 'W' | 'L';
 }
 
@@ -238,10 +241,13 @@ export async function computePlayerProfile(playerId: number, modeFilter?: GameMo
       return a.game.gameNumber - b.game.gameNumber;
     });
 
+  let cumulativeWins = 0;
   const winrateTrend = completedTrendEntries.map((entry, index) => {
     const window = completedTrendEntries.slice(Math.max(0, index - 4), index + 1);
     const wins = window.filter((row) => row.won).length;
     const windowSize = window.length;
+    cumulativeWins += entry.won ? 1 : 0;
+    const cumulativeGames = index + 1;
     return {
       gameId: entry.game.id!,
       label: `G${entry.game.gameNumber}`,
@@ -250,6 +256,9 @@ export async function computePlayerProfile(playerId: number, modeFilter?: GameMo
       wins,
       losses: windowSize - wins,
       winrate: average(wins * 100, windowSize),
+      cumulativeGames,
+      cumulativeWins,
+      cumulativeWinrate: average(cumulativeWins * 100, cumulativeGames),
       result: entry.won ? 'W' as const : 'L' as const,
     };
   });
