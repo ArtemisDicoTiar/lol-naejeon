@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState, StatTile, StatusPill } from '@/components/ui/Page';
 import { useIdentityContext, useLcuContext } from '@/App';
 import { computeFullStats, type FullStats } from '@/lib/stats';
+import { db } from '@/lib/db';
 import { DashboardPresenceBars } from '@/components/dashboard/DashboardPresenceBars';
 import { DashboardFormBoard } from '@/components/dashboard/DashboardFormBoard';
 import { DashboardMvpCandidates } from '@/components/dashboard/DashboardMvpCandidates';
@@ -23,6 +24,12 @@ function formatNumber(value: number) {
 
 const DASHBOARD_RECENT_GAME_LIMIT = 10;
 
+interface DashboardOverallStats {
+  completedGames: number;
+  team1Wins: number;
+  team2Wins: number;
+}
+
 export function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -34,6 +41,7 @@ export function Dashboard() {
   const [sessionName, setSessionName] = useState('');
   const [creating, setCreating] = useState(false);
   const [stats, setStats] = useState<FullStats | null>(null);
+  const [overallStats, setOverallStats] = useState<DashboardOverallStats | null>(null);
   const autoNavigateRef = useRef(false);
   const hasPendingGame = games.some((game) => game.winningTeam === null);
 
@@ -78,6 +86,26 @@ export function Dashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadOverallStats = async () => {
+      const allGames = await db.games.toArray();
+      if (cancelled) return;
+      const completed = allGames.filter((game) => game.winningTeam === 1 || game.winningTeam === 2);
+      const team1Wins = completed.filter((game) => game.winningTeam === 1).length;
+      const team2Wins = completed.filter((game) => game.winningTeam === 2).length;
+      setOverallStats({ completedGames: completed.length, team1Wins, team2Wins });
+    };
+    const timer = window.setTimeout(() => { void loadOverallStats(); }, 0);
+    const handleDataChanged = () => { window.setTimeout(() => { void loadOverallStats(); }, 0); };
+    window.addEventListener('lol-data-changed', handleDataChanged);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener('lol-data-changed', handleDataChanged);
+    };
+  }, []);
+
   const playerName = useMemo(() => {
     return new Map(players.map((player) => [player.id!, player.name]));
   }, [players]);
@@ -103,9 +131,9 @@ export function Dashboard() {
   const completedSessionGames = games.filter((game) => game.winningTeam !== null);
   const team1Wins = completedSessionGames.filter((game) => game.winningTeam === 1).length;
   const team2Wins = completedSessionGames.filter((game) => game.winningTeam === 2).length;
-  const recentSideTotal = stats?.sideStats.total ?? 0;
-  const recentTeam1Wr = recentSideTotal > 0 ? ((stats?.sideStats.team1Wins ?? 0) / recentSideTotal) * 100 : 0;
-  const recentTeam2Wr = recentSideTotal > 0 ? ((stats?.sideStats.team2Wins ?? 0) / recentSideTotal) * 100 : 0;
+  const overallSideTotal = overallStats?.completedGames ?? 0;
+  const overallTeam1Wr = overallSideTotal > 0 ? ((overallStats?.team1Wins ?? 0) / overallSideTotal) * 100 : 0;
+  const overallTeam2Wr = overallSideTotal > 0 ? ((overallStats?.team2Wins ?? 0) / overallSideTotal) * 100 : 0;
   const lcuStatus = lcu.connected ? (lcu.champSelectActive ? '챔셀 감지' : '클라 연결됨') : '클라 미연결';
 
   if (sessionLoading) {
@@ -163,18 +191,18 @@ export function Dashboard() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            <StatTile label="최근 표본" value={`${stats?.wrStats.totalGames ?? 0}/${DASHBOARD_RECENT_GAME_LIMIT}`} />
+            <StatTile label="전체 표본" value={overallSideTotal} />
             <StatTile label="등록 선수" value={players.length} />
-            <StatTile label="Team 1 최근" value={formatPercent(recentTeam1Wr)} tone="blue" />
-            <StatTile label="Team 2 최근" value={formatPercent(recentTeam2Wr)} tone="red" />
+            <StatTile label="Team 1 전체" value={formatPercent(overallTeam1Wr)} tone="blue" />
+            <StatTile label="Team 2 전체" value={formatPercent(overallTeam2Wr)} tone="red" />
             <div className="col-span-2 rounded-lg border border-lol-gold/15 bg-lol-dark/45 p-3">
               <div className="mb-2 flex items-center justify-between text-xs text-lol-gold-light/45">
-                <span>최근 {DASHBOARD_RECENT_GAME_LIMIT}경기 진영 밸런스</span>
-                <span>{recentSideTotal}게임</span>
+                <span>전체 진영 밸런스</span>
+                <span>{overallSideTotal}게임</span>
               </div>
               <div className="flex h-3 overflow-hidden rounded-full bg-lol-blue">
-                <div className="bg-blue-500/80" style={{ width: `${recentTeam1Wr}%` }} />
-                <div className="bg-red-500/80" style={{ width: `${recentTeam2Wr}%` }} />
+                <div className="bg-blue-500/80" style={{ width: `${overallTeam1Wr}%` }} />
+                <div className="bg-red-500/80" style={{ width: `${overallTeam2Wr}%` }} />
               </div>
               <div className="mt-2 flex justify-between text-[10px] text-lol-gold-light/35">
                 <span>현재 세션 T1 {team1Wins}승</span>
