@@ -1391,7 +1391,7 @@ export function BanPickScreen({
   };
 
   const renderLabScenarioRecommendations = (team: 1 | 2) => {
-    if (!labEnabled || !labAnalysis || labAnalysis.scenarios.length === 0 || phase === 'pick') return null;
+    if (!labEnabled || !labAnalysis || labAnalysis.scenarios.length === 0) return null;
 
     const scenarios = labAnalysis.scenarios.slice(0, 3);
     const renderPickIcon = (pick: LabPick, compact = false) => {
