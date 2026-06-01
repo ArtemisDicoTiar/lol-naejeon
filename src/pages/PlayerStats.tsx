@@ -109,7 +109,7 @@ function WinrateTrendChart({ points }: { points: PlayerProfileWinrateTrendPoint[
       <div className="mb-2 flex items-center justify-between gap-2">
         <div>
           <div className="text-sm font-medium text-lol-gold">승률 추이</div>
-          <div className="text-[11px] text-lol-gold-light/40">최근 5경기 window와 날짜별 누적 승률</div>
+          <div className="text-[11px] text-lol-gold-light/40">X축 날짜 기준 최근 5경기 window와 누적 승률</div>
         </div>
         <div className="text-[11px] text-lol-gold-light/45">
           {points.length}경기 추적
@@ -128,7 +128,7 @@ function WinrateTrendChart({ points }: { points: PlayerProfileWinrateTrendPoint[
       <ResponsiveContainer width="100%" height={178}>
         <LineChart data={points} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
           <CartesianGrid stroke="#463714" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="label" tick={{ fill: '#f0e6d280', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#463714' }} />
+          <XAxis dataKey="playedAtLabel" tick={{ fill: '#f0e6d280', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#463714' }} />
           <YAxis domain={[0, 100]} tick={{ fill: '#f0e6d280', fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}%`} />
           <Tooltip
             cursor={false}
