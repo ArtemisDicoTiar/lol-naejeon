@@ -162,6 +162,21 @@ export interface PlayerTrendEntry {
   delta: number;
 }
 
+export interface PlayerWinrateTrendPoint {
+  gameId: number;
+  gameNumber: number;
+  playedAtMs: number;
+  playedAtLabel: string;
+  windowSize: number;
+  wins: number;
+  losses: number;
+  winrate: number;
+  cumulativeGames: number;
+  cumulativeWins: number;
+  cumulativeWinrate: number;
+  result: 'W' | 'L';
+}
+
 export interface PlayerStreakEntry {
   type: 'W' | 'L' | null;
   count: number;
@@ -235,6 +250,7 @@ export interface FullStats {
   roleRadarData: Record<number, PlayerRoleRadarPoint[]>;
   playerChampionPool: Record<number, PlayerChampionPoolEntry>;
   playerTrend: Record<number, PlayerTrendEntry>;
+  playerWinrateTrend: Record<number, PlayerWinrateTrendPoint[]>;
   playerStreak: Record<number, PlayerStreakEntry>;
   headToHead: HeadToHeadEntry[];
   trioPlayerSynergy: TrioPlayerSynergyEntry[];
@@ -323,6 +339,10 @@ function addEogRow(aggregate: EogAggregate, row: GameParticipantStat) {
 function avgEog(aggregate: EogAggregate | undefined, metric: EogMetric) {
   if (!aggregate || aggregate.games === 0) return 0;
   return aggregate[metric] / aggregate.games;
+}
+
+function dateLabel(date: Date): string {
+  return `${date.getMonth() + 1}.${date.getDate()}`;
 }
 
 async function loadParticipantStatsForGames(gameIds: number[] | null) {
@@ -427,6 +447,7 @@ export async function computeFullStats(
   const roleRadarData: Record<number, PlayerRoleRadarPoint[]> = {};
   const playerChampionPool: Record<number, PlayerChampionPoolEntry> = {};
   const playerTrend: Record<number, PlayerTrendEntry> = {};
+  const playerWinrateTrend: Record<number, PlayerWinrateTrendPoint[]> = {};
   const playerStreak: Record<number, PlayerStreakEntry> = {};
   const playerEogSummary: PlayerEogSummaryEntry[] = [];
   const championEogSummary: ChampionEogSummaryEntry[] = [];
@@ -555,6 +576,42 @@ export async function computeFullStats(
       allWinrate: winrate,
       delta: recentGames > 0 ? recentWr - winrate : 0,
     };
+
+    const completedTrendEntries = playerPicks
+      .map((pick) => {
+        const game = gameMap.get(pick.gameId);
+        if (!game || game.winningTeam === null || game.id === undefined) return null;
+        return { game, won: pick.team === game.winningTeam };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => !!entry)
+      .sort((a, b) => {
+        const timeDiff = new Date(a.game.playedAt).getTime() - new Date(b.game.playedAt).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.game.gameNumber - b.game.gameNumber;
+      });
+
+    let cumulativeWins = 0;
+    playerWinrateTrend[pid] = completedTrendEntries.map((entry, index) => {
+      const window = completedTrendEntries.slice(Math.max(0, index - 4), index + 1);
+      const wins = window.filter((row) => row.won).length;
+      const windowSize = window.length;
+      cumulativeWins += entry.won ? 1 : 0;
+      const cumulativeGames = index + 1;
+      return {
+        gameId: entry.game.id!,
+        gameNumber: entry.game.gameNumber,
+        playedAtMs: new Date(entry.game.playedAt).getTime(),
+        playedAtLabel: dateLabel(new Date(entry.game.playedAt)),
+        windowSize,
+        wins,
+        losses: windowSize - wins,
+        winrate: windowSize > 0 ? (wins / windowSize) * 100 : 0,
+        cumulativeGames,
+        cumulativeWins,
+        cumulativeWinrate: cumulativeGames > 0 ? (cumulativeWins / cumulativeGames) * 100 : 0,
+        result: entry.won ? 'W' : 'L',
+      };
+    });
 
     if (playerEogAggregate && playerEogAggregate.games > 0) {
       playerEogSummary.push({
@@ -779,7 +836,7 @@ export async function computeFullStats(
   return {
     wrStats, players, champions,
     radarData, roleRadarData,
-    playerChampionPool, playerTrend, playerStreak,
+    playerChampionPool, playerTrend, playerWinrateTrend, playerStreak,
     headToHead, trioPlayerSynergy,
     roleDist, champCompare, formatStats,
     sideStats: { team1Wins: t1Wins, team2Wins: t2Wins, total: t1Wins + t2Wins },

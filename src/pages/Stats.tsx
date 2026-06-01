@@ -6,6 +6,7 @@ import { EmptyState, PageHeader, StatusPill } from '@/components/ui/Page';
 import { PlayerRanking } from '@/components/stats/PlayerRanking';
 import { PlayerStreak } from '@/components/stats/PlayerStreak';
 import { PlayerTrend } from '@/components/stats/PlayerTrend';
+import { PlayerWinrateTrendChart } from '@/components/stats/PlayerWinrateTrendChart';
 import { PlayerRadar } from '@/components/stats/PlayerRadar';
 import { PlayerRoleRadar } from '@/components/stats/PlayerRoleRadar';
 import { PlayerStyleRadar } from '@/components/stats/PlayerStyleRadar';
@@ -34,8 +35,7 @@ export function Stats() {
   const [eogLoading, setEogLoading] = useState(false);
   const [showDetailedStats, setShowDetailedStats] = useState(false);
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
-  const [selectedRadarPlayerIds, setSelectedRadarPlayerIds] = useState<number[]>([]);
-  const radarSelectionInitializedRef = useRef(false);
+  const [selectedRadarPlayerIds, setSelectedRadarPlayerIds] = useState<number[] | null>(null);
   const statsCacheRef = useRef(new Map<ModeFilter, FullStats>());
   const fastStatsCacheRef = useRef(new Map<ModeFilter, FullStats>());
   const loadRequestIdRef = useRef(0);
@@ -136,12 +136,6 @@ export function Stats() {
   }, [loadStats]);
 
   useEffect(() => {
-    if (!stats || radarSelectionInitializedRef.current) return;
-    setSelectedRadarPlayerIds(stats.players.slice(0, 2).map((player) => player.id!));
-    radarSelectionInitializedRef.current = true;
-  }, [stats]);
-
-  useEffect(() => {
     if (!stats || loading) return;
     const timer = window.setTimeout(() => {
       setShowDetailedStats(true);
@@ -151,13 +145,16 @@ export function Stats() {
 
   const resolvedSelectedRadarPlayerIds = useMemo(() => {
     if (!stats) return [];
+    const selectedIds = selectedRadarPlayerIds ?? stats.players.slice(0, 2).map((player) => player.id!);
     const playerIdSet = new Set(stats.players.map((player) => player.id));
-    return selectedRadarPlayerIds.filter((id) => playerIdSet.has(id));
+    return selectedIds.filter((id) => playerIdSet.has(id));
   }, [selectedRadarPlayerIds, stats]);
 
   const toggleRadarPlayer = (playerId: number) => {
     setSelectedRadarPlayerIds((prev) =>
-      prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId],
+      (prev ?? resolvedSelectedRadarPlayerIds).includes(playerId)
+        ? (prev ?? resolvedSelectedRadarPlayerIds).filter((id) => id !== playerId)
+        : [...(prev ?? resolvedSelectedRadarPlayerIds), playerId],
     );
   };
 
@@ -422,6 +419,9 @@ export function Stats() {
             onTogglePlayer={toggleRadarPlayer}
             hideSelector
           />
+        </div>
+        <div className="mt-4">
+          <PlayerWinrateTrendChart stats={stats} selectedIds={resolvedSelectedRadarPlayerIds} />
         </div>
       </div>
 
