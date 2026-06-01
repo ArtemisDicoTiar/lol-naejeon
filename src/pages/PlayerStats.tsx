@@ -109,10 +109,10 @@ function WinrateTrendChart({ points }: { points: PlayerProfileWinrateTrendPoint[
       <div className="mb-2 flex items-center justify-between gap-2">
         <div>
           <div className="text-sm font-medium text-lol-gold">승률 추이</div>
-          <div className="text-[11px] text-lol-gold-light/40">날짜별 승률과 누적 승률</div>
+          <div className="text-[11px] text-lol-gold-light/40">각 경기 시점 기준 최근 최대 5경기</div>
         </div>
         <div className="text-[11px] text-lol-gold-light/45">
-          {points[0].label} - {points[points.length - 1].label}
+          {points.length}경기 추적
         </div>
       </div>
       <ResponsiveContainer width="100%" height={178}>
@@ -126,11 +126,10 @@ function WinrateTrendChart({ points }: { points: PlayerProfileWinrateTrendPoint[
             formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
             labelFormatter={(_, payload) => {
               const row = payload?.[0]?.payload as PlayerProfileWinrateTrendPoint | undefined;
-              return row ? `${row.dateKey} · ${row.wins}승 ${row.losses}패 (${row.games}전)` : '';
+              return row ? `${row.playedAtLabel} · ${row.label} · 최근 ${row.windowSize}경기 ${row.wins}승 ${row.losses}패` : '';
             }}
           />
-          <Line type="monotone" dataKey="cumulativeWinrate" name="누적 승률" stroke="#c89b3c" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-          <Line type="monotone" dataKey="winrate" name="일자 승률" stroke="#3b82f6" strokeWidth={1.8} strokeDasharray="4 4" dot={{ r: 2 }} />
+          <Line type="monotone" dataKey="winrate" name="최근 5경기 승률" stroke="#c89b3c" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
         </LineChart>
       </ResponsiveContainer>
     </div>
