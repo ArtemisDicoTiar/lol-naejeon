@@ -51,6 +51,9 @@ export interface TeamCompositionSample {
   damageProfileId: string;
   damageProfileLabel: string;
   apShare: number;
+  combatBalanceId: string;
+  combatBalanceLabel: string;
+  combatBalanceDetail: string;
   traitSignature: string;
   keyTraits: string[];
 }
@@ -69,6 +72,7 @@ export interface CompositionAnalysis {
   championMeta: Pick<Champion, 'id' | 'nameKo' | 'imageUrl'>[];
   archetypes: CompositionAggregate[];
   damageProfiles: CompositionAggregate[];
+  combatBalanceProfiles: CompositionAggregate[];
   traitProfiles: CompositionAggregate[];
   roleProfiles: CompositionAggregate[];
   championPairs: ChampionComboAggregate[];
@@ -333,6 +337,66 @@ function damageProfile(champions: Champion[]) {
   return { id: apShare > 58 ? 'ap-lean' : 'ad-lean', label: apShare > 58 ? 'AP 기울음' : 'AD 기울음', apShare };
 }
 
+function combatBalanceProfile(champions: Champion[]) {
+  let frontline = 0;
+  let damage = 0;
+  let sustain = 0;
+
+  for (const champion of champions) {
+    const traits = championTraits[champion.id];
+    const mechanics = traits?.mechanics ?? [];
+    const hasDamageMechanic = mechanics.some((tag) => (
+      tag === 'burst' ||
+      tag === 'dps_sustained' ||
+      tag === 'poke_long' ||
+      tag === 'poke_mid' ||
+      tag === 'execute' ||
+      tag === 'tank_shred'
+    ));
+    const hasSustainMechanic = mechanics.some((tag) => (
+      tag === 'heal' ||
+      tag === 'shield' ||
+      tag === 'speed_buff' ||
+      tag === 'attack_steroid' ||
+      tag === 'invulnerable' ||
+      tag === 'revive'
+    ));
+
+    if (champion.aramRole === 'tank' || champion.aramRole === 'engage') frontline++;
+    if (champion.aramRole === 'dps' || champion.aramRole === 'poke' || hasDamageMechanic) damage++;
+    if (champion.aramRole === 'sustain' || champion.aramRole === 'utility' || hasSustainMechanic) sustain++;
+  }
+
+  const targetDamage = champions.length >= 4 ? 2 : 1;
+  const hasFrontline = frontline >= 1;
+  const hasDamage = damage >= targetDamage;
+  const hasSustain = sustain >= 1;
+  const detail = `탱${frontline} · 딜${damage} · 힐/보호${sustain}`;
+
+  if (hasFrontline && hasDamage && hasSustain) {
+    return { id: 'tdh-balanced', label: '탱딜힐 균형', detail };
+  }
+  if (!hasFrontline && hasDamage && hasSustain) {
+    return { id: 'no-frontline-damage-sustain', label: '노탱 딜힐', detail };
+  }
+  if (hasFrontline && hasDamage && !hasSustain) {
+    return { id: 'frontline-damage', label: '탱딜 중심', detail };
+  }
+  if (hasFrontline && !hasDamage && hasSustain) {
+    return { id: 'frontline-sustain-low-damage', label: '탱힐 저딜', detail };
+  }
+  if (!hasFrontline && hasDamage && !hasSustain) {
+    return { id: 'damage-only', label: '딜 몰빵', detail };
+  }
+  if (hasFrontline && !hasDamage && !hasSustain) {
+    return { id: 'frontline-heavy', label: '탱 과다', detail };
+  }
+  if (!hasFrontline && !hasDamage && hasSustain) {
+    return { id: 'sustain-heavy', label: '힐/유틸 과다', detail };
+  }
+  return { id: 'tdh-unbalanced', label: '역할 불균형', detail };
+}
+
 function classifyArchetype(champions: Champion[]) {
   const roleCounts = new Map<Role, number>();
   for (const champion of champions) {
@@ -373,6 +437,7 @@ function buildTeamSample(
   if (teamChampions.length < 2) return null;
   const archetype = classifyArchetype(teamChampions);
   const damage = damageProfile(teamChampions);
+  const combatBalance = combatBalanceProfile(teamChampions);
   const traits = traitSignature(teamChampions);
   return {
     id: `${game.id}:${team}`,
@@ -398,6 +463,9 @@ function buildTeamSample(
     damageProfileId: damage.id,
     damageProfileLabel: damage.label,
     apShare: damage.apShare,
+    combatBalanceId: combatBalance.id,
+    combatBalanceLabel: combatBalance.label,
+    combatBalanceDetail: combatBalance.detail,
     traitSignature: traits.label,
     keyTraits: traits.keyTraits,
   };
@@ -412,6 +480,10 @@ function makeInsights(analysis: Omit<CompositionAnalysis, 'insights'>): Composit
   const bestPair = analysis.championPairs.find((row) => row.games >= 2);
   const bestMatchup = analysis.matchups.find((row) => row.games >= 2 && row.winrate >= 60);
   const damage = analysis.damageProfiles.find((row) => row.games >= minGames);
+  const balancedDamage = analysis.damageProfiles.find((row) => row.id === 'balanced-damage');
+  const bestDamage = analysis.damageProfiles.find((row) => row.games >= minGames);
+  const balancedCombat = analysis.combatBalanceProfiles.find((row) => row.id === 'tdh-balanced');
+  const bestCombat = analysis.combatBalanceProfiles.find((row) => row.games >= minGames);
   const modeLabel = analysis.modeFilter === 'all' ? '전체 모드' : GAME_MODE_LABELS[analysis.modeFilter];
 
   const insights: CompositionInsight[] = [];
@@ -445,9 +517,31 @@ function makeInsights(analysis: Omit<CompositionAnalysis, 'insights'>): Composit
   }
   if (damage) {
     insights.push({
-      title: '데미지 분배',
+      title: 'AP/AD 분배',
       body: `${damage.label} 프로필이 가장 안정적입니다. 표본 ${damage.games}팀, 승률 ${damage.winrate.toFixed(1)}% 기준입니다.`,
       tone: 'blue',
+    });
+  }
+  if (balancedDamage && bestDamage) {
+    const balancedText = `${balancedDamage.games}표본 ${balancedDamage.winrate.toFixed(1)}%`;
+    const bestText = `${bestDamage.label} ${bestDamage.games}표본 ${bestDamage.winrate.toFixed(1)}%`;
+    insights.push({
+      title: bestDamage.id === balancedDamage.id ? 'AP/AD 균형 유효' : 'AP/AD 균형 재검토',
+      body: bestDamage.id === balancedDamage.id
+        ? `현재 데이터에서는 AP/AD 균형 조합이 가장 좋습니다. 균형형 ${balancedText}로, 한쪽 딜 과다보다 안정적으로 보입니다.`
+        : `현재 데이터에서는 균형형(${balancedText})보다 ${bestText}가 더 좋게 나옵니다. 표본이 적으면 보정 승률까지 같이 보세요.`,
+      tone: bestDamage.id === balancedDamage.id ? 'green' : 'blue',
+    });
+  }
+  if (balancedCombat && bestCombat) {
+    const balancedText = `${balancedCombat.games}표본 ${balancedCombat.winrate.toFixed(1)}%`;
+    const bestText = `${bestCombat.label} ${bestCombat.games}표본 ${bestCombat.winrate.toFixed(1)}%`;
+    insights.push({
+      title: bestCombat.id === balancedCombat.id ? '탱딜힐 균형 유효' : '탱딜힐 균형 재검토',
+      body: bestCombat.id === balancedCombat.id
+        ? `현재 데이터에서는 탱/딜/힐이 모두 있는 조합이 가장 좋습니다. 균형형 ${balancedText}입니다.`
+        : `현재 데이터에서는 탱딜힐 균형형(${balancedText})보다 ${bestText}가 더 좋게 나옵니다. 상대 조합과 챔피언 숙련도 영향을 함께 봐야 합니다.`,
+      tone: bestCombat.id === balancedCombat.id ? 'green' : 'purple',
     });
   }
   return insights;
@@ -479,6 +573,7 @@ export async function computeCompositionAnalysis(modeFilter: CompositionModeFilt
   const recentGames: CompositionAnalysis['recentGames'] = [];
   const archetypeMap = new Map<string, MutableAggregate>();
   const damageMap = new Map<string, MutableAggregate>();
+  const combatBalanceMap = new Map<string, MutableAggregate>();
   const traitMap = new Map<string, MutableAggregate>();
   const roleMap = new Map<string, MutableAggregate>();
   const pairMap = new Map<string, MutableComboAggregate>();
@@ -499,6 +594,7 @@ export async function computeCompositionAnalysis(modeFilter: CompositionModeFilt
       samples.push(sample);
       addAggregate(archetypeMap, sample.archetypeId, sample.archetypeLabel, sample.won, names);
       addAggregate(damageMap, sample.damageProfileId, sample.damageProfileLabel, sample.won, names);
+      addAggregate(combatBalanceMap, sample.combatBalanceId, sample.combatBalanceLabel, sample.won, names);
       addAggregate(traitMap, sample.traitSignature, sample.traitSignature, sample.won, names);
       addAggregate(roleMap, sample.roleSignature, sample.roleSignature, sample.won, names);
 
@@ -541,6 +637,7 @@ export async function computeCompositionAnalysis(modeFilter: CompositionModeFilt
     })),
     archetypes: finalizeAggregates(archetypeMap, totalSamples, 1),
     damageProfiles: finalizeAggregates(damageMap, totalSamples, 1),
+    combatBalanceProfiles: finalizeAggregates(combatBalanceMap, totalSamples, 1),
     traitProfiles: finalizeAggregates(traitMap, totalSamples, 1),
     roleProfiles: finalizeAggregates(roleMap, totalSamples, 1),
     championPairs: finalizeComboAggregates(pairMap, totalSamples, 2),

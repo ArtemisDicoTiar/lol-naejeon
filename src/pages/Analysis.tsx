@@ -91,7 +91,7 @@ function InsightGrid({ insights }: { insights: CompositionInsight[] }) {
   if (insights.length === 0) return null;
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {insights.slice(0, 6).map((insight) => (
+      {insights.slice(0, 8).map((insight) => (
         <div key={`${insight.title}-${insight.body}`} className={`rounded-xl border p-3 ${insightToneClass[insight.tone]}`}>
           <div className="text-sm font-black">{insight.title}</div>
           <p className="mt-1.5 text-xs leading-5 text-lol-gold-light/64">{insight.body}</p>
@@ -215,6 +215,8 @@ function TeamStrip({
       </div>
       <div className="mt-2 grid gap-1 text-[11px] text-lol-gold-light/45">
         <span className="truncate">조합: {sample.archetypeLabel}</span>
+        <span className="truncate">AP/AD: {sample.damageProfileLabel} · AP {Math.round(sample.apShare)}%</span>
+        <span className="truncate">탱딜힐: {sample.combatBalanceLabel} ({sample.combatBalanceDetail})</span>
         <span className="truncate">역할: {sample.roleSignature || '분류 없음'}</span>
         <span className="truncate">특성: {sample.traitSignature || '분류 없음'}</span>
       </div>
@@ -370,8 +372,12 @@ export function Analysis() {
         <MatchupList analysis={analysis} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <AggregateList title="데미지 밸런스" rows={analysis.damageProfiles} emptyText="데미지 분포 표본이 없습니다." limit={5} />
+      <div className="grid gap-4 xl:grid-cols-2">
+        <AggregateList title="AP/AD 밸런스" rows={analysis.damageProfiles} emptyText="데미지 분포 표본이 없습니다." limit={5} />
+        <AggregateList title="탱/딜/힐 밸런스" rows={analysis.combatBalanceProfiles} emptyText="탱딜힐 분포 표본이 없습니다." limit={6} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
         <AggregateList title="핵심 특성 조합" rows={analysis.traitProfiles} emptyText="특성 표본이 없습니다." limit={5} />
         <AggregateList title="역할 구성" rows={analysis.roleProfiles} emptyText="역할 구성 표본이 없습니다." limit={5} />
       </div>
